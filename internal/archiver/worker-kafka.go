@@ -17,7 +17,7 @@ type Worker struct {
 	repo   MessageRepository
 }
 
-func NewWorker(brokers []string, topic string, groupID string, repo MessageRepository) *Worker {
+func NewWorker(brokers []string, topic string, groupID string) *Worker {
 	return &Worker{
 		reader: kafka.NewReader(kafka.ReaderConfig{
 			Brokers:  brokers,
@@ -26,7 +26,6 @@ func NewWorker(brokers []string, topic string, groupID string, repo MessageRepos
 			MinBytes: 10e3,
 			MaxBytes: 10e6,
 		}),
-		repo: repo,
 	}
 }
 

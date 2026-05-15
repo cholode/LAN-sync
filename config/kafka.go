@@ -21,7 +21,7 @@ func InitKafka() {
 	brokers := strings.Split(kafkaAddrStr, ",")
 
 	//1.实例化kafka生产这供websocket调用
-	KafkaProducer = producer.NewMessageClient(brokers, "im_char_messages")
+	KafkaProducer = producer.NewMessageClient(brokers, "im_chat_messages")
 	log.Println("Kafka 生产者准备就绪")
 
 	// 2. 实例化后台稳态消费者 (需注入你的 MySQL 存储引擎实体)

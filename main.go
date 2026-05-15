@@ -1,21 +1,22 @@
 package main
 
 import (
+	"context"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/pprof"
+	"github.com/gin-gonic/gin"
 	"io"
 	"lan-im-go/api"
 	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/infrastructure"
+	"lan-im-go/internal/archiver"
 	"lan-im-go/middleware"
 	"lan-im-go/repository"
 	"log"
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/pprof"
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -57,6 +58,28 @@ func main() {
 	// 业务逻辑统一通过数据访问层接口操作数据库
 	repository.InitRepositories(infrastructure.DB)
 	log.Println("[就绪] 数据访问层初始化完成")
+
+	repository.InitRepositories(infrastructure.DB)
+	log.Println("[系统就绪] 数据访问层 (DAL) 初始化完成")
+
+	// ========================================================================
+	// 阶段 3：后台稳态消费者唤醒 (Kafka Consumer Daemon)
+	// ========================================================================
+	kafkaAddrStr := os.Getenv("KAFKA_ADDR")
+	if kafkaAddrStr == "" {
+		kafkaAddrStr = "127.0.0.1:9092" // 本地降级
+	}
+
+	// 组装消费者，它内部会自动调用 repository.Message 进行物理落盘
+	worker := archiver.NewWorker([]string{kafkaAddrStr}, "im_chat_messages", "mysql_archiver_group")
+
+	// 创建全局生命周期上下文
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		log.Println("[系统指令] Kafka 稳态消费协程进入死循环监听...")
+		worker.Start(ctx)
+	}()
 
 	// ========================================================================
 	// 阶段3：WebSocket核心引擎启动
@@ -162,4 +185,6 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("[致命错误] 网关崩溃: %v", err)
 	}
+
+	cancel()
 }

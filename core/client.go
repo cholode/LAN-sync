@@ -1,12 +1,14 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
-	"log"
-	"time"
-
 	"github.com/gorilla/websocket"
-	"lan-im-go/models"
+	"lan-im-go/config"
+	//"lan-im-go/models"
+	"log"
+	"strconv"
+	"time"
 )
 
 const (
@@ -32,16 +34,12 @@ type Subscription struct {
 	RoomIDs []int64 // 操作关联的群聊集合
 }
 
-// ReadPump 读取消息：接收客户端消息，解析后发送至消息中心
-// 每个客户端连接仅启动一个协程执行该方法
 func (c *Client) ReadPump() {
-	// 连接关闭时释放资源
 	defer func() {
-		c.Hub.Unsubscribe <- &Subscription{Client: c, RoomIDs: nil} // 由Hub注销客户端并清理连接
+		c.Hub.Unsubscribe <- &Subscription{Client: c, RoomIDs: nil}
 		c.Conn.Close()
 	}()
 
-	// 设置消息读取限制和心跳处理
 	c.Conn.SetReadLimit(maxMessageSize)
 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.Conn.SetPongHandler(func(string) error {
@@ -51,7 +49,6 @@ func (c *Client) ReadPump() {
 
 	for {
 		_, message, err := c.Conn.ReadMessage()
-		log.Printf("收到客户端消息：%s\n", message)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
@@ -59,27 +56,102 @@ func (c *Client) ReadPump() {
 			break
 		}
 
-		// 解析客户端消息
+		// 1. 强制要求前端上报 ClientMsgID
 		var payload struct {
-			RoomID  int64  `json:"room_id"`
-			Content string `json:"content"`
+			RoomID      int64  `json:"room_id"`
+			Content     string `json:"content"`
+			ClientMsgID string `json:"client_msg_id"` // 分布式架构必备的幂等性
 		}
-		var msg models.Message
+
 		if err := json.Unmarshal(message, &payload); err != nil {
-			log.Printf("[消息解析失败] 用户 %d 发送了非法的 JSON 格式消息", c.UserID)
+			log.Printf("[消息解析失败] 用户 %d 发送了非法格式: %v", c.UserID, err)
 			continue
 		}
-		// 安全校验：用户ID从服务端获取，禁止客户端伪造身份
-		msg.SenderID = c.UserID
-		msg.Content = payload.Content
-		msg.CreatedAt = time.Now()
-		msg.Type = 1
-		msg.RoomID = payload.RoomID
 
-		// 发送至消息中心进行广播
-		c.Hub.Broadcast <- &msg
+		if payload.ClientMsgID == "" {
+			log.Printf("[非法调用] 用户 %d 缺失防重发凭证，已拒绝处理", c.UserID)
+			continue
+		}
+
+		// 2. 剥离本地闭环，注入 Kafka 全局流
+		// 此处调用之前封装好的极速生产者实例
+		// 注意：RoomID 需要转换为 string 形式作为 Kafka 的路由 Key，以保证同群消息的物理顺序
+		roomIDStr := strconv.FormatInt(payload.RoomID, 10)
+
+		// 设定单次投递的极端超时时间，防止底层 I/O 拖垮协程
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+		// 将消息的物化投递任务完全甩给底层中间件
+		err = config.KafkaProducer.HandleIncomingMessage(
+			ctx,
+			roomIDStr,
+			int(c.UserID),
+			payload.Content,
+			payload.ClientMsgID,
+		)
+		cancel()
+
+		if err != nil {
+			// 如果 Kafka 发生严重物理宕机，需要考虑降级策略或通知客户端发送失败
+			log.Printf("无法投递至 Kafka，消息丢弃: %v", err)
+			// 可选：向当前客户端回复系统异常错误码
+			continue
+		}
+
+		// 架构级定调：
+		// 此时绝对不调用 c.Hub.Broadcast。
+		// 你的网关协程在这一步已经完成了它的历史使命，可以立刻进行下一次循环，去接住用户的高频连发。
 	}
 }
+
+// ReadPump 读取消息：接收客户端消息，解析后发送至消息中心
+// 每个客户端连接仅启动一个协程执行该方法
+// func (c *Client) ReadPump() {
+// 	// 连接关闭时释放资源
+// 	defer func() {
+// 		c.Hub.Unsubscribe <- &Subscription{Client: c, RoomIDs: nil} // 由Hub注销客户端并清理连接
+// 		c.Conn.Close()
+// 	}()
+
+// 	// 设置消息读取限制和心跳处理
+// 	c.Conn.SetReadLimit(maxMessageSize)
+// 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+// 	c.Conn.SetPongHandler(func(string) error {
+// 		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+// 		return nil
+// 	})
+
+// 	for {
+// 		_, message, err := c.Conn.ReadMessage()
+// 		log.Printf("收到客户端消息：%s\n", message)
+// 		if err != nil {
+// 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+// 				log.Printf("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
+// 			}
+// 			break
+// 		}
+
+// 		// 解析客户端消息
+// 		var payload struct {
+// 			RoomID  int64  `json:"room_id"`
+// 			Content string `json:"content"`
+// 		}
+// 		var msg models.Message
+// 		if err := json.Unmarshal(message, &payload); err != nil {
+// 			log.Printf("[消息解析失败] 用户 %d 发送了非法的 JSON 格式消息", c.UserID)
+// 			continue
+// 		}
+// 		// 安全校验：用户ID从服务端获取，禁止客户端伪造身份
+// 		msg.SenderID = c.UserID
+// 		msg.Content = payload.Content
+// 		msg.CreatedAt = time.Now()
+// 		msg.Type = 1
+// 		msg.RoomID = payload.RoomID
+
+// 		// 发送至消息中心进行广播
+// 		c.Hub.Broadcast <- &msg
+// 	}
+// }
 
 // WritePump 发送消息：从消息中心接收数据并发送给客户端
 // WebSocket写入操作非并发安全，仅允许单个协程执行
