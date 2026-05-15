@@ -1,11 +1,9 @@
 package main
 
 import (
-	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/pprof"
-	"github.com/gin-gonic/gin"
 	"io"
 	"lan-im-go/api"
+	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/infrastructure"
 	"lan-im-go/middleware"
@@ -14,6 +12,10 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/pprof"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -36,6 +38,13 @@ func main() {
 		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=Local"
 		log.Println("[警告] 未检测到DB_DSN环境变量，使用本地默认配置连接MySQL")
 	}
+
+	//中间件初始化，redis，kafka
+	config.InitKafka()
+	config.InitRedis()
+
+	defer config.RedisClient.Close()
+	defer config.KafkaProducer.Close()
 
 	// 初始化数据库连接池并自动同步表结构
 	// 数据库连接失败时程序直接终止，保证服务启动完整性
