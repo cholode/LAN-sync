@@ -6,13 +6,15 @@ networks:
 
 volumes:
   mysql_data:
+  redis_data:      # 物理卷：缓存持久化
+  kafka_data:      # 物理卷：消息积压持久化
 
 services:
+  # --- [1] 持久层：MySQL ---
   db:
     image: mysql:8.0
     container_name: im-mysql
     restart: unless-stopped
-    #network_mode: "host"
     networks:
       - lan-im-network
     ports:
@@ -22,9 +24,6 @@ services:
         limits:
           cpus: '4.0'
           memory: 4G
-        reservations:
-          cpus: '0.5'
-          memory: 1G
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
@@ -33,46 +32,94 @@ services:
       - ./deploy/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
       - ./mysql-custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
     healthcheck:
-      # 强制使用 127.0.0.1 走 TCP 协议探活，规避 Unix Socket 陷阱
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 10s
       retries: 5
       start_period: 30s
 
+  # --- [2] 缓存层：Redis ---
+  redis:
+    image: redis:7.0-alpine
+    container_name: im-redis
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # --- [3] 消息中间件：Kafka (KRaft 模式) ---
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: im-kafka
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:29093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:29092,CONTROLLER://:29093,EXTERNAL://0.0.0.0:9092
+      # 极其关键：内部 backend 访问 kafka:29092，外部宿主机调试访问 localhost:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+    volumes:
+      - kafka_data:/bitnami/kafka
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+
+  # --- [4] 业务算力层：Go Backend ---
   backend:
     build:
       context: .
       dockerfile: Dockerfile.dev
     container_name: im-backend
     restart: unless-stopped
-    #network_mode: "host"
     networks:
       - lan-im-network
     ports:
      - "8080:8080"
      - "6060:6060"
     environment:
-      # 修复语法错误：彻底删除无效的 db: 前缀
       - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
+      # 新增：注入中间件连接地址，供 Go 代码内部调用
+      - REDIS_ADDR=redis:6379
+      - KAFKA_ADDR=kafka:29092
       - LAN_IM_DATA_DIR=/app/data
     deploy:
       resources:
         limits:
           cpus: '4.0'
           memory: 8G
-        reservations:
-          cpus: '0.5'
-          memory: 1G
     volumes:
       - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
     ulimits:
       nofile:
         soft: 65535
         hard: 65535
 
+  # --- [5] 接入层：Nginx ---
   nginx:
     build:
       context: .
