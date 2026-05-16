@@ -88,6 +88,7 @@ func main() {
 	hub := core.NewHub()
 	// 启动引擎监听调度通道
 	go hub.Run()
+	go core.StartGlobalListener(ctx, hub)
 	log.Println("[就绪] WebSocket核心引擎启动完成")
 
 	// ========================================================================

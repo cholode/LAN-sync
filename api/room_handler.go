@@ -265,12 +265,12 @@ func OwnerDisbandRoom(hub *core.Hub) gin.HandlerFunc {
 			return
 		}
 
-		sysMsg := &models.Message{
-			RoomID:   targetRoomID,
-			SenderID: 0,
-			Content:  "【系统通知】群主已解散该群聊",
-		}
-		hub.Broadcast <- sysMsg
+		// sysMsg := &models.Message{
+		// 	RoomID:   targetRoomID,
+		// 	SenderID: 0,
+		// 	Content:  "【系统通知】群主已解散该群聊",
+		// }
+		// hub.Broadcast <- sysMsg
 
 		c.JSON(http.StatusOK, gin.H{"msg": "群聊已解散"})
 	}

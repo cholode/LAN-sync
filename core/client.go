@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/gorilla/websocket"
+	"lan-im-go/cache"
 	"lan-im-go/config"
 	//"lan-im-go/models"
 	"log"
 	"strconv"
 	"time"
 )
+
+var CurrentGatewayNodeID = "node-1-192.168.1.100"
 
 const (
 	// WebSocket 配置参数
@@ -195,6 +198,11 @@ func (c *Client) WritePump() {
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
+
+			//刷新redis中用户登录失效时间
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			_ = cache.RenewUserOnline(ctx, c.UserID)
+			cancel()
 		}
 	}
 }

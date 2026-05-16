@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"lan-im-go/config"
 	//"strconv"
+
 	"time"
 )
 
@@ -31,7 +32,7 @@ func RenewUserOnline(ctx context.Context, userID int64) error {
 	return config.RedisClient.Expire(ctx, key, onlineTTL).Err()
 }
 
-// CheckUserOnline 极速鉴权：判断用户是否在全局任意节点存活
+// CheckUserOnline 鉴权：判断用户是否在全局任意节点存活
 func CheckUserOnline(ctx context.Context, userID int64) (bool, string, error) {
 	key := fmt.Sprintf("%s%d", onlineKeyPrefix, userID)
 	nodeID, err := config.RedisClient.Get(ctx, key).Result()

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"lan-im-go/core"
-	"lan-im-go/models"
+	//"lan-im-go/models"
 	"lan-im-go/repository"
 )
 
@@ -58,13 +58,13 @@ func AdminDeleteRoom(hub *core.Hub) gin.HandlerFunc {
 
 		// 2. 向群内所有在线用户广播解散通知
 		// 保证前端实时感知群聊状态变更，提升用户体验
-		sysMsg := &models.Message{
-			RoomID:   targetRoomID,
-			SenderID: 0, // 系统标识
-			Content:  "【系统通知】该群聊已被管理员解散",
-		}
+		// sysMsg := &models.Message{
+		// 	RoomID:   targetRoomID,
+		// 	SenderID: 0, // 系统标识
+		// 	Content:  "【系统通知】该群聊已被管理员解散",
+		// }
 		// 通过核心引擎广播消息
-		hub.Broadcast <- sysMsg
+		//hub.Broadcast <- sysMsg
 
 		c.JSON(http.StatusOK, gin.H{
 			"msg": "群聊解散成功，已通知所有在线成员",
