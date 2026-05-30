@@ -57,23 +57,27 @@ services:
 
   # --- [3] 消息中间件：Kafka (KRaft 模式) ---
   kafka:
-    image: bitnami/kafka:3.6
-    container_name: im-kafka
-    restart: unless-stopped
-    networks:
-      - lan-im-network
+    image: apache/kafka:latest
+    container_name: kafka
+    restart: always
     ports:
       - "9092:9092"
     environment:
-      - KAFKA_CFG_PROCESS_ROLES=controller,broker
-      - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:29093
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:29092,CONTROLLER://:29093,EXTERNAL://0.0.0.0:9092
-      # 极其关键：内部 backend 访问 kafka:29092，外部宿主机调试访问 localhost:9092
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      # [核心] 集群唯一物理身份证
+      CLUSTER_ID: "lan-im-go-cluster-1024"
+      # [角色] 开启 KRaft 模式，同时兼任数据节点(broker)和管理节点(controller)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      # [网络] 物理监听边界设定
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://127.0.0.1:9092'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      # [防线] 集群选票收割机指向自己
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093'
+      # [单机优化] 强制降维副本数，防止本地单机测试时报错
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     volumes:
       - kafka_data:/bitnami/kafka
     deploy:

@@ -66,7 +66,7 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[全局中枢] 收到系统绞杀信号，Redis 监听协程安全退出")
+			log.Println("[全局中枢] 收到系统关闭信号，Redis 监听协程安全退出")
 			return
 		case redisMsg := <-ch:
 			// 1. 拦截 Redis 字节流并反序列化为业务模型
@@ -86,10 +86,14 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 	}
 }
 
-func (h *Hub) Run() {
+func (h *Hub) Run(ctx context.Context) {
 	log.Println("[Local Hub] 本地内存路由引擎已启动，等待 Redis 指令...")
 	for {
 		select {
+		case <-ctx.Done():
+			log.Println("[Local Hub] 收到系统关闭信号，本地路由引擎停止调度")
+			return
+
 		case sub := <-h.Subscribe:
 			h.users[sub.Client.UserID] = sub.Client
 			for _, roomID := range sub.RoomIDs {

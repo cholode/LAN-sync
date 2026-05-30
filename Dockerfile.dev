@@ -4,6 +4,9 @@
 # 规范1：指定固定基础镜像版本，保证构建环境一致性
 FROM golang:1.26-alpine AS builder
 
+# 架构级防线：强制劫持 Go 依赖下载的物理路由，直连国内镜像池
+ENV GOPROXY=https://goproxy.cn,direct
+
 # 规范2：配置Go编译环境变量，启用Go Modules并配置国内代理
 ENV GO111MODULE=on \
     GOPROXY=https://goproxy.cn,direct \
