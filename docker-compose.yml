@@ -60,6 +60,8 @@ services:
     image: apache/kafka:latest
     container_name: kafka
     restart: always
+    networks:
+      - lan-im-network
     ports:
       - "9092:9092"
     environment:
@@ -70,7 +72,7 @@ services:
       KAFKA_PROCESS_ROLES: 'broker,controller'
       # [网络] 物理监听边界设定
       KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://127.0.0.1:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
       # [防线] 集群选票收割机指向自己
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093'
@@ -79,7 +81,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     volumes:
-      - kafka_data:/bitnami/kafka
+      - kafka_data:/tmp/kraft-combined-logs
     deploy:
       resources:
         limits:
@@ -102,7 +104,7 @@ services:
       - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
       # 新增：注入中间件连接地址，供 Go 代码内部调用
       - REDIS_ADDR=redis:6379
-      - KAFKA_ADDR=kafka:29092
+      - KAFKA_ADDR=kafka:9092
       - LAN_IM_DATA_DIR=/app/data
     deploy:
       resources:

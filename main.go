@@ -5,7 +5,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
-	"io"
+	//"io"
 	"lan-im-go/api"
 	"lan-im-go/config"
 	"lan-im-go/core"
@@ -29,7 +29,7 @@ func main() {
 			panic("pprof start failed: " + err.Error())
 		}
 	}()
-	log.SetOutput(io.Discard)
+	//log.SetOutput(io.Discard)
 	// ========================================================================
 	// 阶段1：环境与基础设施初始化
 	// ========================================================================
@@ -96,8 +96,11 @@ func main() {
 	// ========================================================================
 	// 开发环境使用默认模式，生产环境建议切换为发布模式
 	//r := gin.Default()
-	gin.SetMode(gin.ReleaseMode)
+	//gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.DebugMode)
 	r := gin.New()
+
+	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	pprof.Register(r)
 	// ========================================================================

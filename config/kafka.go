@@ -16,6 +16,7 @@ var (
 func InitKafka() {
 	kafkaAddrStr := os.Getenv("KAFKA_ADDR")
 	if kafkaAddrStr == "" {
+		log.Println("Kafka env配置获取失败，使用默认配置")
 		kafkaAddrStr = "localhost:9092"
 	}
 	brokers := strings.Split(kafkaAddrStr, ",")
