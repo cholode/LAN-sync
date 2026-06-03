@@ -4,7 +4,6 @@ import { auth, logout } from './modules/auth.js';
 import { sendMsg, handleEnter, createRoom, joinRoom, filterRooms, selectRoom, removeMember, disbandCurrentRoom, initChat } from './modules/chat.js';
 import { startUpload, cancelUpload } from './modules/upload.js';
 
-// 暴露给 HTML onclick 调用
 window.auth = auth;
 window.logout = logout;
 window.sendMsg = sendMsg;
@@ -21,4 +20,9 @@ window.cancelUpload = cancelUpload;
 window.addEventListener('DOMContentLoaded', () => {
     console.log('[系统基建] LAN-IM SPA 引擎点火...');
     switchView();
+    // 页面刷新时若已有 token，直接恢复会话
+    var token = localStorage.getItem('lan_im_token');
+    if (token) {
+        initChat();
+    }
 });
