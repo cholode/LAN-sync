@@ -1,0 +1,17 @@
+{
+  "name": "lan-im-frontend",
+  "version": "1.0.0",
+  "description": "LAN-IM 局域网即时通讯系统前端基建",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

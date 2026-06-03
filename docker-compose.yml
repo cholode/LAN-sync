@@ -1,13 +1,11 @@
-
-
 networks:
   lan-im-network:
     driver: bridge
 
 volumes:
   mysql_data:
-  redis_data:      # 物理卷：缓存持久化
-  kafka_data:      # 物理卷：消息积压持久化
+  redis_data:
+  kafka_data:
 
 services:
   # --- [1] 持久层：MySQL ---
@@ -65,18 +63,14 @@ services:
     ports:
       - "9092:9092"
     environment:
-      # [核心] 集群唯一物理身份证
       CLUSTER_ID: "lan-im-go-cluster-1024"
-      # [角色] 开启 KRaft 模式，同时兼任数据节点(broker)和管理节点(controller)
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: 'broker,controller'
-      # [网络] 物理监听边界设定
       KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
       KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-      # [防线] 集群选票收割机指向自己
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093'
-      # [单机优化] 强制降维副本数，防止本地单机测试时报错
+      # [核心修复] 必须指向容器名，打破 localhost 选举死锁
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -102,7 +96,6 @@ services:
      - "6060:6060"
     environment:
       - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
-      # 新增：注入中间件连接地址，供 Go 代码内部调用
       - REDIS_ADDR=redis:6379
       - KAFKA_ADDR=kafka:9092
       - LAN_IM_DATA_DIR=/app/data
@@ -130,21 +123,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.nginx
-    #image: nginx:alpine
     container_name: im-nginx
     restart: unless-stopped
-    #network_mode: "host"
     networks:
       - lan-im-network
     ports:
       - "80:80"
       - "443:443"
-
     volumes:
-      # - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # - ./deploy/certs:/etc/nginx/certs:ro
-      - ./frontend:/usr/share/nginx/html:ro
-      # 与 backend 持久化目录一致（当前下载走 API；挂载便于日后做静态直链或运维查看）
+      # [核心修复] 挂载前端的编译产物目录 dist，而不是源码目录
+      - ./frontend/dist:/usr/share/nginx/html:ro
       - ./data_storage/uploads:/var/www/uploads:ro
     ulimits:
       nofile:

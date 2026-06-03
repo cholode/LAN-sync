@@ -1,81 +1,120 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>LAN-IM 终端控制台 - 登录验证</title>
-  <style>
-    body{font-family:'Segoe UI',Tahoma,sans-serif;background:#121212;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}
-    .login-box{background:#1e1e1e;padding:40px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.5);width:350px;border:1px solid #333;}
-    .login-box h2{margin-top:0;color:#007acc;text-align:center;margin-bottom:30px;}
-    input{width:100%;padding:12px;margin:10px 0;background:#2d2d2d;border:1px solid #444;color:#fff;border-radius:5px;box-sizing:border-box;outline:none;}
-    input:focus{border-color:#007acc;}
-    button{width:100%;padding:12px;margin-top:20px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:16px;transition:0.2s;}
-    .btn-login{background:#007acc;color:white;}
-    .btn-login:hover{background:#005999;}
-    .btn-reg{background:transparent;color:#aaa;border:1px solid #555;margin-top:10px;}
-    .btn-reg:hover{background:#333;color:white;}
-    #msg{text-align:center;margin-top:15px;font-size:14px;color:#e74c3c;height:20px;}
-  </style>
+  <title>LAN-IM 局域网即时通讯系统</title>
+  <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-  <div class="login-box">
-    <h2>LAN-IM 系统登录</h2>
-    <input type="text" id="username" placeholder="用户名" autocomplete="off">
-    <input type="password" id="password" placeholder="密码">
-    <button class="btn-login" onclick="auth('login')">登录</button>
-    <button class="btn-reg" onclick="auth('register')">注册</button>
-    <div id="msg"></div>
+
+  <div id="login-view" class="view-container">
+    <div class="login-box">
+      <h2>LAN-IM 系统登录</h2>
+      <input type="text" id="username" placeholder="用户名" autocomplete="off">
+      <input type="password" id="password" placeholder="密码">
+      <button class="btn-login" onclick="window.auth('login')">登录</button>
+      <button class="btn-reg" onclick="window.auth('register')">注册</button>
+      <div id="msg"></div>
+    </div>
   </div>
 
-  <script>
-    /** 与聊天页一致：nginx 同源反代时留空；否则填 API 根，如 "http://192.168.1.10:8080" */
-    const API_ORIGIN = "";
-    const API_BASE = (function () {
-      const o = (API_ORIGIN || "").replace(/\/+$/, "");
-      if (!o) return "/api/v1";
-      return o + "/api/v1";
-    })();
-    if (localStorage.getItem("lan_im_token")) {
-      window.location.href = "public.html";
-    }
+  <div id="chat-view" class="view-container" style="display: none;">
+    
+    <header class="topbar">
+      <div class="topbar-brand">LAN-IM 局域网即时通讯</div>
+      <div class="topbar-user">
+        <div class="topbar-user-meta">
+          <div class="topbar-user-name" id="top-username">用户</div>
+          <div class="topbar-user-id" id="top-userid">—</div>
+        </div>
+        <button type="button" class="btn-ghost" onclick="window.logout()">退出登录</button>
+      </div>
+    </header>
 
-    async function auth(action) {
-      const u = document.getElementById("username").value;
-      const p = document.getElementById("password").value;
-      const msgBox = document.getElementById("msg");
-      if (!u || !p) return msgBox.innerText = "请输入用户名和密码";
-      msgBox.style.color = "#aaa";
-      msgBox.innerText = "正在处理...";
+    <div class="app-body">
+      <aside class="sidebar">
+        <div class="sidebar-head">群聊列表</div>
+        <div class="room-list" id="room-list">
+          <div style="color:var(--muted);text-align:center;padding:20px;font-family:monospace;">加载中...</div>
+        </div>
+      </aside>
 
-      try {
-        const res = await fetch(`${API_BASE}/${action}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: u, password: p })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (action === 'register') {
-            msgBox.style.color = "#2ecc71";
-            msgBox.innerText = "注册成功，请登录系统";
-          } else {
-            localStorage.setItem("lan_im_token", data.token);
-            if (data.user) {
-              localStorage.setItem("lan_im_user", JSON.stringify(data.user));
-            }
-            msgBox.style.color = "#2ecc71";
-            msgBox.innerText = "登录成功，正在跳转...";
-            setTimeout(() => window.location.href = "public.html", 500);
-          }
-        } else {
-          msgBox.style.color = "#e74c3c";
-          msgBox.innerText = data.error || "操作失败，请重试";
-        }
-      } catch (e) {
-        msgBox.style.color = "#e74c3c";
-        msgBox.innerText = "网络连接异常，请检查后重试";
-      }
-    }
-  </script>
+      <section class="main-view">
+        <div class="chat-header">
+          <div>
+            <div id="current-room-title">请选择群聊</div>
+            <div class="chat-header-sub" id="current-room-sub"></div>
+          </div>
+        </div>
+        <div class="chat-wrap" id="chat-wrap">
+          <div class="chat-history-hint" id="history-hint"></div>
+          <div id="chat-box" class="chat-placeholder" data-empty="1">请选择左侧群聊开始聊天<br>向上滚动加载历史消息</div>
+        </div>
+        <div class="input-area">
+          <input type="text" id="msg-content" placeholder="输入消息，Enter 发送" onkeypress="window.handleEnter(event)" disabled>
+          <button type="button" class="primary" onclick="window.sendMsg()" id="btn-send" disabled>发送</button>
+        </div>
+      </section>
+
+      <aside class="aside">
+        
+        <div class="aside-block">
+          <h3>当前用户</h3>
+          <div class="profile-card">
+            <div class="profile-avatar" id="aside-avatar">?</div>
+            <div class="profile-lines">
+              <div class="name" id="aside-username">—</div>
+              <div class="sub" id="aside-userdetail">未登录</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="aside-block">
+          <h3>群聊搜索</h3>
+          <input type="search" id="room-search" placeholder="搜索群聊名称/ID" oninput="window.filterRooms()">
+          <p class="hint">支持搜索已加入的群聊，可通过下方功能创建或加入新群聊</p>
+          <div class="flex-row" style="margin-top:12px;">
+            <input type="text" id="new-room-name" placeholder="群聊名称">
+            <button type="button" class="primary" onclick="window.createRoom()" style="border-color:#00ff88;color:#00ff88;background:rgba(0,255,136,0.05);">创建群聊</button>
+          </div>
+          <div class="flex-row">
+            <input type="number" id="join-room-id" placeholder="群聊ID">
+            <button type="button" class="primary" onclick="window.joinRoom()" style="border-color:#ffb800;color:#ffb800;background:rgba(255,184,0,0.05);">加入群聊</button>
+          </div>
+        </div>
+
+        <div class="aside-block">
+          <h3>文件传输</h3>
+          <input type="file" id="file-input">
+          <div class="flex-row">
+            <button type="button" class="primary" id="btn-upload" onclick="window.startUpload()" style="border-color:#b400ff;color:#b400ff;background:rgba(180,0,255,0.05);flex:1;">上传文件</button>
+            <button type="button" class="primary danger" id="btn-cancel" onclick="window.cancelUpload()" style="flex:1;" disabled>取消上传</button>
+          </div>
+          <div class="hint" id="upload-status">等待上传</div>
+          <div class="progress-bg"><div id="progress-bar"></div></div>
+        </div>
+
+        <div class="aside-block aside-members-panel">
+          <h3>群成员</h3>
+          <p class="members-room-hint" id="members-room-hint">请选择群聊查看成员</p>
+          <div class="member-list" id="member-list">
+            <div style="color:var(--muted);font-size:11px;padding:8px 12px;">暂无成员</div>
+          </div>
+          <div class="flex-row" style="margin-top:12px;">
+            <input type="number" id="kick-user-id" placeholder="用户ID（退出群聊输入自己ID）" style="margin-bottom:0;">
+            <button type="button" class="primary danger" onclick="window.removeMember()">移除成员</button>
+          </div>
+        </div>
+
+        <div class="aside-block aside-disband-panel" id="owner-disband-block" style="border-top:1px solid var(--border-dim);">
+          <h3>解散群聊</h3>
+          <p class="hint">警告：仅群主可操作，解散后群聊将被删除，所有成员将被移出</p>
+          <button type="button" class="primary danger" onclick="window.disbandCurrentRoom()" id="btn-disband-room" style="width:100%;" disabled>解散群聊</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
