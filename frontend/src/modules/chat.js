@@ -35,12 +35,22 @@ export function connectWS() {
                 var content = msg.content != null ? msg.content : msg.Content;
                 var sender = msg.sender_id != null ? msg.sender_id : msg.SenderID;
 
+                var pseudo = {
+                    sender_id: sender,
+                    content: content,
+                    created_at: new Date().toISOString()
+                };
+
+                var cacheKey = room != null ? String(room) : 'global';
+                if (!state.messageCache[cacheKey]) {
+                    state.messageCache[cacheKey] = [];
+                }
+                state.messageCache[cacheKey].push(pseudo);
+                if (state.messageCache[cacheKey].length > state.MAX_CACHE_SIZE) {
+                    state.messageCache[cacheKey].shift();
+                }
+
                 if (room === state.currentRoomId || room === '全局') {
-                    var pseudo = {
-                        sender_id: sender,
-                        content: content,
-                        created_at: new Date().toISOString()
-                    };
                     var box = ensureChatScrollable();
                     var near = isNearBottom(box);
                     insertMessageNode(pseudo, 'live');
@@ -168,9 +178,21 @@ export async function selectRoom(roomId) {
     updateDisbandButtonState();
 
     resetChatArea();
-    setChatPlaceholder('正在加载消息...');
+
+    var cacheKey = String(roomId);
+    var cached = state.messageCache[cacheKey] || [];
+    if (cached.length > 0) {
+        clearChatPlaceholder();
+        cached.forEach(function(m) { insertMessageNode(m, 'live'); });
+        var box = ensureChatScrollable();
+        if (box) box.scrollTop = box.scrollHeight;
+    } else {
+        setChatPlaceholder('正在加载消息...');
+    }
+
     renderRoomList();
     loadRoomMembers(roomId);
+
     await loadHistory(roomId);
 }
 
@@ -180,21 +202,36 @@ export async function loadHistory(roomId) {
     try {
         var res = await request('/rooms/' + roomId + '/messages');
         if (!res.ok) {
-            setChatPlaceholder('加载失败 (HTTP ' + res.status + ')，请重试');
+            var cacheKey = String(roomId);
+            if (!state.messageCache[cacheKey] || state.messageCache[cacheKey].length === 0) {
+                setChatPlaceholder('加载失败 (HTTP ' + res.status + ')，请重试');
+            }
             return;
         }
         var data = await res.json();
         var messages = data.messages || data || [];
         if (messages.length === 0) {
-            setChatPlaceholder('暂无消息，发送第一条吧');
+            var cacheKey2 = String(roomId);
+            if (!state.messageCache[cacheKey2] || state.messageCache[cacheKey2].length === 0) {
+                setChatPlaceholder('暂无消息，发送第一条吧');
+            }
             return;
         }
-        clearChatPlaceholder();
+
+        // 追加前先判断当前是否在底部
         var box = ensureChatScrollable();
+        var nearBefore = isNearBottom(box);
+
+        clearChatPlaceholder();
         messages.forEach(function(msg) { insertMessageNode(msg, 'hist'); });
-        if (box) box.scrollTop = box.scrollHeight;
+
+        // 追加前就在底部 → 追加后滚到底；追加前在看历史 → 保持原位
+        if (box && nearBefore) box.scrollTop = box.scrollHeight;
     } catch (e) {
-        setChatPlaceholder('加载失败：' + (e.message || '网络异常'));
+        var cacheKey3 = String(roomId);
+        if (!state.messageCache[cacheKey3] || state.messageCache[cacheKey3].length === 0) {
+            setChatPlaceholder('加载失败：' + (e.message || '网络异常'));
+        }
     }
 }
 

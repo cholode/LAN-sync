@@ -1,4 +1,4 @@
-package producer
+﻿package producer
 
 import (
 	"context"
@@ -7,14 +7,16 @@ import (
 	"log"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
 )
 
 type MessageClient struct {
-	writer *kafka.Writer
+	writer      *kafka.Writer
+	redisClient *redis.Client
 }
 
-func NewMessageClient(brokers []string, topic string) *MessageClient {
+func NewMessageClient(brokers []string, topic string, redisClient *redis.Client) *MessageClient {
 	return &MessageClient{
 		writer: &kafka.Writer{
 			Addr:     kafka.TCP(brokers...),
@@ -22,6 +24,7 @@ func NewMessageClient(brokers []string, topic string) *MessageClient {
 			Balancer: &kafka.Hash{},
 			Async:    true,
 		},
+		redisClient: redisClient,
 	}
 }
 
@@ -38,16 +41,19 @@ func (c *MessageClient) HandleIncomingMessage(ctx context.Context, roomID string
 		return fmt.Errorf("消息负载序列化失败: %w", err)
 	}
 
-	// 2. 物理投递
 	err = c.writer.WriteMessages(ctx, kafka.Message{
-		Key:   []byte(roomID), // 物理保证：同群同分区！
+		Key:   []byte(roomID),
 		Value: payload,
 	})
 
 	if err != nil {
 		log.Printf("[中间件告警] Kafka 投递失败：%v", err)
-		// 必须将错误抛给调用方 (ReadPump)，让网关决定是重试还是向客户端返回发送失败
 		return fmt.Errorf("kafka 写入失败: %w", err)
+	}
+
+	redisChannel := "im:broadcast:room:" + roomID
+	if pubErr := c.redisClient.Publish(ctx, redisChannel, string(payload)).Err(); pubErr != nil {
+		log.Printf("[中间件告警] Redis 广播发布失败（消息仍已落盘Kafka）: %v", pubErr)
 	}
 
 	return nil

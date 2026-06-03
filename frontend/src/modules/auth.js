@@ -1,23 +1,23 @@
 ﻿// src/modules/auth.js —— 登录/注册/登出
-import { state, setToken, setUser, clearAuth } from '../store/index.js';
+import { state, setToken, setUser, clearAuth, resetState } from '../store/index.js';
 import { switchView } from '../router/index.js';
 import { initChat } from './chat.js';
 
 export async function auth(action) {
-    const u = document.getElementById('username').value;
-    const p = document.getElementById('password').value;
-    const msgBox = document.getElementById('msg');
+    var u = document.getElementById('username').value;
+    var p = document.getElementById('password').value;
+    var msgBox = document.getElementById('msg');
 
     if (!u || !p) return msgBox.innerText = '请输入用户名和密码';
     msgBox.innerText = '正在处理...';
 
     try {
-        const res = await fetch(state.apiBase + '/' + action, {
+        var res = await fetch(state.apiBase + '/' + action, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: u, password: p })
         });
-        const data = await res.json();
+        var data = await res.json();
 
         if (res.ok && action === 'login') {
             setToken(data.token);
@@ -26,8 +26,9 @@ export async function auth(action) {
             } else {
                 setUser({ username: u });
             }
+            resetState();
             msgBox.innerText = '登录成功，正在跳转...';
-            setTimeout(() => {
+            setTimeout(function() {
                 switchView();
                 initChat();
             }, 300);
@@ -43,9 +44,31 @@ export async function auth(action) {
 
 export function logout() {
     clearAuth();
-    if (state.ws) {
-        state.ws.close();
-        state.ws = null;
-    }
+    cleanDirtyDOM();
+    resetState();
     switchView();
+}
+
+// 清除上一用户残留在 DOM 中的脏数据（侧边栏群列表、聊天区、成员列表）
+function cleanDirtyDOM() {
+    var roomList = document.getElementById('room-list');
+    if (roomList) roomList.innerHTML = '';
+
+    var memberList = document.getElementById('member-list');
+    if (memberList) memberList.innerHTML = '';
+
+    var msgInput = document.getElementById('msg-content');
+    if (msgInput) { msgInput.value = ''; msgInput.disabled = true; }
+
+    var btnSend = document.getElementById('btn-send');
+    if (btnSend) btnSend.disabled = true;
+
+    var titleEl = document.getElementById('current-room-title');
+    if (titleEl) titleEl.textContent = '请选择群聊';
+
+    var subEl = document.getElementById('current-room-sub');
+    if (subEl) subEl.textContent = '';
+
+    var chatBox = document.getElementById('chat-box');
+    if (chatBox) chatBox.remove();
 }

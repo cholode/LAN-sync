@@ -8,7 +8,9 @@ export const state = {
     currentRoomId: null,
     currentRoomName: '',
     loadedMessageIds: new Set(),
-    myRooms: []
+    myRooms: [],
+    messageCache: {},
+    MAX_CACHE_SIZE: 500
 };
 
 export function setToken(token) {
@@ -26,4 +28,16 @@ export function clearAuth() {
     state.user = null;
     localStorage.removeItem('lan_im_token');
     localStorage.removeItem('lan_im_user');
+}
+
+export function resetState() {
+    state.myRooms = [];
+    state.currentRoomId = null;
+    state.currentRoomName = '';
+    state.loadedMessageIds.clear();
+    state.messageCache = {};
+    if (state.ws) {
+        state.ws.close();
+        state.ws = null;
+    }
 }
