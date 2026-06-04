@@ -1,4 +1,4 @@
-﻿// src/modules/upload.js —— 文件分片上传（使用浏览器原生 crypto.subtle）
+﻿// src/modules/upload.js —— 文件分片上传（断点续传 + Web Worker 哈希 + 原生 crypto.subtle）
 import { state } from '../store/index.js';
 import { request, readErrorMessage } from '../api/api.js';
 
@@ -6,12 +6,63 @@ var isUploading = false;
 var uploadAbortController = null;
 var currentUploadFileHash = null;
 
-// 使用浏览器原生 Web Crypto API 计算 SHA-256，无需任何外部依赖
+// 流式哈希计算引擎 (Web Worker + 2MB 分块 + 原生 crypto.subtle)
 export async function computeFileSha256Hex(file) {
-    var fullBuf = await file.arrayBuffer();
-    var hash = await crypto.subtle.digest('SHA-256', fullBuf);
-    var hexArr = Array.from(new Uint8Array(hash));
-    return hexArr.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+    return new Promise(function(resolve, reject) {
+        var workerScript = '\n\
+            self.onmessage = async function(e) {\n\
+                try {\n\
+                    var file = e.data.file;\n\
+                    var chunkSize = 2 * 1024 * 1024; // 每次仅读取 2MB\n\
+                    var chunks = Math.ceil(file.size / chunkSize);\n\
+                    var parts = [];\n\
+                    for (var i = 0; i < chunks; i++) {\n\
+                        var start = i * chunkSize;\n\
+                        var end = Math.min(start + chunkSize, file.size);\n\
+                        var buf = await file.slice(start, end).arrayBuffer();\n\
+                        parts.push(new Uint8Array(buf));\n\
+                    }\n\
+                    // 拼接所有分块为完整缓冲区\n\
+                    var totalLen = 0;\n\
+                    for (var j = 0; j < parts.length; j++) totalLen += parts[j].byteLength;\n\
+                    var result = new Uint8Array(totalLen);\n\
+                    var offset = 0;\n\
+                    for (var k = 0; k < parts.length; k++) {\n\
+                        result.set(parts[k], offset);\n\
+                        offset += parts[k].byteLength;\n\
+                    }\n\
+                    var hash = await crypto.subtle.digest("SHA-256", result);\n\
+                    var hex = Array.from(new Uint8Array(hash)).map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");\n\
+                    self.postMessage({ type: "done", hash: hex });\n\
+                } catch (err) {\n\
+                    self.postMessage({ type: "error", error: err.message || "哈希计算异常" });\n\
+                }\n\
+            };\n\
+        ';
+
+        var blob = new Blob([workerScript], { type: 'application/javascript' });
+        var workerUrl = URL.createObjectURL(blob);
+        var worker = new Worker(workerUrl);
+
+        worker.onmessage = function(e) {
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
+            if (e.data.type === 'done') {
+                resolve(e.data.hash);
+            } else {
+                reject(new Error(e.data.error));
+            }
+        };
+
+        worker.onerror = function(err) {
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
+            reject(new Error('Worker 线程执行崩溃: ' + err.message));
+        };
+
+        // 发送文件句柄——只传引用，不拷贝文件本体
+        worker.postMessage({ file: file });
+    });
 }
 
 export async function startUpload() {
@@ -45,8 +96,7 @@ export async function startUpload() {
     uploadAbortController = new AbortController();
 
     try {
-        statusBox.textContent = '[1/3] 检查秒传状态...';
-
+        statusBox.textContent = '[1/3] 检查上传状态...';
         var checkRes = await request('/upload/status?hash=' + fileHash + '&filename=' + safeFileName);
         var checkData = await checkRes.json();
 
@@ -66,7 +116,7 @@ export async function startUpload() {
         var completedCount = uploadedChunks.length;
         updateProgress(completedCount, totalChunks);
 
-        statusBox.textContent = '[2/3] 上传分片 (并发执行)...';
+        statusBox.textContent = '[2/3] 上传分片...';
         var uploadTasks = [];
 
         for (var i = 0; i < totalChunks; i++) {
@@ -90,7 +140,7 @@ export async function startUpload() {
                         if (res.ok) { lastErr = ''; break; }
                         var detail = await readErrorMessage(res);
                         lastErr = 'HTTP ' + res.status + ': ' + detail;
-                        if (res.status === 401) throw new Error('凭证失效');
+                        if (res.status === 401) throw new Error('登录已过期，请重新登录');
                         if (attempt < maxAttempts) await new Promise(function(r) { setTimeout(r, 250); });
                     }
                     if (lastErr) throw new Error('分片 ' + chunkIdx + ' 上传失败：' + lastErr);
@@ -111,17 +161,26 @@ export async function startUpload() {
             })
         );
 
+        // 合并参数本地校验（防止空哈希/空文件名）
         statusBox.textContent = '[3/3] 合并文件指令下发...';
+        var mergeHash = String(fileHash || '').trim();
+        var mergeFilename = String(file.name || '').trim();
+        var mergeTotalChunks = String(totalChunks);
+        if (!mergeHash || !mergeFilename || totalChunks <= 0) {
+            throw new Error('合并参数本地校验失败');
+        }
+
         var mergeData = new FormData();
-        mergeData.append('hash', fileHash);
-        mergeData.append('filename', file.name);
-        mergeData.append('total_chunks', String(totalChunks));
+        mergeData.append('hash', mergeHash);
+        mergeData.append('filename', mergeFilename);
+        mergeData.append('total_chunks', mergeTotalChunks);
 
         var mergeRes = await request('/upload/merge', {
             method: 'POST',
             body: mergeData
         });
         var mergeResult = await mergeRes.json();
+        if (!mergeRes.ok) throw new Error(mergeResult.error || '合并失败');
 
         statusBox.textContent = '上传完成';
         state.ws.send(JSON.stringify({

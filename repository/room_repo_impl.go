@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"gorm.io/gorm"
@@ -59,7 +59,7 @@ func (r *roomRepoImpl) GetJoinedRooms(userID int64) ([]*models.Room, error) {
 	// 内连接查询，继承软删除规则，一次性获取用户所有群聊
 	err := r.db.Model(&models.Room{}).
 		Select("rooms.*").
-		Joins("INNER JOIN room_members ON rooms.id = room_members.room_id").
+		Joins("INNER JOIN room_members ON rooms.id = room_members.room_id AND room_members.deleted_at = 0").
 		Where("room_members.user_id = ?", userID).
 		Find(&rooms).Error
 	return rooms, err
