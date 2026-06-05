@@ -73,7 +73,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			Hub:    hub,
 			UserID: realUserID,
 			Conn:   conn,
-			Send:   make(chan []byte, 256),
+			Send:   make(chan []byte, 512),
 		}
 
 		subscription := &core.Subscription{

@@ -122,12 +122,11 @@ func (h *Hub) Run(ctx context.Context) {
 			}
 
 		case unsub := <-h.Unsubscribe:
-			for _, roomID := range unsub.RoomIDs {
-				if clients, ok := h.rooms[roomID]; ok {
-					delete(clients, unsub.Client)
-					if len(clients) == 0 {
-						delete(h.rooms, roomID)
-					}
+			// 清理所有房间中的该客户端（包括 RoomIDs=nil 的情况）
+			for rid, roomClients := range h.rooms {
+				delete(roomClients, unsub.Client)
+				if len(roomClients) == 0 {
+					delete(h.rooms, rid)
 				}
 			}
 			if _, ok := h.users[unsub.Client.UserID]; ok {
@@ -148,9 +147,15 @@ func (h *Hub) Run(ctx context.Context) {
 					case client.Send <- payload:
 					default:
 						log.Printf("[Local Hub 绞杀] 客户端 %d 阻塞，物理断开", client.UserID)
-						close(client.Send)
-						delete(clients, client)
+						// 先摘除所有房间引用，再关通道，杜绝 send on closed channel
+						for rid, roomClients := range h.rooms {
+							delete(roomClients, client)
+							if len(roomClients) == 0 {
+								delete(h.rooms, rid)
+							}
+						}
 						delete(h.users, client.UserID)
+						close(client.Send)
 					}
 				}
 			}

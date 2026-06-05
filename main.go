@@ -5,7 +5,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
-	//"io"
+	"io"
 	"lan-im-go/api"
 	"lan-im-go/config"
 	"lan-im-go/core"
@@ -29,7 +29,7 @@ func main() {
 			panic("pprof start failed: " + err.Error())
 		}
 	}()
-	//log.SetOutput(io.Discard)
+	log.SetOutput(io.Discard)
 	// ========================================================================
 	// 闃舵1锛氱幆澧冧笌鍩虹璁炬柦鍒濆鍖?
 	// ========================================================================
@@ -96,11 +96,11 @@ func main() {
 	// ========================================================================
 	// 寮€鍙戠幆澧冧娇鐢ㄩ粯璁ゆā寮忥紝鐢熶骇鐜寤鸿鍒囨崲涓哄彂甯冩ā寮?
 	//r := gin.Default()
-	//gin.SetMode(gin.ReleaseMode)
-	gin.SetMode(gin.DebugMode)
+	gin.SetMode(gin.ReleaseMode)
+	//gin.SetMode(gin.DebugMode)
 	r := gin.New()
 
-	r.Use(gin.Logger())
+	//r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	pprof.Register(r)
 	// ========================================================================

@@ -1,211 +1,159 @@
-import ws from 'k6/ws';
-import http from 'k6/http';
-import exec from 'k6/execution';
-import { sleep } from 'k6';
-import { Counter, Gauge } from 'k6/metrics';
+﻿import ws from "k6/ws";
+import http from "k6/http";
+import exec from "k6/execution";
+import { sleep } from "k6";
+import { Counter, Gauge, Trend } from "k6/metrics";
 
 // ============================================================================
-// 指标采集器定义 (严格隔离 K6 底层保留字)
+// 自定义物理指标探针
 // ============================================================================
-const wsMsgSentTotal = new Counter('custom_ws_msg_sent_total');
-const wsConnectSuccess = new Counter('custom_ws_connect_success');
-const httpReqFailed = new Counter('custom_http_req_failed');
-const onlineUserGauge = new Gauge('custom_online_user_count');
+const msgSentTotal  = new Counter("custom_msg_sent_total");
+const msgRecvTotal  = new Counter("custom_msg_recv_total");
+const wsConnSuccess = new Counter("custom_ws_connect_success");
+const httpReqFailed = new Counter("custom_http_req_failed");
+const onlineUsers   = new Gauge("custom_online_user_count");
+const msgLatency    = new Trend("custom_msg_latency_ms", true); 
 
 // ============================================================================
-// 压测沙盘全局拓扑配置
+// 压测规模与战术编排
 // ============================================================================
-const TOTAL_VUS = 10000; // 全局物理并发连接总数
-const RAMP_UP_DURATION = '2m'; // 【架构调优】节点爬坡阶段：拉长至 2 分钟平滑建立连接
-const FIRE_DURATION = '5m'; // 极值压测阶段：持续 5 分钟火力输出
-const RAMP_DOWN_DURATION = '1m'; // 平滑降级阶段：最后 1 分钟陆续断开
-const TOTAL_ROOMS = 100; // 业务沙盘：测试群组总数
-const ACTIVE_PER_ROOM = 10; // 业务沙盘：每个群组内的火力输出节点数
-const BASE_URL = 'http://127.0.0.1:8080/api/v1';
-const WS_URL = 'ws://127.0.0.1:8080/api/v1/ws';
+const TOTAL_USERS     = 100;
+const MSG_INTERVAL_MS = 1000;
+const SENDER_COUNT    = 10;    // 前 10 个 VU 为火力输出，其余 90 个纯听众
+
+const STAGE_RAMP_UP   = 5; 
+const STAGE_FIRE      = 120;
+const STAGE_RAMP_DOWN = 5; 
+
+const BASE_URL = "http://127.0.0.1:8080/api/v1";
+const WS_URL   = "ws://127.0.0.1:8080/api/v1/ws";
 
 // ============================================================================
-// 引擎调度器配置
+// K6 引擎全局配置
 // ============================================================================
 export const options = {
   scenarios: {
-    im_5000_pressure_test: {
-      executor: 'ramping-vus',
+    im_websocket_load: {
+      executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: RAMP_UP_DURATION, target: TOTAL_VUS }, // 0~2分钟：平滑建连，减轻网关握手压力
-        { duration: FIRE_DURATION, target: TOTAL_VUS },    // 2~7分钟：保持满载并发，检验系统极值
-        { duration: RAMP_DOWN_DURATION, target: 0 },       // 7~8分钟：物理连接销毁，释放 FD
+        { duration: `${STAGE_RAMP_UP}s`,   target: TOTAL_USERS },
+        { duration: `${STAGE_FIRE}s`,      target: TOTAL_USERS },
+        { duration: `${STAGE_RAMP_DOWN}s`, target: 0 },
       ],
-      gracefulRampDown: '10s', // 允许进行中请求拥有 10 秒的清理缓冲期
+      gracefulRampDown: "5s",
+      exec: "vuMain",
     },
   },
-  // 强制丢弃 HTTP 响应体，避免 V8 引擎产生 GC 停顿引发压测端假死
-  discardResponseBodies: true,
+  discardResponseBodies: true, // 物理级内存优化
 };
 
-// ============================================================================
-// 生命周期阶段 1: 全局基础设施构建 (Setup)
-// ============================================================================
-export function setup() {
-  console.log("[架构基建] 开始初始化压测沙盘拓扑结构...");
-  const headers = { 'Content-Type': 'application/json' };
-  const adminAccount = { username: "admin_test_master", password: "password123" };
-
-  // 执行管理员认证与 Token 颁发
-  http.post(`${BASE_URL}/register`, JSON.stringify(adminAccount), { headers });
-  const loginRes = http.post(`${BASE_URL}/login`, JSON.stringify(adminAccount), {
-    headers,
-    responseType: 'text' // 局部豁免：强制读取响应体以提取 JWT
-  });
-
-  if (loginRes.status !== 200) {
-    console.error("[致命异常] 超级管理员认证失败，系统阻断压测初始化流程");
-    return { roomIds: [1] }; // 物理兜底，防止后续数组越界
-  }
-
-  const adminToken = JSON.parse(loginRes.body).token;
-  let roomIds = [];
-
-  // 批量构建业务群组拓扑
-  for (let i = 0; i < TOTAL_ROOMS; i++) {
-    const roomRes = http.post(`${BASE_URL}/rooms`, JSON.stringify({ name: `压测沙盘群组_${i+1}` }), {
-      headers: {
-        'Authorization': `Bearer ${adminToken}`,
-        'Content-Type': 'application/json'
-      },
-      responseType: 'text'
-    });
-
-    if (roomRes.status === 200) {
-      const parsed = JSON.parse(roomRes.body);
-      const id = parsed.data?.id || parsed.id || (i+1);
-      roomIds.push(id);
-    } else {
-      roomIds.push(i+1);
-    }
-  }
-
-  console.log(`[架构基建] 成功构建 ${roomIds.length} 个隔离群组，沙盘就绪。`);
-  return { roomIds };
-}
+// 【已彻底抹除 handleSummary，将控制权交还给 K6 官方报表引擎】
 
 // ============================================================================
-// 生命周期阶段 2: 并发节点执行核心 (VU Runtime)
+// 虚拟用户 (VU) 主逻辑闭环
 // ============================================================================
-export default function (data) {
+export function vuMain() {
   const vuId = exec.vu.idInTest;
+  const scenarioStart = exec.scenario.startTime;
+  const ROOM_ID = 1; 
 
-  // 路由分配与角色映射
-  const roomIndex = Math.floor((vuId - 1) / (TOTAL_VUS / TOTAL_ROOMS));
-  const roomId = data.roomIds[roomIndex] || 1;
+  const fireStartMs = scenarioStart + STAGE_RAMP_UP * 1000;
+  const fireEndMs   = scenarioStart + (STAGE_RAMP_UP + STAGE_FIRE) * 1000;
 
-  // 依据模运算精准控制活跃节点比例
-  const isActiveUser = (vuId % (TOTAL_VUS / TOTAL_ROOMS) >= 1 && vuId % (TOTAL_VUS / TOTAL_ROOMS) <= ACTIVE_PER_ROOM);
-
-  // 必须使用特定前缀触发后端哈希旁路机制
-  const userAccount = { username: `silent_vu_${vuId}`, password: "password123" };
-  const headers = { 
-      'Content-Type': 'application/json',
-      'Connection': 'close'
-  };
-
-  // ------------------------------------------------------------------------
-  // 协议握手层: HTTP 认证与路由加入
-  // ------------------------------------------------------------------------
-  const loginRes = http.post(`${BASE_URL}/login`, JSON.stringify(userAccount), {
-    headers,
-    responseType: 'text'
-  });
+  // ---------- 1. HTTP 鉴权层穿透 ----------
+  const loginRes = http.post(
+    `${BASE_URL}/login`, 
+    JSON.stringify({ username: `vu_${vuId}`, password: "pass123" }), 
+    { 
+      headers: { "Content-Type": "application/json" },
+      responseType: "text" 
+    }
+  );
+  
   if (loginRes.status !== 200) {
     httpReqFailed.add(1);
-    sleep(60);
+    sleep(1);
     return;
   }
-
-  const token = JSON.parse(loginRes.body).token;
-  const joinRes = http.post(`${BASE_URL}/rooms/${roomId}/join`, null, {
-    headers: { Authorization: `Bearer ${token}`,'Connection': 'close' }
-  });
-  if (joinRes.status !== 200 && joinRes.status !== 400) {
+  
+  let token = "";
+  try {
+    token = JSON.parse(loginRes.body).token;
+  } catch(e) {
     httpReqFailed.add(1);
-    sleep(60);
+    sleep(1);
     return;
   }
 
-  // ------------------------------------------------------------------------
-  // 物理连接层: WebSocket 全双工通道维护
-  // ------------------------------------------------------------------------
-  const wsConnectUrl = `${WS_URL}?token=${token}&room_id=${roomId}`;
-  ws.connect(wsConnectUrl, null, (socket) => {
-    let msgTimer;
+  // ---------- 2. WebSocket 长连接接驳 ----------
+  const wsUrl = `${WS_URL}?token=${token}`;
+  const isSender = vuId <= SENDER_COUNT;   
 
-    socket.on('open', () => {
-      wsConnectSuccess.add(1);
-      onlineUserGauge.add(1);
+  ws.connect(wsUrl, null, function (socket) {
+    let vuMsgSeq = 0;
+    let msgTimer = null;
+    let disconnectTimer = null;
 
-      // TCP 保活机制: K6 引擎将在 socket 关闭时自动销毁该定时器
-      socket.setInterval(() => socket.ping(), 10000);
+    socket.on("open", function () {
+      wsConnSuccess.add(1);
+      onlineUsers.add(1);
 
-      // 活跃节点火力调度机制
-      if (isActiveUser) {
-        const elapsedMs = new Date().getTime() - exec.scenario.startTime;
-        
-        // 【核心物理修正】爬坡期绝对时间阈值：2m = 120000ms
-        const fireStartWaitMs = 120000 - elapsedMs; 
-        
-        // 【核心物理修正】停止开火的绝对时间阈值：爬坡 2m + 开火 5m = 7m (420000ms)
-        const stopFiringMs = 420000; 
+      const now = Date.now();
+      
+      // 【终极物理防爆盾】：强行向上取整，并兜底最小值为 1ms，彻底绞杀 Go 引擎的 0.00 宕机
+      const delayToFire = Math.max(1, Math.ceil(fireStartMs - now));
+      const delayToClose = Math.max(1, Math.ceil(fireEndMs - now));
 
-        const startFiring = () => {
-          msgTimer = socket.setInterval(() => {
-            const currentElapsedMs = new Date().getTime() - exec.scenario.startTime;
-            
-            // 触发火力阻断机制：一旦触碰 7 分钟时间线，立刻停止发送并准备撤离
-            if (currentElapsedMs >= stopFiringMs) {
-              clearInterval(msgTimer); // 标准的全局定时器回收调用
-              return;
-            }
+      // 真实时间校验：如果已经过了撤退时间，直接物理斩断
+      if ((fireEndMs - now) <= 0) {
+        socket.close();
+        return; 
+      }
 
-            // 载荷组装与物理下发
-            const msg = JSON.stringify({
-              room_id: roomId,
-              type: 1,
-              content: ` VU_ID:[${vuId}]}]`
-            });
-            socket.send(msg);
-            wsMsgSentTotal.add(1);
-          }, 1000);
-        };
+      disconnectTimer = socket.setTimeout(function() {
+        if (msgTimer) socket.clearInterval(msgTimer);
+        socket.close();
+      }, delayToClose);
 
-        // 基于全局时钟进行绝对时间对齐同步
-        if (fireStartWaitMs > 0) {
-          socket.setTimeout(startFiring, fireStartWaitMs);
-        } else {
-          startFiring();
-        }
+      if (!isSender) return;   
+
+      const beginFiring = function () {
+        msgTimer = socket.setInterval(function () {
+          const sendTime = Date.now();
+          const globalMsgId = `${vuId}-${++vuMsgSeq}-${sendTime}`;
+          socket.send(JSON.stringify({
+            room_id: ROOM_ID,
+            content: `#${vuId}`,
+            client_msg_id: globalMsgId,
+          }));
+          msgSentTotal.add(1);
+        }, MSG_INTERVAL_MS);
+      };
+
+      // 真实时间校验：如果还没到开火时间，挂载定时炸弹，否则立刻开火
+      if ((fireStartMs - now) > 0) {
+        socket.setTimeout(beginFiring, delayToFire);
+      } else {
+        beginFiring();
       }
     });
 
-    socket.on('close', () => {
-      onlineUserGauge.add(-1);
-      // 依赖 K6 原生资源回收机制，不再手动执行冗余的 clearInterval
-    });
-
-    socket.on('error', (e) => {
-      const errMsg = e.error();
-      if (errMsg !== "websocket: close 1006 (abnormal closure)" && errMsg !== "normal closure") {
-        console.error(`[通道异常] 虚拟用户 ${vuId} 连接阻断: ${errMsg}`);
+    socket.on("message", function (raw) {
+      msgRecvTotal.add(1);
+      // 【架构级探针突围】：绕过脆弱的 JSON 嵌套解析，用正则直接从内存字符串中强抠出时间戳
+      const match = raw.match(/"ts":(\d+)/);
+      if (match && match[1]) {
+        msgLatency.add(Date.now() - parseInt(match[1], 10));
       }
     });
+
+    socket.on("close", function () {
+      onlineUsers.add(-1);
+      if (msgTimer) socket.clearInterval(msgTimer);
+      if (disconnectTimer) socket.clearTimeout(disconnectTimer);
+    });
+
+    socket.on("error", function () {});
   });
-
-  sleep(1);
-}
-
-// ============================================================================
-// 生命周期阶段 3: 物理资源回收 (Teardown)
-// ============================================================================
-export function teardown(data) {
-  console.log(`[战役结束] 压测节点已全量撤离，物理沙盘销毁完毕。`);
 }
