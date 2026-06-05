@@ -257,8 +257,16 @@ export async function loadRoomMembers(roomId) {
         list.innerHTML = members.map(function(m) {
             var uid = m.user_id || m.id;
             var uname = escapeHtml(m.username || '用户');
+            var isCreator = m.is_creator === true;
+            var role = (m.role != null) ? Number(m.role) : 1;
+            var badge = '';
+            if (isCreator || role === 3) {
+                badge = ' <span class="member-badge owner">群主</span>';
+            } else if (role === 2) {
+                badge = ' <span class="member-badge manager">管理</span>';
+            }
             return '<div class="member-item">' +
-                '<span class="member-name">' + uname + '</span>' +
+                '<span class="member-name">' + uname + badge + '</span>' +
                 '<span class="member-id">#' + uid + '</span>' +
                 '</div>';
         }).join('');

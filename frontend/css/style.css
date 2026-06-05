@@ -233,6 +233,9 @@ button.danger:hover:not(:disabled) { background: var(--danger); color: #fff; box
 .member-item:hover { background: rgba(0, 210, 255, 0.08); border-left-color: var(--accent); }
 .member-name { font-weight: 500; color: #fff; }
 .member-id { color: var(--muted); font-size: 11px; }
+.member-badge { display: inline; font-size: 10px; margin-left: 6px; padding: 1px 5px; border-radius: 3px; vertical-align: middle; }
+.member-badge.owner { color: #f0c040; border: 1px solid rgba(240,192,64,0.35); }
+.member-badge.manager { color: #40c0f0; border: 1px solid rgba(64,192,240,0.35); }
 
 .flex-row { display: flex; gap: 8px; margin-bottom: 10px; }
 .flex-row:last-child { margin-bottom: 0; }

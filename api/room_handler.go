@@ -65,12 +65,23 @@ func RemoveRoomMember(hub *core.Hub) gin.HandlerFunc {
 		operatorID := c.GetInt64("user_id")
 		globalRole := c.GetInt8("user_role") // 1=管理员,0=普通用户
 
-		// 权限校验：非管理员只能操作自己的账号
-		if globalRole != 1 {
-			if operatorID != targetUserID {
-				c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，无法移除其他成员"})
+		// 权限校验：允许全局管理员、房间创建者、群主/管理踢人；所有人可退出自己
+		canKick := globalRole == 1 || operatorID == targetUserID
+		if !canKick {
+			room, roomErr := repository.Room.GetRoomByID(roomID)
+			if roomErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "查询房间信息失败"})
 				return
 			}
+			if room.CreatorID == operatorID {
+				canKick = true
+			} else if opRole, ok, _ := repository.RoomMember.GetMemberRole(roomID, operatorID); ok && opRole >= 2 {
+				canKick = true
+			}
+		}
+		if !canKick {
+			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，仅群主/管理可移除其他成员"})
+			return
 		}
 
 		// 执行移除成员操作
@@ -121,12 +132,23 @@ func GetRoomMembers() gin.HandlerFunc {
 			return
 		}
 
-		// 组装脱敏响应数据
+		// 组装脱敏响应数据（含房间角色与创建者标记）
+		room, _ := repository.Room.GetRoomByID(roomID)
+		var creatorID int64
+		if room != nil {
+			creatorID = room.CreatorID
+		}
 		var response []map[string]interface{}
 		for _, u := range users {
+			role := int8(1)
+			if r, ok, _ := repository.RoomMember.GetMemberRole(roomID, u.ID); ok {
+				role = r
+			}
 			response = append(response, map[string]interface{}{
-				"user_id":  u.ID,
-				"username": u.Username,
+				"user_id":    u.ID,
+				"username":   u.Username,
+				"role":       role,
+				"is_creator": u.ID == creatorID,
 			})
 		}
 
