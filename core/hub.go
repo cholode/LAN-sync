@@ -1,13 +1,13 @@
 ﻿package core
 
 import (
-	"encoding/json"
-	"log"
-	"strconv"
-
 	"context"
+	"encoding/json"
+	"github.com/go-redis/redis/v8"
 	"lan-im-go/config"
 	"lan-im-go/models"
+	"log"
+	"strconv"
 )
 
 // redisMessage 是 Redis Pub/Sub 消息的中间表示，JSON key 对齐生产者使用的 snake_case 格式
@@ -64,8 +64,8 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 
 	log.Println("[全局中枢] Redis 跨节点广播总线本地监听实例已成功点火...")
 
-	ch := pubsub.Channel()
-
+	//ch := pubsub.Channel()
+	ch := pubsub.Channel(redis.WithChannelSize(10000))
 	for {
 		select {
 		case <-ctx.Done():

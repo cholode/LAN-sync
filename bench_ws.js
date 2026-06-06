@@ -16,13 +16,16 @@ const diagWsUpgrade   = new Counter("diag_ws_upgrade_fail");
 const diagPremClose   = new Counter("diag_premature_close");
 const diagNormalClose = new Counter("diag_normal_close");
 
-const TOTAL_USERS     = 10;
-const MSG_INTERVAL_MS = 1;
-const SENDER_COUNT    = 10;
+// ============================================================================
+// 100 群 × 每群 10 人在线 = 1000 连接，每群 10 人全员发消息
+// ============================================================================
+const TOTAL_USERS     = 1000;
+const USERS_PER_ROOM  = 10;
+const MSG_INTERVAL_MS = 50;
 
-const STAGE_RAMP_UP   = 5;
+const STAGE_RAMP_UP   = 30;
 const STAGE_FIRE      = 120;
-const STAGE_RAMP_DOWN = 5;
+const STAGE_RAMP_DOWN = 30;
 
 const BASE_URL = "http://127.0.0.1:8080/api/v1";
 const WS_URL   = "ws://127.0.0.1:8080/api/v1/ws";
@@ -37,7 +40,7 @@ export const options = {
         { duration: `${STAGE_FIRE}s`,      target: TOTAL_USERS },
         { duration: `${STAGE_RAMP_DOWN}s`, target: 0 },
       ],
-      gracefulRampDown: "5s",
+      gracefulRampDown: "30s",
       exec: "vuMain",
     },
   },
@@ -58,27 +61,32 @@ export function handleSummary(data) {
   console.log("==================================\n");
 }
 
-// 【防重连】标记每个 VU 是否已经完成本轮测试
 const vuDone = new Set();
 
 export function vuMain() {
   const vuId = exec.vu.idInTest;
 
-  // 已经正常关闭过，不再重连
   if (vuDone.has(vuId)) {
     sleep(9999);
     return;
   }
 
   const scenarioStart = exec.scenario.startTime;
-  const ROOM_ID = 1;
+
+  // 路由到群：k6 VU_1-10 → vu_1-10(群1), VU_11-20 → vu_101-110(群2), ...
+  const ROOM_ID = Math.floor((vuId - 1) / USERS_PER_ROOM) + 1;
+  const offsetInRoom = (vuId - 1) % USERS_PER_ROOM + 1;
+  const actualUserId = (ROOM_ID - 1) * 100 + offsetInRoom;
+
+  // 每群 10 人全员发消息
+  const isSender = true;
 
   const fireStartMs = scenarioStart + STAGE_RAMP_UP * 1000;
   const fireEndMs   = scenarioStart + (STAGE_RAMP_UP + STAGE_FIRE) * 1000;
 
   const loginRes = http.post(
     `${BASE_URL}/login`,
-    JSON.stringify({ username: `vu_${vuId}`, password: "pass123" }),
+    JSON.stringify({ username: `vu_${actualUserId}`, password: "pass123" }),
     { headers: { "Content-Type": "application/json" }, responseType: "text" }
   );
 
@@ -100,7 +108,6 @@ export function vuMain() {
   }
 
   const wsUrl = `${WS_URL}?token=${token}`;
-  const isSender = vuId <= SENDER_COUNT;
 
   ws.connect(wsUrl, null, function (socket) {
     let vuMsgSeq = 0;
@@ -115,7 +122,7 @@ export function vuMain() {
       wsOpened = true;
 
       const now = Date.now();
-      const delayToFire = Math.max(1, Math.ceil(fireStartMs - now));
+      const delayToFire  = Math.max(1, Math.ceil(fireStartMs - now));
       const delayToClose = Math.max(1, Math.ceil(fireEndMs - now));
 
       if ((fireEndMs - now) <= 0) {
@@ -136,7 +143,7 @@ export function vuMain() {
       const beginFiring = function () {
         msgTimer = socket.setInterval(function () {
           const sendTime = Date.now();
-          const globalMsgId = `${vuId}-${++vuMsgSeq}-${sendTime}`;
+          const globalMsgId = `${vuId}-${++vuMsgSeq}-${sendTime}-${Math.random().toString(36).slice(2, 8)}`;
           socket.send(JSON.stringify({
             room_id: ROOM_ID,
             content: `#${vuId}`,

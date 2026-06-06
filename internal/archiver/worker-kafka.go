@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// kafkaMessage 是 Kafka 消息的中间表示，JSON key 对齐生产者使用的 snake_case 格式
 type kafkaMessage struct {
 	RoomID      string `json:"room_id"`
 	SenderID    int64  `json:"sender_id"`
@@ -29,13 +28,8 @@ func nextID() int64 {
 	return now*1000 + seq
 }
 
-type MessageRepository interface {
-	Save(ctx context.Context, payload []byte) error
-}
-
 type Worker struct {
 	reader *kafka.Reader
-	repo   MessageRepository
 }
 
 func NewWorker(brokers []string, topic string, groupID string) *Worker {
@@ -51,41 +45,80 @@ func NewWorker(brokers []string, topic string, groupID string) *Worker {
 	}
 }
 
+const (
+	batchSize     = 1000
+	flushInterval = 500 * time.Millisecond
+)
+
 func (w *Worker) Start(ctx context.Context) {
 	defer w.reader.Close()
 
-	log.Println("稳态消费者已启动...")
+	log.Println("[Archiver] 稳态消费者已启动（微批模式: 1000条/500ms）")
+
+	msgBatch := make([]*models.Message, 0, batchSize)
+	// 记录本批次对应的最后一条 Kafka 消息，用于批量提交位移
+	var lastMsg kafka.Message
+	needCommit := false
+
+	flush := func() {
+		if len(msgBatch) == 0 {
+			return
+		}
+		if err := repository.Message.SaveMessageBatch(msgBatch); err != nil {
+			log.Printf("[Archiver] 批量写入失败，丢弃 %d 条: %v", len(msgBatch), err)
+		}
+		msgBatch = msgBatch[:0]
+
+		// 批次落库成功后，提交本批最后一条的位移
+		if needCommit {
+			if err := w.reader.CommitMessages(ctx, lastMsg); err != nil {
+				log.Printf("[Archiver] 位移提交失败: %v", err)
+			}
+			needCommit = false
+		}
+	}
+
+	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
 
 	for {
-		m, err := w.reader.FetchMessage(ctx)
+		select {
+		case <-ctx.Done():
+			flush()
+			log.Println("[Archiver] 消费者安全退出")
+			return
+		default:
+		}
+
+		// 带超时的单条拉取，兼顾攒批响应
+		fetchCtx, cancel := context.WithTimeout(ctx, flushInterval)
+		m, err := w.reader.FetchMessage(fetchCtx)
+		cancel()
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				log.Printf("收到系统 canceled 信号，退出循环 %v\n", err)
-				return
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				// 超时或取消 → 刷盘
+				flush()
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				continue
 			}
-			log.Printf("Kafka 物理拉取异常，进入重试 %v\n", err)
+			log.Printf("[Archiver] Kafka 拉取异常: %v", err)
 			continue
 		}
 
 		var raw kafkaMessage
 		if err := json.Unmarshal(m.Value, &raw); err != nil {
-			log.Printf("Kafka 脏数据解析阻断，直接抛弃并跳过 %v\n", err)
-			if commitErr := w.reader.CommitMessages(ctx, m); commitErr != nil {
-				log.Printf("毒消息位移跳过失败 %v\n", commitErr)
-			}
+			_ = w.reader.CommitMessages(ctx, m)
 			continue
 		}
-
 		roomID, err := strconv.ParseInt(raw.RoomID, 10, 64)
 		if err != nil {
-			log.Printf("room_id 格式非法: %q，抛弃 %v\n", raw.RoomID, err)
-			if commitErr := w.reader.CommitMessages(ctx, m); commitErr != nil {
-				log.Printf("毒消息位移跳过失败 %v\n", commitErr)
-			}
+			_ = w.reader.CommitMessages(ctx, m)
 			continue
 		}
 
-		msg := &models.Message{
+		msgBatch = append(msgBatch, &models.Message{
 			ID:          nextID(),
 			RoomID:      roomID,
 			SenderID:    raw.SenderID,
@@ -93,16 +126,12 @@ func (w *Worker) Start(ctx context.Context) {
 			Type:        1,
 			Content:     raw.Content,
 			CreatedAt:   time.Now(),
-		}
+		})
+		lastMsg = m
+		needCommit = true
 
-		err = repository.Message.SaveMessage(msg)
-		if err != nil {
-			log.Printf("底层数据库持久化物理阻断，拒绝提交位移: %v \n", err)
-			continue
-		}
-
-		if err := w.reader.CommitMessages(ctx, m); err != nil {
-			log.Printf("位移提交物理阻断: %v \n", err)
+		if len(msgBatch) >= batchSize {
+			flush()
 		}
 	}
 }
