@@ -21,7 +21,7 @@ const diagNormalClose = new Counter("diag_normal_close");
 // ============================================================================
 const TOTAL_USERS     = 1000;
 const USERS_PER_ROOM  = 10;
-const MSG_INTERVAL_MS = 50;
+const MSG_INTERVAL_MS = 100;
 
 const STAGE_RAMP_UP   = 30;
 const STAGE_FIRE      = 120;

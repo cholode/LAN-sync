@@ -18,6 +18,7 @@ type kafkaMessage struct {
 	SenderID    int64  `json:"sender_id"`
 	Content     string `json:"content"`
 	ClientMsgID string `json:"client_msg_id"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 var idSeq int64
@@ -56,7 +57,6 @@ func (w *Worker) Start(ctx context.Context) {
 	log.Println("[Archiver] 稳态消费者已启动（微批模式: 1000条/500ms）")
 
 	msgBatch := make([]*models.Message, 0, batchSize)
-	// 记录本批次对应的最后一条 Kafka 消息，用于批量提交位移
 	var lastMsg kafka.Message
 	needCommit := false
 
@@ -64,12 +64,16 @@ func (w *Worker) Start(ctx context.Context) {
 		if len(msgBatch) == 0 {
 			return
 		}
-		if err := repository.Message.SaveMessageBatch(msgBatch); err != nil {
-			log.Printf("[Archiver] 批量写入失败，丢弃 %d 条: %v", len(msgBatch), err)
-		}
+		count := len(msgBatch)
+		err := repository.Message.SaveMessageBatch(msgBatch)
 		msgBatch = msgBatch[:0]
 
-		// 批次落库成功后，提交本批最后一条的位移
+		if err != nil {
+			log.Printf("[Archiver] 批量写入失败，%d 条不提交位移，重启后重放: %v", count, err)
+			needCommit = false
+			return
+		}
+
 		if needCommit {
 			if err := w.reader.CommitMessages(ctx, lastMsg); err != nil {
 				log.Printf("[Archiver] 位移提交失败: %v", err)
@@ -90,13 +94,11 @@ func (w *Worker) Start(ctx context.Context) {
 		default:
 		}
 
-		// 带超时的单条拉取，兼顾攒批响应
 		fetchCtx, cancel := context.WithTimeout(ctx, flushInterval)
 		m, err := w.reader.FetchMessage(fetchCtx)
 		cancel()
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				// 超时或取消 → 刷盘
 				flush()
 				if errors.Is(err, context.Canceled) {
 					return
@@ -125,7 +127,7 @@ func (w *Worker) Start(ctx context.Context) {
 			ClientMsgID: raw.ClientMsgID,
 			Type:        1,
 			Content:     raw.Content,
-			CreatedAt:   time.Now(),
+			CreatedAt:   parseTime(raw.Timestamp),
 		})
 		lastMsg = m
 		needCommit = true
@@ -134,4 +136,13 @@ func (w *Worker) Start(ctx context.Context) {
 			flush()
 		}
 	}
+}
+
+// parseTime 从 Kafka 消息体中的纳秒时间戳还原真实发送时间，
+// 兼容旧消息（timestamp=0 时回退到当前时间）。
+func parseTime(ns int64) time.Time {
+	if ns == 0 {
+		return time.Now()
+	}
+	return time.Unix(0, ns)
 }
