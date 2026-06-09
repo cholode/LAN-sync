@@ -5,7 +5,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
-	"io"
+	//"io"
 	"lan-im-go/api"
 	"lan-im-go/config"
 	"lan-im-go/core"
@@ -19,176 +19,194 @@ import (
 	"time"
 )
 
+// main 程序入口函数
+// 按顺序执行：基础设施初始化 → 数据访问层初始化 → 后台消费服务启动 → WebSocket引擎启动 → HTTP服务启动
 func main() {
-
-	//  鍗曠嫭鍚姩涓€涓?goroutine 鐩戝惉 6060 绔彛锛堜笉褰卞搷涓讳笟鍔★級
+	// 独立启动pprof性能分析服务，监听6060端口，不阻塞主业务流程
 	go func() {
-		// 鍦板潃锛?.0.0.0:6060 鍏佽澶栭儴/瀹夸富鏈鸿闂?
+		// 绑定0.0.0.0允许外部/宿主机访问，生产环境建议限制为内网地址
 		err := http.ListenAndServe("0.0.0.0:6060", nil)
 		if err != nil {
 			panic("pprof start failed: " + err.Error())
 		}
 	}()
-	log.SetOutput(io.Discard)
-	// ========================================================================
-	// 闃舵1锛氱幆澧冧笌鍩虹璁炬柦鍒濆鍖?
-	// ========================================================================
-	// 浠庣幆澧冨彉閲忚鍙栨暟鎹簱閰嶇疆锛屼负绌烘椂浣跨敤鏈湴榛樿閰嶇疆锛堥€傞厤鏈湴璋冭瘯锛?
+
+	//log.SetOutput(io.Discard)
+
+	// ================================
+	// 阶段1：环境与基础设施初始化
+	// ================================
+	// 从环境变量读取数据库DSN，为空时使用本地默认配置（仅适用于开发调试）
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
 		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=Local"
-		log.Println("[璀﹀憡] 鏈娴嬪埌DB_DSN鐜鍙橀噺锛屼娇鐢ㄦ湰鍦伴粯璁ら厤缃繛鎺ySQL")
+		log.Println("[警告] 未检测到DB_DSN环境变量，使用本地默认配置连接MySQL")
 	}
 
-	//涓棿浠跺垵濮嬪寲锛宺edis锛宬afka
+	// 初始化中间件：Redis缓存、Kafka消息队列
 	config.InitRedis()
 	config.InitKafka()
 
+	// 程序退出时优雅关闭资源连接
 	defer config.RedisClient.Close()
 	defer config.KafkaProducer.Close()
 
-	// 鍒濆鍖栨暟鎹簱杩炴帴姹犲苟鑷姩鍚屾琛ㄧ粨鏋?
-	// 鏁版嵁搴撹繛鎺ュけ璐ユ椂绋嬪簭鐩存帴缁堟锛屼繚璇佹湇鍔″惎鍔ㄥ畬鏁存€?
+	// 初始化数据库连接池并自动同步表结构
+	// 数据库连接失败时直接panic终止程序，保证服务启动的完整性
 	infrastructure.InitDatabase(dsn)
 	api.InitFileDirs()
-	// ========================================================================
-	// 闃舵2锛氭暟鎹闂眰鍒濆鍖?
-	// ========================================================================
-	// 娉ㄥ叆鏁版嵁搴撹繛鎺ュ疄渚嬪埌鏁版嵁璁块棶灞?
-	// 涓氬姟閫昏緫缁熶竴閫氳繃鏁版嵁璁块棶灞傛帴鍙ｆ搷浣滄暟鎹簱
+
+	// ================================
+	// 阶段2：数据访问层(DAL)初始化
+	// ================================
+	// 注入数据库连接实例到数据访问层
+	// 所有业务逻辑统一通过数据访问层接口操作数据库
 	repository.InitRepositories(infrastructure.DB)
-	log.Println("[灏辩华] 鏁版嵁璁块棶灞傚垵濮嬪寲瀹屾垚")
+	log.Println("[系统就绪] 数据访问层(DAL)初始化完成")
 
 	repository.InitRepositories(infrastructure.DB)
 	log.Println("[系统就绪] 数据访问层(DAL) 初始化完成")
 
-	// ========================================================================
-	// 闃舵 3锛氬悗鍙扮ǔ鎬佹秷璐硅€呭敜閱?(Kafka Consumer Daemon)
-	// ========================================================================
+	// ================================
+	// 阶段3：Kafka离线消息归档消费服务启动
+	// ================================
+	// 从环境变量读取Kafka地址，为空时使用本地默认地址
 	kafkaAddrStr := os.Getenv("KAFKA_ADDR")
 	if kafkaAddrStr == "" {
-		kafkaAddrStr = "127.0.0.1:9092" // 鏈湴闄嶇骇
+		kafkaAddrStr = "127.0.0.1:9092"
+		log.Println("[警告] 未检测到KAFKA_ADDR环境变量，使用本地默认配置连接Kafka")
 	}
 
-	// 缁勮娑堣垂鑰咃紝瀹冨唴閮ㄤ細鑷姩璋冪敤 repository.Message 杩涜鐗╃悊钀界洏
-	worker := archiver.NewWorker([]string{kafkaAddrStr}, "im_chat_messages", "mysql_archiver_group")
+	// 初始化消息归档Worker，内部自动调用repository持久化消息到MySQL
+	worker := archiver.NewWorker([]string{kafkaAddrStr}, "im_chat_messages", "mysql_archiver_group", config.RedisClient)
 
-	// 鍒涘缓鍏ㄥ眬鐢熷懡鍛ㄦ湡涓婁笅鏂?
+	// 创建全局根上下文，用于控制所有后台协程的生命周期
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// 启动Kafka消费协程，阻塞监听消息队列
 	go func() {
-		log.Println("[绯荤粺鎸囦护] Kafka 绋虫€佹秷璐瑰崗绋嬭繘鍏ユ寰幆鐩戝惉...")
+		log.Println("[系统启动] Kafka离线消息归档协程进入循环监听...")
 		worker.Start(ctx)
 	}()
 
-	// ========================================================================
-	// 闃舵3锛歐ebSocket鏍稿績寮曟搸鍚姩
-	// ========================================================================
-	// 鍒涘缓鍏ㄥ眬WebSocket璺敱涓績
+	// ================================
+	// 阶段4：WebSocket核心引擎启动
+	// ================================
+	// 创建全局WebSocket连接管理器Hub
 	hub := core.NewHub()
-	// 鍚姩寮曟搸鐩戝惉璋冨害閫氶亾
+	// 启动Hub主循环，处理连接注册、注销和消息广播
 	go hub.Run(ctx)
+	// 启动全局消息监听器，接收Kafka消息并转发到对应房间
 	go core.StartGlobalListener(ctx, hub)
-	log.Println("[灏辩华] WebSocket鏍稿績寮曟搸鍚姩瀹屾垚")
+	log.Println("[系统就绪] WebSocket核心引擎启动完成")
 
-	// ========================================================================
-	// 闃舵4锛欻TTP鏈嶅姟涓庤矾鐢遍厤缃?
-	// ========================================================================
-	// 寮€鍙戠幆澧冧娇鐢ㄩ粯璁ゆā寮忥紝鐢熶骇鐜寤鸿鍒囨崲涓哄彂甯冩ā寮?
-	//r := gin.Default()
-	gin.SetMode(gin.ReleaseMode)
-	//gin.SetMode(gin.DebugMode)
+	// ================================
+	// 阶段5：HTTP服务与路由配置
+	// ================================
+	// 设置Gin运行模式，生产环境必须切换为ReleaseMode
+	//gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.DebugMode)
+
+	// 自定义Gin引擎，禁用默认日志中间件，保留崩溃恢复中间件
 	r := gin.New()
-
 	//r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+
+	// 注册pprof性能分析路由
 	pprof.Register(r)
-	// ========================================================================
-	// 璺ㄥ煙閰嶇疆锛堥渶鍦ㄨ矾鐢辨敞鍐屽墠閰嶇疆锛?
-	// ========================================================================
+
+	// ================================
+	// 跨域资源共享(CORS)配置
+	// ================================
 	r.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true, // 寮€鍙戠幆澧冨厑璁告墍鏈夊煙鍚嶏紝鐢熶骇鐜闇€閰嶇疆鎸囧畾鍓嶇鍩熷悕
+		AllowAllOrigins:  true, // 开发环境允许所有来源，生产环境必须配置指定前端域名
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
-		MaxAge:           12 * time.Hour, // 棰勬璇锋眰缂撳瓨鏃堕暱锛屽噺灏戦噸澶嶈姹?
+		MaxAge:           12 * time.Hour, // 预检请求缓存时间，减少重复请求
 	}))
 
-	// ========================================================================
-	// 璺敱鍒嗙粍閰嶇疆
-	// ========================================================================
+	// ================================
+	// 路由分组配置
+	// ================================
 
-	// 鍏叡璺敱缁勶細鏃犻渶韬唤楠岃瘉
+	// 公开路由组：无需身份认证即可访问
 	public := r.Group("/api/v1")
 	{
-		// 寮€鏀炬帴鍙ｏ細鐢ㄦ埛娉ㄥ唽銆佺櫥褰?
+		// 用户认证接口
 		public.POST("/register", api.RegisterHandler)
 		public.POST("/login", api.LoginHandler)
-		// 鏂囦欢涓嬭浇锛氳矾寰勪腑鍚暣鏂囦欢 SHA-256 鍓嶇紑锛岃涓鸿兘鍔涢摼鎺ワ紱缇ゆ垚鍛樻棤闇€鍦?URL 涓甫鍚勮嚜 JWT 鍗冲彲鍦ㄦ祻瑙堝櫒涓墦寮€涓嬭浇
+		// 文件下载接口：路径包含文件SHA-256哈希作为能力链，无需JWT即可直接下载
 		public.GET("/download/*filepath", api.DownloadFile)
 	}
 
-	// 閴存潈璺敱缁勶細闇€JWT韬唤楠岃瘉
+	// 授权路由组：需要JWT身份认证才能访问
 	authorized := r.Group("/api/v1")
-	// 娉ㄥ唽JWT韬唤楠岃瘉涓棿浠?
+	// 注册JWT身份认证中间件
 	authorized.Use(middleware.JWTAuth())
 	{
-		// WebSocket杩炴帴鍏ュ彛
-		log.Printf("杩涘叆WebSocket杩炴帴閰嶇疆\n")
+		// WebSocket连接建立端点
+		log.Printf("进入WebSocket连接配置\n")
 		authorized.GET("/ws", func(c *gin.Context) {
 			api.WsEndpoint(hub)(c)
 		})
 
-		// 鏂囦欢涓婁紶鐩稿叧鎺ュ彛
+		// 分片文件上传接口
 		authorized.GET("/upload/status", api.CheckUploadStatus)
 		authorized.POST("/upload/chunk", api.UploadChunk)
 		authorized.POST("/upload/merge", api.MergeChunks)
-		// 缇よ亰鐩稿叧鎺ュ彛
+		authorized.DELETE("/upload/cancel", api.CancelUpload)
+
+		// 群聊相关接口
 		authorized.GET("/rooms/:id/messages", api.GetChatHistory())
 		authorized.POST("/rooms/:id/join", api.JoinRoom(hub))
 		authorized.GET("/rooms/:id/members", api.GetRoomMembers())
 		authorized.DELETE("/rooms/:id/members/:user_id", api.RemoveRoomMember(hub))
 		authorized.DELETE("/rooms/:id/disband", api.OwnerDisbandRoom(hub))
-		authorized.DELETE("/upload/cancel", api.CancelUpload)
-		// 缇よ亰绠＄悊鎺ュ彛
+
+		// 群聊管理接口
 		authorized.POST("/rooms", api.CreateRoom(hub))
 		authorized.GET("/my_rooms", api.GetMyRooms())
 	}
 
-	// 绠＄悊鍛樿矾鐢辩粍锛氶渶绠＄悊鍛樻潈闄?
+	// 管理员路由组：需要超级管理员权限
 	admin := r.Group("/api/v1/admin")
-	// 涓棿浠舵墽琛岄『搴忥細鍏堣韩浠介獙璇侊紝鍐嶆潈闄愭牎楠?
+	// 中间件执行顺序：先身份认证，再权限校验
 	admin.Use(middleware.JWTAuth(), middleware.SuperAdminOnly())
 	{
-		// 绠＄悊鍛樻搷浣滄帴鍙?
+		// 管理员操作接口
 		admin.DELETE("/users/:id", api.AdminDeleteUser(hub))
 		admin.DELETE("/rooms/:id", api.AdminDeleteRoom(hub))
 	}
 
-	// ========================================================================
-	// 闃舵5锛氬惎鍔℉TTP鏈嶅姟
-	// ========================================================================
+	// ================================
+	// 阶段6：启动HTTP服务
+	// ================================
+	// 从环境变量读取服务端口，为空时默认使用8080
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "8080"
 	}
 
+	// 配置HTTP服务器参数
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           r,                // 灏?Gin 璺敱寮曟搸寮鸿鎸傝浇鍒板簳灞?Server
-		ReadTimeout:       5 * time.Second,  // 璇诲彇瀹屾暣璇锋眰澶?浣撶殑鏈€闀挎椂闂?
-		ReadHeaderTimeout: 3 * time.Second,  // 闃插尽 Slowloris 鎱㈤€熷ご閮ㄦ敾鍑?
-		WriteTimeout:      10 * time.Second, // 鍝嶅簲鍐欏洖鐨勬渶闀挎椂闂?
-		IdleTimeout:       15 * time.Second, // 搴曞眰 TCP Keep-Alive 绌洪棽鏈€澶у瓨娲绘椂闂?
+		Handler:           r,                // 将Gin路由引擎挂载到底层HTTP服务器
+		ReadTimeout:       5 * time.Second,  // 读取完整请求头和请求体的最长时间
+		ReadHeaderTimeout: 3 * time.Second,  // 仅读取请求头的最长时间，防止Slowloris攻击
+		WriteTimeout:      10 * time.Second, // 写入响应的最长时间
+		IdleTimeout:       15 * time.Second, // TCP Keep-Alive连接的最长空闲时间
 	}
 
-	log.Printf("[鏋舵瀯灏辩华] LAN-IM 鏈嶅姟绔惎鍔ㄦ垚鍔燂紝鐩戝惉绔彛 :%s", port)
+	log.Printf("[系统启动] LAN-IM 服务端启动成功，监听端口 :%s", port)
 
-	// 鎵ц甯︽湁寮傚父鎹曡幏鐨勫簳灞傚惎鍔ㄨ皟鐢?
+	// 启动HTTP服务，阻塞等待请求
+	// 只有服务异常关闭或主动调用Shutdown时才会返回
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("[鑷村懡閿欒] 缃戝叧宕╂簝: %v", err)
+		log.Fatalf("[致命错误] 服务启动失败: %v", err)
 	}
 
+	// 收到关闭信号后，取消全局上下文，通知所有后台协程优雅退出
 	cancel()
 }

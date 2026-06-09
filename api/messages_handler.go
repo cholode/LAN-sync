@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"net/http"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"lan-im-go/cache"
 	"lan-im-go/repository"
 )
 
@@ -40,42 +41,72 @@ func GetChatHistory() gin.HandlerFunc {
 			return
 		}
 
-		// 解析分页参数
-		// cursor=0 表示首次加载，查询最新消息
 		cursorStr := c.DefaultQuery("cursor", "0")
 		limitStr := c.DefaultQuery("limit", "50")
 		cursorMsgID, _ := strconv.ParseInt(cursorStr, 10, 64)
 		limit, _ := strconv.Atoi(limitStr)
 
-		// 分页参数校验：限制最大查询数量，保证接口性能
 		if limit > 100 {
 			limit = 100
 		} else if limit <= 0 {
 			limit = 50
 		}
 
-		// 游标分页查询消息，避免深分页性能问题
-		messages, err := repository.Message.GetHistoryByCursor(roomID, cursorMsgID, limit)
-		// #region agent log
+		// ====================================================================
+		// 首页查询（cursor=0）：优先走 Redis 热点缓存，miss 回退 MySQL
+		// ====================================================================
+		var messages []cache.CachedMsg
+		var nextCursor int64 = 0
+		hasMore := false
 
-		// #endregion
+		if cursorMsgID == 0 {
+			cached, err := cache.GetLatestMessages(c.Request.Context(), roomID, limit)
+			if err == nil && len(cached) > 0 {
+				messages = cached
+				// 缓存命中：判断是否还有更多（缓存满则说明 MySQL 可能还有更老的）
+				hasMore = len(cached) == limit
+				if hasMore && len(cached) > 0 {
+					nextCursor = cached[len(cached)-1].ID
+				}
+				// 转 DTO 返回
+				out := make([]chatHistoryMsgDTO, 0, len(messages))
+				for _, m := range messages {
+					out = append(out, chatHistoryMsgDTO{
+						ID: m.ID, RoomID: m.RoomID, SenderID: m.SenderID,
+						Type: m.Type, Content: m.Content, CreatedAt: m.CreatedAt,
+					})
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"messages":    out,
+					"next_cursor": strconv.FormatInt(nextCursor, 10),
+					"has_more":    hasMore,
+					"source":      "redis",
+				})
+				return
+			}
+		}
+
+		// ====================================================================
+		// 缓存未命中 或 翻页查询 → MySQL
+		// ====================================================================
+		dbMsgs, err := repository.Message.GetHistoryByCursor(roomID, cursorMsgID, limit)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "获取历史消息失败"})
 			return
 		}
 
-		// 计算下一页游标
-		var nextCursor int64 = 0
-		if len(messages) > 0 {
-			// 取当前列表最后一条消息ID作为下一页游标
-			nextCursor = messages[len(messages)-1].ID
+		// 缓存未命中时，异步回填 Redis
+		if cursorMsgID == 0 && len(dbMsgs) > 0 {
+			go cache.BackfillRoomCache(c.Request.Context(), dbMsgs)
 		}
 
-		// 判断是否存在更多数据
-		hasMore := len(messages) == limit
+		if len(dbMsgs) > 0 {
+			nextCursor = dbMsgs[len(dbMsgs)-1].ID
+		}
+		hasMore = len(dbMsgs) == limit
 
-		out := make([]chatHistoryMsgDTO, 0, len(messages))
-		for _, m := range messages {
+		out := make([]chatHistoryMsgDTO, 0, len(dbMsgs))
+		for _, m := range dbMsgs {
 			out = append(out, chatHistoryMsgDTO{
 				ID: m.ID, RoomID: m.RoomID, SenderID: m.SenderID,
 				Type: m.Type, Content: m.Content, CreatedAt: m.CreatedAt,

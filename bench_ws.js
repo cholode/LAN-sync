@@ -17,15 +17,15 @@ const diagPremClose   = new Counter("diag_premature_close");
 const diagNormalClose = new Counter("diag_normal_close");
 
 // ============================================================================
-// 100 群 × 每群 10 人在线 = 1000 连接，每群 10 人全员发消息
+// 100 群 × 每群 10 人在线 = 1000 连接
 // ============================================================================
 const TOTAL_USERS     = 1000;
 const USERS_PER_ROOM  = 10;
-const MSG_INTERVAL_MS = 100;
+const MSG_INTERVAL_MS = 50;
 
 const STAGE_RAMP_UP   = 30;
 const STAGE_FIRE      = 120;
-const STAGE_RAMP_DOWN = 30;
+const STAGE_RAMP_DOWN = 1;    // 1 秒内全部登出
 
 const BASE_URL = "http://127.0.0.1:8080/api/v1";
 const WS_URL   = "ws://127.0.0.1:8080/api/v1/ws";
@@ -40,7 +40,7 @@ export const options = {
         { duration: `${STAGE_FIRE}s`,      target: TOTAL_USERS },
         { duration: `${STAGE_RAMP_DOWN}s`, target: 0 },
       ],
-      gracefulRampDown: "30s",
+      gracefulRampDown: "1s",
       exec: "vuMain",
     },
   },
@@ -73,12 +73,10 @@ export function vuMain() {
 
   const scenarioStart = exec.scenario.startTime;
 
-  // 路由到群：k6 VU_1-10 → vu_1-10(群1), VU_11-20 → vu_101-110(群2), ...
   const ROOM_ID = Math.floor((vuId - 1) / USERS_PER_ROOM) + 1;
   const offsetInRoom = (vuId - 1) % USERS_PER_ROOM + 1;
   const actualUserId = (ROOM_ID - 1) * 100 + offsetInRoom;
 
-  // 每群 10 人全员发消息
   const isSender = true;
 
   const fireStartMs = scenarioStart + STAGE_RAMP_UP * 1000;
