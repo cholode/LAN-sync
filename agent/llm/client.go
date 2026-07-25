@@ -1,4 +1,4 @@
-﻿package llm
+package llm
 
 import (
 	"bytes"
@@ -109,79 +109,83 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage, temperature f
 		return nil, fmt.Errorf("marshal chat request: %w", err)
 	}
 
-	// 发送 http 请求
 	resp, err := c.doRequest(ctx, "POST", c.baseURL+"/chat/completions", body)
 	if err != nil {
-		return nil, fmt.Errorf(" chat request: %w", err)
+		return nil, fmt.Errorf("chat request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// 读入内存
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf(" read chat response: %w", err)
+		return nil, fmt.Errorf("read chat response: %w", err)
 	}
 
-	// 确认 http 返回成功
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(" chat API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("chat API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	// 序列化 ai 返回的答案
 	var chatResp ChatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf(" unmarshal chat response: %w", err)
+		return nil, fmt.Errorf("unmarshal chat response: %w", err)
 	}
 
-	// 返回 ai 的回复
 	return &chatResp, nil
 }
 
-// Embed 文本向量化
+// Embed 单条文本向量化，返回第一条结果（兼容旧调用）
 func (c *Client) Embed(ctx context.Context, inputs []string) ([]float32, int, error) {
+	vecs, tokens, err := c.EmbedMulti(ctx, inputs)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(vecs) == 0 {
+		return nil, 0, fmt.Errorf("empty embedding response")
+	}
+	return vecs[0], tokens, nil
+}
 
-	// 初始化请求
+// EmbedMulti 批量文本向量化，利用 API 原生批量能力一次请求返回全部向量
+func (c *Client) EmbedMulti(ctx context.Context, inputs []string) ([][]float32, int, error) {
 	req := EmbeddingRequest{
 		Model: "text-embedding-3-small",
 		Input: inputs,
 	}
 
-	// 序列化
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal embed request: %w", err)
 	}
 
-	// 发起向量化请求
 	resp, err := c.doRequest(ctx, "POST", c.baseURL+"/embeddings", body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("embed request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// 读入内存
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read embed response: %w", err)
 	}
 
-	// 确认状态
 	if resp.StatusCode != http.StatusOK {
 		return nil, 0, fmt.Errorf("embed API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	// 反序列化
 	var embedResp EmbeddingResponse
 	if err := json.Unmarshal(respBody, &embedResp); err != nil {
 		return nil, 0, fmt.Errorf("unmarshal embed response: %w", err)
 	}
 
-	// 返回错误
-	if len(embedResp.Data) == 0 {
-		return nil, 0, fmt.Errorf("empty embedding response")
+	// 按 Index 排序后返回（API 不保证顺序）
+	vecs := make([][]float32, len(embedResp.Data))
+	for _, d := range embedResp.Data {
+		if d.Index < 0 || d.Index >= len(vecs) {
+			continue
+		}
+		vecs[d.Index] = d.Embedding
 	}
 
-	return embedResp.Data[0].Embedding, embedResp.Usage.TotalTokens, nil
+	return vecs, embedResp.Usage.TotalTokens, nil
 }
 
 // doRequest 通用 HTTP 请求
