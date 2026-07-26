@@ -27,7 +27,6 @@ func (e *Embedder) Embed(ctx context.Context, text string) ([]float32, error) {
 }
 
 // EmbedBatch 批量文本向量化
-// 利用 Embedding API 原生批量能力，每次请求最多 100 条，按序返回
 func (e *Embedder) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
 	const batchSize = 100
 	result := make([][]float32, 0, len(texts))
