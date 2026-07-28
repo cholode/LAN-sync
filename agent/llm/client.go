@@ -21,8 +21,36 @@ type Client struct {
 
 // ChatMessage 消息结构
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string      `json:"role"`
+	Content    string      `json:"content,omitempty"`
+	ToolCallID string      `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+}
+
+// ToolCall 函数调用
+type ToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
+}
+
+// FunctionCall 函数调用详情
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// Tool 工具定义
+type Tool struct {
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
+}
+
+// FunctionDef 函数定义
+type FunctionDef struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Parameters  interface{} `json:"parameters"`
 }
 
 // ChatRequest 请求体
@@ -32,6 +60,7 @@ type ChatRequest struct {
 	Temperature float64       `json:"temperature"`
 	MaxTokens   int           `json:"max_tokens,omitempty"`
 	Stream      bool          `json:"stream"`
+	Tools       []Tool        `json:"tools,omitempty"`
 }
 
 // ChatResponse 响应体
@@ -39,8 +68,9 @@ type ChatResponse struct {
 	ID      string `json:"id"`
 	Choices []struct {
 		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
+			Role      string     `json:"role"`
+			Content   string     `json:"content"`
+			ToolCalls []ToolCall `json:"tool_calls"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -94,16 +124,16 @@ func (c *Client) SetModel(model string) {
 	c.model = model
 }
 
-// Chat 对话补全
-func (c *Client) Chat(ctx context.Context, messages []ChatMessage, temperature float64) (*ChatResponse, error) {
+// Chat 对话补全，支持 function calling
+func (c *Client) Chat(ctx context.Context, messages []ChatMessage, temperature float64, tools []Tool) (*ChatResponse, error) {
 	req := ChatRequest{
 		Model:       c.model,
 		Messages:    messages,
 		Temperature: temperature,
 		Stream:      false,
+		Tools:       tools,
 	}
 
-	// 序列化
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal chat request: %w", err)
@@ -132,7 +162,7 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage, temperature f
 	return &chatResp, nil
 }
 
-// Embed 单条文本向量化，返回第一条结果（兼容旧调用）
+// Embed 单条文本向量化，返回第一条结果
 func (c *Client) Embed(ctx context.Context, inputs []string) ([]float32, int, error) {
 	vecs, tokens, err := c.EmbedMulti(ctx, inputs)
 	if err != nil {
@@ -144,7 +174,7 @@ func (c *Client) Embed(ctx context.Context, inputs []string) ([]float32, int, er
 	return vecs[0], tokens, nil
 }
 
-// EmbedMulti 批量文本向量化，利用 API 原生批量能力一次请求返回全部向量
+// EmbedMulti 批量文本向量化，一次请求传入整个 batch
 func (c *Client) EmbedMulti(ctx context.Context, inputs []string) ([][]float32, int, error) {
 	req := EmbeddingRequest{
 		Model: "text-embedding-3-small",
@@ -176,7 +206,6 @@ func (c *Client) EmbedMulti(ctx context.Context, inputs []string) ([][]float32, 
 		return nil, 0, fmt.Errorf("unmarshal embed response: %w", err)
 	}
 
-	// 按 Index 排序后返回（API 不保证顺序）
 	vecs := make([][]float32, len(embedResp.Data))
 	for _, d := range embedResp.Data {
 		if d.Index < 0 || d.Index >= len(vecs) {
