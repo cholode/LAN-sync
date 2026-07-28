@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// EmbedClient 向量嵌入客户端，默认使用硅基流动的中文 embedding 模型
+// EmbedClient 向量嵌入客户端，默认使用豆包 multimodal embedding
 type EmbedClient struct {
 	baseURL    string
 	apiKey     string
@@ -20,14 +20,20 @@ type EmbedClient struct {
 	httpClient *http.Client
 }
 
-// EmbeddingRequest 嵌入请求
-type EmbeddingRequest struct {
-	Model string   `json:"model"`
-	Input []string `json:"input"`
+// embedInput 豆包 multimodal 输入单项
+type embedInput struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
 }
 
-// EmbeddingResponse 嵌入响应
-type EmbeddingResponse struct {
+// embedRequest 豆包 multimodal 请求体
+type embedRequest struct {
+	Model string       `json:"model"`
+	Input []embedInput `json:"input"`
+}
+
+// embedResponse 豆包 multimodal 响应体
+type embedResponse struct {
 	Data []struct {
 		Embedding []float32 `json:"embedding"`
 		Index     int       `json:"index"`
@@ -38,18 +44,18 @@ type EmbeddingResponse struct {
 }
 
 // NewEmbedClient 创建 Embedding 客户端
-// EMBED_BASE_URL — 默认 https://api.siliconflow.cn/v1（硅基流动）
+// EMBED_BASE_URL — 默认 https://ark.cn-beijing.volces.com/api/v3
 // EMBED_API_KEY — API Key
-// EMBED_MODEL   — 默认 BAAI/bge-large-zh-v1.5（1024维，中文优化）
+// EMBED_MODEL   — 默认 doubao-embedding-vision-251215（1024维）
 func NewEmbedClient() *EmbedClient {
 	baseURL := os.Getenv("EMBED_BASE_URL")
 	if baseURL == "" {
-		baseURL = "https://api.siliconflow.cn/v1"
+		baseURL = "https://ark.cn-beijing.volces.com/api/v3"
 	}
 	apiKey := os.Getenv("EMBED_API_KEY")
 	model := os.Getenv("EMBED_MODEL")
 	if model == "" {
-		model = "BAAI/bge-large-zh-v1.5"
+		model = "doubao-embedding-vision-251215"
 	}
 
 	return &EmbedClient{
@@ -78,11 +84,16 @@ func (c *EmbedClient) Embed(ctx context.Context, text string) ([]float32, error)
 	return vecs[0], nil
 }
 
-// EmbedMulti 批量文本向量化，一次请求传入整个 batch（最多100条）
+// EmbedMulti 批量文本向量化，一次请求传入整个 batch
 func (c *EmbedClient) EmbedMulti(ctx context.Context, inputs []string) ([][]float32, error) {
-	req := EmbeddingRequest{
+	items := make([]embedInput, len(inputs))
+	for i, t := range inputs {
+		items[i] = embedInput{Type: "text", Text: t}
+	}
+
+	req := embedRequest{
 		Model: c.model,
-		Input: inputs,
+		Input: items,
 	}
 
 	body, err := json.Marshal(req)
@@ -90,7 +101,7 @@ func (c *EmbedClient) EmbedMulti(ctx context.Context, inputs []string) ([][]floa
 		return nil, fmt.Errorf("marshal embed request: %w", err)
 	}
 
-	resp, err := c.doRequest(ctx, "POST", c.baseURL+"/embeddings", body)
+	resp, err := c.doRequest(ctx, "POST", c.baseURL+"/embeddings/multimodal", body)
 	if err != nil {
 		return nil, fmt.Errorf("embed request: %w", err)
 	}
@@ -105,7 +116,7 @@ func (c *EmbedClient) EmbedMulti(ctx context.Context, inputs []string) ([][]floa
 		return nil, fmt.Errorf("embed API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var embedResp EmbeddingResponse
+	var embedResp embedResponse
 	if err := json.Unmarshal(respBody, &embedResp); err != nil {
 		return nil, fmt.Errorf("unmarshal embed response: %w", err)
 	}
