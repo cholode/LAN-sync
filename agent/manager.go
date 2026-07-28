@@ -100,8 +100,32 @@ func (m *AgentManager) AddAgent(ctx context.Context, roomID int64) error {
 	return nil
 }
 
+// PauseAgent 暂停指定群的 Agent
+// 停止 RoomAgent、标记禁用，但保留 Qdrant 向量和 MySQL 分块数据，可以重新启用
+func (m *AgentManager) PauseAgent(ctx context.Context, roomID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	agent, exists := m.agents[roomID]
+	if !exists {
+		return nil
+	}
+
+	agent.Stop()
+	delete(m.agents, roomID)
+
+	m.db.WithContext(ctx).Model(&models.Room{}).
+		Where("id = ?", roomID).
+		Updates(map[string]interface{}{
+			"agent_enabled": false,
+		})
+
+	log.Printf("[AgentManager] room=%d Agent 已暂停", roomID)
+	return nil
+}
+
 // RemoveAgent 停止并移除指定群的 Agent
-// 同时清理 Qdrant 向量集合和 MySQL 分块记录
+// 同时清理 Qdrant 向量集合和 MySQL 分块记录，不可恢复
 func (m *AgentManager) RemoveAgent(ctx context.Context, roomID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -127,7 +151,7 @@ func (m *AgentManager) RemoveAgent(ctx context.Context, roomID int64) error {
 			"agent_enabled": false,
 		})
 
-	log.Printf("[AgentManager] room=%d Agent 已禁用", roomID)
+	log.Printf("[AgentManager] room=%d Agent 已移除（含数据清理）", roomID)
 	return nil
 }
 
