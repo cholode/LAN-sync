@@ -18,7 +18,4 @@ type VectorStore interface {
 
 	// 根据房间号删除
 	DeleteByRoom(ctx context.Context, roomID int64) error
-
-	// 根据文件编号+房间号删除
-	DeleteByDocID(ctx context.Context, roomID, docID int64) error
 }

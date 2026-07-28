@@ -53,7 +53,6 @@ func (s *QdrantVectorStore) EnsureIndex(ctx context.Context, roomID int64) error
 		return nil
 	}
 
-	// 创建相应群的集合
 	err = s.client.CreateCollection(ctx, &qdrant.CreateCollection{
 		CollectionName: name,
 		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
@@ -77,7 +76,7 @@ func (s *QdrantVectorStore) EnsureIndex(ctx context.Context, roomID int64) error
 	return nil
 }
 
-// Insert 批量插入 topic 分块+向量
+// Insert 批量插入分块向量
 func (s *QdrantVectorStore) Insert(ctx context.Context, chunks []*models.RAGChunk, vectors [][]float32) error {
 	if len(chunks) != len(vectors) {
 		return fmt.Errorf("chunks and vectors length mismatch: %d vs %d", len(chunks), len(vectors))
@@ -91,12 +90,12 @@ func (s *QdrantVectorStore) Insert(ctx context.Context, chunks []*models.RAGChun
 			Id:      qdrant.NewIDNum(uint64(chunk.ID)),
 			Vectors: qdrant.NewVectors(vectors[i]...),
 			Payload: qdrant.NewValueMap(map[string]any{
-				"content":    chunk.Content,
-				"chunk_type": chunk.ChunkType,
-				"start_time": chunk.StartTime.UnixMilli(),
-				"end_time":   chunk.EndTime.UnixMilli(),
-				"topic_name": chunk.TopicName,
-				"speakers":   chunk.Speakers,
+				"content":     chunk.Content,
+				"chunk_type":  chunk.ChunkType,
+				"start_time":  chunk.StartTime.UnixMilli(),
+				"end_time":    chunk.EndTime.UnixMilli(),
+				"topic_name":  chunk.TopicName,
+				"speakers":    chunk.Speakers,
 			}),
 		}
 	}
@@ -111,7 +110,7 @@ func (s *QdrantVectorStore) Insert(ctx context.Context, chunks []*models.RAGChun
 	return nil
 }
 
-// Search 仅按 chunk_type 过滤的语义搜索
+// Search 按 chunk_type 过滤的语义搜索
 func (s *QdrantVectorStore) Search(ctx context.Context, queryVec []float32, roomID int64, opts SearchOptions) ([]ChunkResult, error) {
 	name := s.collectionName(roomID)
 	topK := uint64(opts.TopK)
@@ -127,7 +126,6 @@ func (s *QdrantVectorStore) Search(ctx context.Context, queryVec []float32, room
 		WithPayload:    qdrant.NewWithPayload(true),
 	}
 
-	// chunk_type 过滤
 	if len(opts.ChunkTypes) > 0 {
 		req.Filter = &qdrant.Filter{
 			Must: []*qdrant.Condition{
@@ -144,7 +142,6 @@ func (s *QdrantVectorStore) Search(ctx context.Context, queryVec []float32, room
 	return s.parseSearchResults(resp, roomID), nil
 }
 
-// 将从 Qdrant 获取的格式 payload 转化成项目能使用的格式
 func (s *QdrantVectorStore) parseSearchResults(points []*qdrant.ScoredPoint, roomID int64) []ChunkResult {
 	var results []ChunkResult
 
@@ -190,22 +187,6 @@ func (s *QdrantVectorStore) DeleteByRoom(ctx context.Context, roomID int64) erro
 	err := s.client.DeleteCollection(ctx, s.collectionName(roomID))
 	if err != nil && !strings.Contains(err.Error(), "not found") {
 		return fmt.Errorf("delete collection: %w", err)
-	}
-	return nil
-}
-
-// DeleteByDocID 按文档 ID 删除相关向量
-func (s *QdrantVectorStore) DeleteByDocID(ctx context.Context, roomID, docID int64) error {
-	_, err := s.client.Delete(ctx, &qdrant.DeletePoints{
-		CollectionName: s.collectionName(roomID),
-		Points: qdrant.NewPointsSelectorFilter(&qdrant.Filter{
-			Must: []*qdrant.Condition{
-				qdrant.NewMatchText("message_ids", fmt.Sprintf("%d", docID)),
-			},
-		}),
-	})
-	if err != nil && !strings.Contains(err.Error(), "not found") {
-		return fmt.Errorf("delete points: %w", err)
 	}
 	return nil
 }

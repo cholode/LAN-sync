@@ -1,4 +1,4 @@
-﻿package infrastructure
+package infrastructure
 
 import (
 	"log"
@@ -43,7 +43,6 @@ func InitDatabase(dsn string) {
 		// ★ Agent + RAG 新增表
 		&models.AgentConfig{},
 		&models.RAGChunk{},
-		&models.RAGDocument{},
 	)
 	if err != nil {
 		log.Fatalf("[错误] 数据库表结构同步失败: %v", err)

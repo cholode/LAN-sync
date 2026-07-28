@@ -58,8 +58,6 @@ func (s *ChunkStore) BatchSave(ctx context.Context, chunks []*models.RAGChunk) e
 
 	// 5. 写入 Qdrant 向量存储
 	roomID := chunks[0].RoomID
-
-	// 确保索引存在
 	if err := s.vectorStore.EnsureIndex(ctx, roomID); err != nil {
 		log.Printf("[ChunkStore] ensure index warning: %v", err)
 	}
@@ -77,15 +75,6 @@ func (s *ChunkStore) BatchSave(ctx context.Context, chunks []*models.RAGChunk) e
 	return nil
 }
 
-// BatchUpdateVectors 批量更新向量（内容未变但重新嵌入时使用）
-// func (s *ChunkStore) BatchUpdateVectors(ctx context.Context, chunks []*models.RAGChunk, vectors [][]float32) error {
-// 	roomID := chunks[0].RoomID
-// 	if err := s.vectorStore.EnsureIndex(ctx, roomID); err != nil {
-// 		log.Printf("[ChunkStore] ensure index warning: %v", err)
-// 	}
-// 	return s.vectorStore.Insert(ctx, chunks, vectors)
-// }
-
 // GetByRoomID 按房间获取分块列表
 func (s *ChunkStore) GetByRoomID(ctx context.Context, roomID int64, chunkType string) ([]*models.RAGChunk, error) {
 	var chunks []*models.RAGChunk
@@ -101,10 +90,8 @@ func (s *ChunkStore) GetByRoomID(ctx context.Context, roomID int64, chunkType st
 
 // DeleteByRoom 删除房间所有分块
 func (s *ChunkStore) DeleteByRoom(ctx context.Context, roomID int64) error {
-	// 1. MySQL 软删除
 	if err := s.db.WithContext(ctx).Where("room_id = ?", roomID).Delete(&models.RAGChunk{}).Error; err != nil {
 		return err
 	}
-	// 2. Qdrant 清理
 	return s.vectorStore.DeleteByRoom(ctx, roomID)
 }
