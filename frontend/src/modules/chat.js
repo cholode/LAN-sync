@@ -1,4 +1,4 @@
-﻿// src/modules/chat.js —— 聊天核心：WS连接、消息收发、群聊管理
+// src/modules/chat.js —— 聊天核心：WS连接、消息收发、群聊管理
 import { state } from '../store/index.js';
 import { request, readErrorMessage } from '../api/api.js';
 import {
@@ -12,6 +12,7 @@ import {
     updateDisbandButtonState,
     escapeHtml
 } from '../utils/ui.js';
+import { loadAgentState } from './agent.js';
 
 // ============ WebSocket ============
 
@@ -192,6 +193,7 @@ export async function selectRoom(roomId) {
 
     renderRoomList();
     loadRoomMembers(roomId);
+    loadAgentState();
 
     await loadHistory(roomId);
 }
