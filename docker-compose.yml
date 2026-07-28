@@ -6,6 +6,7 @@ volumes:
   mysql_data:
   redis_data:
   kafka_data:
+  qdrant_data:
 
 services:
   # --- [1] 持久层：MySQL ---
@@ -69,7 +70,6 @@ services:
       KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
       KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-      # [核心修复] 必须指向容器名，打破 localhost 选举死锁
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -98,6 +98,16 @@ services:
       - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
       - REDIS_ADDR=redis:6379
       - KAFKA_ADDR=kafka:9092
+      - QDRANT_HOST=qdrant
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
+      - EMBED_BASE_URL=${EMBED_BASE_URL}
+      - EMBED_API_KEY=${EMBED_API_KEY}
+      - EMBED_MODEL=${EMBED_MODEL}
+      - SERVER_PORT=${SERVER_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - TOPIC_CHUNK_INTERVAL=${TOPIC_CHUNK_INTERVAL}
       - LAN_IM_DATA_DIR=/app/data
     deploy:
       resources:
@@ -113,12 +123,32 @@ services:
         condition: service_started
       kafka:
         condition: service_started
+      qdrant:
+        condition: service_started
     ulimits:
       nofile:
         soft: 65535
         hard: 65535
 
-  # --- [5] 接入层：Nginx ---
+  # --- [5] 向量数据库：Qdrant ---
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: im-qdrant
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # --- [6] 接入层：Nginx ---
   nginx:
     build:
       context: .
@@ -131,7 +161,6 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # [核心修复] 挂载前端的编译产物目录 dist，而不是源码目录
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./data_storage/uploads:/var/www/uploads:ro
     ulimits:
