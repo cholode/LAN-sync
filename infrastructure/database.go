@@ -1,4 +1,4 @@
-package infrastructure
+﻿package infrastructure
 
 import (
 	"log"
@@ -25,14 +25,13 @@ func InitDatabase(dsn string) {
 	}
 
 	// 2. 配置数据库连接池参数
-	// 连接池配置可避免高并发场景下数据库连接耗尽
 	sqlDB, err := DB.DB()
 	if err != nil {
 		log.Fatalf("[错误] 获取底层数据库连接失败: %v", err)
 	}
-	sqlDB.SetMaxIdleConns(200)          // 最大空闲连接数
-	sqlDB.SetMaxOpenConns(1000)         // 最大打开连接数
-	sqlDB.SetConnMaxLifetime(time.Hour) // 连接最大复用时间
+	sqlDB.SetMaxIdleConns(200)
+	sqlDB.SetMaxOpenConns(1000)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	// 3. 自动同步数据模型至数据库表结构
 	log.Println("开始同步数据库表结构...")
@@ -41,6 +40,10 @@ func InitDatabase(dsn string) {
 		&models.Room{},
 		&models.RoomMember{},
 		&models.Message{},
+		// ★ Agent + RAG 新增表
+		&models.AgentConfig{},
+		&models.RAGChunk{},
+		&models.RAGDocument{},
 	)
 	if err != nil {
 		log.Fatalf("[错误] 数据库表结构同步失败: %v", err)

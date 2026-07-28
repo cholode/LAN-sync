@@ -1,14 +1,14 @@
 package models
 
 import (
-	//"gorm.io/gorm"
-	"gorm.io/plugin/soft_delete"
 	"time"
+
+	"gorm.io/plugin/soft_delete"
 )
 
-// Message 统一消息表 (系统的绝对核心)
+// Message 统一消息表（系统的绝对核心）
 type Message struct {
-	ID          int64                 `gorm:"primaryKey;autoIncrement:false;index:idx_room_id_id,priority:2;comment:'雪花算法MsgID'"` // 雪花算法 ID 包含时间戳属性，天生有序
+	ID          int64                 `gorm:"primaryKey;autoIncrement:false;index:idx_room_id_id,priority:2;comment:'雪花算法MsgID'"`
 	RoomID      int64                 `gorm:"type:bigint;not null;index:idx_room_id_id,priority:1;comment:'所属房间'"`
 	SenderID    int64                 `gorm:"type:bigint;not null;index:idx_sender_id;comment:'发送者ID'"`
 	ClientMsgID string                `gorm:"type:varchar(64);not null;uniqueIndex:idx_client_msg_id;comment:'客户端防重发凭证(UUID/雪花)'"`
