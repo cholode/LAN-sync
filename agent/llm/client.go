@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Client 封装 OpenAI 兼容的 LLM API
+// Client 封装 OpenAI 兼容的 LLM Chat API
 type Client struct {
 	baseURL    string
 	apiKey     string
@@ -81,38 +81,22 @@ type ChatResponse struct {
 	} `json:"usage"`
 }
 
-// EmbeddingRequest 嵌入请求
-type EmbeddingRequest struct {
-	Model string   `json:"model"`
-	Input []string `json:"input"`
-}
-
-// EmbeddingResponse 嵌入响应
-type EmbeddingResponse struct {
-	Data []struct {
-		Embedding []float32 `json:"embedding"`
-		Index     int       `json:"index"`
-	} `json:"data"`
-	Usage struct {
-		TotalTokens int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-// NewClient 创建 LLM 客户端
+// NewClient 创建 LLM Chat 客户端，默认使用 DeepSeek
 func NewClient() *Client {
 	baseURL := os.Getenv("LLM_BASE_URL")
 	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
+		baseURL = "https://api.deepseek.com/v1"
 	}
 	apiKey := os.Getenv("LLM_API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
+	model := os.Getenv("LLM_MODEL")
+	if model == "" {
+		model = "deepseek-chat"
 	}
 
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		model:   "gpt-4o-mini",
+		model:   model,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -160,61 +144,6 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage, temperature f
 	}
 
 	return &chatResp, nil
-}
-
-// Embed 单条文本向量化，返回第一条结果
-func (c *Client) Embed(ctx context.Context, inputs []string) ([]float32, int, error) {
-	vecs, tokens, err := c.EmbedMulti(ctx, inputs)
-	if err != nil {
-		return nil, 0, err
-	}
-	if len(vecs) == 0 {
-		return nil, 0, fmt.Errorf("empty embedding response")
-	}
-	return vecs[0], tokens, nil
-}
-
-// EmbedMulti 批量文本向量化，一次请求传入整个 batch
-func (c *Client) EmbedMulti(ctx context.Context, inputs []string) ([][]float32, int, error) {
-	req := EmbeddingRequest{
-		Model: "text-embedding-3-small",
-		Input: inputs,
-	}
-
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("marshal embed request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, "POST", c.baseURL+"/embeddings", body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("embed request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read embed response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, 0, fmt.Errorf("embed API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var embedResp EmbeddingResponse
-	if err := json.Unmarshal(respBody, &embedResp); err != nil {
-		return nil, 0, fmt.Errorf("unmarshal embed response: %w", err)
-	}
-
-	vecs := make([][]float32, len(embedResp.Data))
-	for _, d := range embedResp.Data {
-		if d.Index < 0 || d.Index >= len(vecs) {
-			continue
-		}
-		vecs[d.Index] = d.Embedding
-	}
-
-	return vecs, embedResp.Usage.TotalTokens, nil
 }
 
 // doRequest 通用 HTTP 请求

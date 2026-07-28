@@ -56,7 +56,7 @@ func (s *QdrantVectorStore) EnsureIndex(ctx context.Context, roomID int64) error
 	err = s.client.CreateCollection(ctx, &qdrant.CreateCollection{
 		CollectionName: name,
 		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
-			Size:     1536,
+			Size:     1024,
 			Distance: qdrant.Distance_Cosine,
 		}),
 	})

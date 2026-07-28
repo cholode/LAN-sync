@@ -18,7 +18,7 @@ type AgentConfig struct {
 	TriggerWords string  `gorm:"type:varchar(512);comment:'触发关键词 JSON 数组'"`
 	MaxHistory   int     `gorm:"type:int;default:20;comment:'上下文消息条数'"`
 	Temperature  float64 `gorm:"type:decimal(3,2);default:0.70;comment:'LLM 温度参数'"`
-	ModelName    string  `gorm:"type:varchar(64);default:'gpt-4o-mini';comment:'LLM 模型名'"`
+	ModelName    string  `gorm:"type:varchar(64);default:'deepseek-chat';comment:'LLM 模型名'"`
 
 	// RAG 配置
 	RAGEnabled       bool    `gorm:"type:tinyint(1);default:1;comment:'是否启用 RAG'"`
@@ -29,7 +29,7 @@ type AgentConfig struct {
 
 	// 分块策略配置
 	TopicChunkMinMsgs int    `gorm:"type:int;default:30;comment:'话题分块触发的最小消息数'"`
-	TopicChunkModel   string `gorm:"type:varchar(64);default:'gpt-4o-mini';comment:'话题分块使用的 LLM 模型'"`
+	TopicChunkModel   string `gorm:"type:varchar(64);default:'deepseek-chat';comment:'话题分块使用的 LLM 模型'"`
 
 	CreatedAt time.Time             `gorm:"autoCreateTime"`
 	UpdatedAt time.Time             `gorm:"autoUpdateTime"`
@@ -49,13 +49,13 @@ func DefaultAgentConfig(roomID int64) *AgentConfig {
 		TriggerWords:      "[]",
 		MaxHistory:        20,
 		Temperature:       0.70,
-		ModelName:         "gpt-4o-mini",
+		ModelName:         "deepseek-chat",
 		RAGEnabled:        true,
 		TopK:              5,
 		SimilarityThold:   0.70,
 		RerankEnabled:     true,
 		MaxChunkTokens:    4000,
 		TopicChunkMinMsgs: 30,
-		TopicChunkModel:   "gpt-4o-mini",
+		TopicChunkModel:   "deepseek-chat",
 	}
 }
