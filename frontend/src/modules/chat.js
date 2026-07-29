@@ -224,7 +224,7 @@ export async function loadHistory(roomId) {
         var box = ensureChatScrollable();
         var nearBefore = isNearBottom(box);
 
-        clearChatPlaceholder();
+        resetChatArea();
         messages.forEach(function(msg) { insertMessageNode(msg, 'hist'); });
 
         // 追加前就在底部 → 追加后滚到底；追加前在看历史 → 保持原位

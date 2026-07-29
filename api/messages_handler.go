@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"net/http"
@@ -66,7 +66,7 @@ func GetChatHistory() gin.HandlerFunc {
 				// 缓存命中：判断是否还有更多（缓存满则说明 MySQL 可能还有更老的）
 				hasMore = len(cached) == limit
 				if hasMore && len(cached) > 0 {
-					nextCursor = cached[len(cached)-1].ID
+					nextCursor = cached[0].ID
 				}
 				// 转 DTO 返回
 				out := make([]chatHistoryMsgDTO, 0, len(messages))
@@ -101,7 +101,7 @@ func GetChatHistory() gin.HandlerFunc {
 		}
 
 		if len(dbMsgs) > 0 {
-			nextCursor = dbMsgs[len(dbMsgs)-1].ID
+			nextCursor = dbMsgs[0].ID
 		}
 		hasMore = len(dbMsgs) == limit
 

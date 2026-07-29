@@ -63,7 +63,7 @@ type CachedMsg struct {
 // GetLatestMessages 从 Redis 读取房间最新的 limit 条消息
 func GetLatestMessages(ctx context.Context, roomID int64, limit int) ([]CachedMsg, error) {
 	key := fmt.Sprintf("%s%d", roomLatestKeyPrefix, roomID)
-	vals, err := config.RedisClient.LRange(ctx, key, -int64(limit), -1).Result()
+	vals, err := config.RedisClient.LRange(ctx, key, 0, int64(limit-1)).Result()
 	if err != nil || len(vals) == 0 {
 		return nil, err
 	}
