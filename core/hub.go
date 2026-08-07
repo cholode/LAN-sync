@@ -1,13 +1,19 @@
-﻿package core
+package core
 
 import (
 	"context"
 	"encoding/json"
 	"github.com/go-redis/redis/v8"
 	"lan-im-go/config"
+	"lan-im-go/internal/taskpool"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
 	"strconv"
+)
+
+const (
+	// poolDispatchThreshold 房间成员数超过此阈值时，使用协程池分发消息
+	poolDispatchThreshold = 100
 )
 
 // redisMessage 是 Redis Pub/Sub 消息的中间表示，JSON key 对齐生产者使用的 snake_case 格式
@@ -37,6 +43,9 @@ type Hub struct {
 
 	RoomActionChan chan *RoomAction
 	Kick           chan int64
+
+	// killClient 接收来自协程池中检测到的慢客户端，由 Hub 主循环统一清理
+	killClient chan *Client
 }
 
 func NewHub() *Hub {
@@ -50,6 +59,7 @@ func NewHub() *Hub {
 
 		RoomActionChan: make(chan *RoomAction, 100),
 		Kick:           make(chan int64),
+		killClient:     make(chan *Client, 64),
 	}
 }
 
@@ -64,7 +74,6 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 
 	pkg.Infoln("[全局中枢] Redis 跨节点广播总线本地监听实例已成功点火...")
 
-	//ch := pubsub.Channel()
 	ch := pubsub.Channel(redis.WithChannelSize(10000))
 	for {
 		select {
@@ -72,21 +81,18 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 			pkg.Infoln("[全局中枢] 收到系统关闭信号，Redis 监听协程安全退出")
 			return
 		case redisMsg := <-ch:
-			// 1. 先反序列化到中间结构体（snake_case JSON → Go struct）
 			var raw redisMessage
 			if err := json.Unmarshal([]byte(redisMsg.Payload), &raw); err != nil {
 				pkg.Infof("[数据脏污] 跨节点广播载荷解析失败 %v", err)
 				continue
 			}
 
-			// 2. room_id 是字符串，转换回来
 			roomID, err := strconv.ParseInt(raw.RoomID, 10, 64)
 			if err != nil {
 				pkg.Infof("[数据脏污] room_id 格式非法: %q %v", raw.RoomID, err)
 				continue
 			}
 
-			// 3. 映射为业务模型
 			msg := &models.Message{
 				RoomID:      roomID,
 				SenderID:    raw.SenderID,
@@ -102,6 +108,64 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 			}
 		}
 	}
+}
+
+// dispatchMessage 将消息分发给房间内所有客户端
+// 小房间直接内联分发，大房间通过协程池并行分发
+func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
+	clients, ok := h.rooms[msg.RoomID]
+	if !ok || len(clients) == 0 {
+		return
+	}
+
+	// 小房间：内联分发，零开销
+	if len(clients) < poolDispatchThreshold {
+		for client := range clients {
+			select {
+			case client.Send <- payload:
+			default:
+				h.evictClient(client)
+			}
+		}
+		return
+	}
+
+	// 大房间：通过协程池并行分发，避免阻塞 Hub 主循环
+	for client := range clients {
+		c := client
+		taskpool.Go(func() {
+			select {
+			case c.Send <- payload:
+			default:
+				// 慢客户端：通知 Hub 主循环安全清理
+				select {
+				case h.killClient <- c:
+				default:
+					// kill 通道满，丢弃（Hub 会在下次清理）
+				}
+			}
+		})
+	}
+}
+
+// evictClient 从所有房间和用户表中摘除客户端，关闭发送通道
+// 必须在 Hub 主循环中调用（非线程安全）
+func (h *Hub) evictClient(client *Client) {
+	pkg.Infof("[Local Hub 绞杀] 客户端 %d 阻塞，物理断开", client.UserID)
+	for rid, roomClients := range h.rooms {
+		delete(roomClients, client)
+		if len(roomClients) == 0 {
+			delete(h.rooms, rid)
+		}
+	}
+	if _, ok := h.users[client.UserID]; ok {
+		delete(h.users, client.UserID)
+	}
+	// 安全关闭通道：通道可能已被关闭，recover 捕获 panic
+	func() {
+		defer func() { recover() }()
+		close(client.Send)
+	}()
 }
 
 func (h *Hub) Run(ctx context.Context) {
@@ -122,7 +186,6 @@ func (h *Hub) Run(ctx context.Context) {
 			}
 
 		case unsub := <-h.Unsubscribe:
-			// 清理所有房间中的该客户端（包括 RoomIDs=nil 的情况）
 			for rid, roomClients := range h.rooms {
 				delete(roomClients, unsub.Client)
 				if len(roomClients) == 0 {
@@ -140,25 +203,7 @@ func (h *Hub) Run(ctx context.Context) {
 				pkg.Infof("[Local Hub 异常] 无法序列化消息 %v", err)
 				continue
 			}
-
-			if clients, ok := h.rooms[msg.RoomID]; ok {
-				for client := range clients {
-					select {
-					case client.Send <- payload:
-					default:
-						pkg.Infof("[Local Hub 绞杀] 客户端 %d 阻塞，物理断开", client.UserID)
-						// 先摘除所有房间引用，再关通道，杜绝 send on closed channel
-						for rid, roomClients := range h.rooms {
-							delete(roomClients, client)
-							if len(roomClients) == 0 {
-								delete(h.rooms, rid)
-							}
-						}
-						delete(h.users, client.UserID)
-						close(client.Send)
-					}
-				}
-			}
+			h.dispatchMessage(msg, payload)
 
 		case action := <-h.RoomActionChan:
 			switch action.Action {
@@ -185,6 +230,9 @@ func (h *Hub) Run(ctx context.Context) {
 			if client, ok := h.users[targetUserID]; ok {
 				client.Conn.Close()
 			}
+
+		case client := <-h.killClient:
+			h.evictClient(client)
 		}
 	}
 }

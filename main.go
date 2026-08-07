@@ -12,6 +12,7 @@ import (
 	"lan-im-go/core"
 	"lan-im-go/infrastructure"
 	"lan-im-go/internal/archiver"
+	"lan-im-go/internal/taskpool"
 	"lan-im-go/middleware"
 	"lan-im-go/repository"
 	"lan-im-go/pkg"
@@ -42,10 +43,12 @@ func main() {
 	config.InitRedis()
 	config.InitKafka()
 
+	defer taskpool.Release()
 	defer config.RedisClient.Close()
 	defer config.KafkaProducer.Close()
 
 	infrastructure.InitDatabase(dsn)
+	taskpool.Init(0) // 0=默认线程数(CPU*2)
 	api.InitFileDirs()
 
 	// ================================

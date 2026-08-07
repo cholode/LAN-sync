@@ -3,17 +3,18 @@ package archiver
 import (
 	"context"
 	"encoding/json"
-"errors"
-"sync"
+	"errors"
 	"fmt"
+	"lan-im-go/internal/taskpool"
+	"lan-im-go/models"
+	"lan-im-go/pkg"
+	"lan-im-go/repository"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
-	"lan-im-go/models"
-	"lan-im-go/repository"
-	"lan-im-go/pkg"
 )
 
 type kafkaMessage struct {
@@ -24,7 +25,6 @@ type kafkaMessage struct {
 	Timestamp   int64  `json:"timestamp"`
 }
 
-var idSeq int64
 // idSeq 使用雪花算法简化版：毫秒时间戳(42位) + 序列号(10位)
 // 支持每毫秒 1024 个 ID，可用约 140 年
 var (
@@ -42,7 +42,6 @@ func nextID() int64 {
 	if now == idLastMs {
 		idSequence = (idSequence + 1) & 0x3FF // 10 bits, 0-1023
 		if idSequence == 0 {
-			// 序列号溢出，等待下一毫秒
 			for now <= idLastMs {
 				now = time.Now().UnixMilli()
 			}
@@ -54,10 +53,11 @@ func nextID() int64 {
 
 	return (now-idEpoch)<<10 | idSequence
 }
+
 type Worker struct {
-	reader *kafka.Reader
-	rdb    *redis.Client
-	topic  string
+	reader    *kafka.Reader
+	rdb       *redis.Client
+	topic     string
 	partition int
 	offsetKey string
 }
@@ -66,8 +66,7 @@ func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client
 	const partition = 0
 	offsetKey := fmt.Sprintf("im:kafka:offset:{%s}:%d", topic, partition)
 
-	// read starting offset from Redis, default to LastOffset (-1 means latest)
-	startOffset := int64(kafka.FirstOffset) // no saved offset, consume from beginning
+	startOffset := int64(kafka.FirstOffset)
 	if rdb != nil {
 		val, err := rdb.Get(context.Background(), offsetKey).Result()
 		if err == nil {
@@ -158,7 +157,7 @@ func (w *Worker) saveOffset(ctx context.Context, offset int64) {
 func (w *Worker) Start(ctx context.Context) {
 	defer w.reader.Close()
 
-	pkg.Infof("[Archiver] 稳态消费者已启动（分区直读模式: 1000条/500ms + Redis offset）")
+	pkg.Infof("[Archiver] 稳态消费者已启动（分区直读模式 1000条/500ms + Redis offset）")
 
 	msgBatch := make([]*models.Message, 0, batchSize)
 	var lastOffset int64
@@ -168,20 +167,25 @@ func (w *Worker) Start(ctx context.Context) {
 			return
 		}
 		count := len(msgBatch)
-		err := repository.Message.SaveMessageBatch(msgBatch)
-		if err != nil {
-			pkg.Infof("[Archiver] 批量写入失败，%d 条: %v", count, err)
-			// do NOT clear batch, retry next flush
-			return
-		}
-
-		w.pushLatestToRedis(ctx, msgBatch)
-		pkg.Infof("[Archiver] 批量写入成功: %d 条, offset=%d", count, lastOffset)
-
-		// persist offset to Redis AFTER successful MySQL write
-		w.saveOffset(ctx, lastOffset)
-
+		// 拷贝批次数据，立即清空原切片让消费者继续读取
+		batch := make([]*models.Message, count)
+		copy(batch, msgBatch)
+		savedOffset := lastOffset
 		msgBatch = msgBatch[:0]
+
+		// 通过协程池异步写入 MySQL，避免阻塞 Kafka 消费循环
+		taskpool.Go(func() {
+			err := repository.Message.SaveMessageBatch(batch)
+			if err != nil {
+				pkg.Infof("[Archiver] 批量写入失败，%d 条 %v", count, err)
+				return
+			}
+
+			w.pushLatestToRedis(ctx, batch)
+			pkg.Infof("[Archiver] 批量写入成功: %d 条 offset=%d", count, savedOffset)
+
+			w.saveOffset(ctx, savedOffset)
+		})
 	}
 
 	ticker := time.NewTicker(flushInterval)
@@ -198,7 +202,6 @@ func (w *Worker) Start(ctx context.Context) {
 		default:
 		}
 
-		// set a read deadline so we can check ctx.Done and ticker periodically
 		readCtx, cancel := context.WithTimeout(ctx, flushInterval)
 		m, err := w.reader.ReadMessage(readCtx)
 		cancel()
