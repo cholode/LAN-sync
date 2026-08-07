@@ -6,7 +6,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"lan-im-go/config"
 	"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 	"strconv"
 )
 
@@ -59,30 +59,30 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 
 	_, err := pubsub.Receive(ctx)
 	if err != nil {
-		log.Fatalf("[物理阻断] Redis Pub/Sub 全局总线连接失败: %v", err)
+		pkg.Fatalf("[物理阻断] Redis Pub/Sub 全局总线连接失败: %v", err)
 	}
 
-	log.Println("[全局中枢] Redis 跨节点广播总线本地监听实例已成功点火...")
+	pkg.Infoln("[全局中枢] Redis 跨节点广播总线本地监听实例已成功点火...")
 
 	//ch := pubsub.Channel()
 	ch := pubsub.Channel(redis.WithChannelSize(10000))
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[全局中枢] 收到系统关闭信号，Redis 监听协程安全退出")
+			pkg.Infoln("[全局中枢] 收到系统关闭信号，Redis 监听协程安全退出")
 			return
 		case redisMsg := <-ch:
 			// 1. 先反序列化到中间结构体（snake_case JSON → Go struct）
 			var raw redisMessage
 			if err := json.Unmarshal([]byte(redisMsg.Payload), &raw); err != nil {
-				log.Printf("[数据脏污] 跨节点广播载荷解析失败 %v", err)
+				pkg.Infof("[数据脏污] 跨节点广播载荷解析失败 %v", err)
 				continue
 			}
 
 			// 2. room_id 是字符串，转换回来
 			roomID, err := strconv.ParseInt(raw.RoomID, 10, 64)
 			if err != nil {
-				log.Printf("[数据脏污] room_id 格式非法: %q %v", raw.RoomID, err)
+				pkg.Infof("[数据脏污] room_id 格式非法: %q %v", raw.RoomID, err)
 				continue
 			}
 
@@ -98,18 +98,18 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 			select {
 			case localHub.ForwardMessage <- msg:
 			default:
-				log.Println("[性能预警] 本地 Hub 转发队列满，物理抛弃当前广播")
+				pkg.Infoln("[性能预警] 本地 Hub 转发队列满，物理抛弃当前广播")
 			}
 		}
 	}
 }
 
 func (h *Hub) Run(ctx context.Context) {
-	log.Println("[Local Hub] 本地内存路由引擎已启动，等待 Redis 指令...")
+	pkg.Infoln("[Local Hub] 本地内存路由引擎已启动，等待 Redis 指令...")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Local Hub] 收到系统关闭信号，本地路由引擎停止调度")
+			pkg.Infoln("[Local Hub] 收到系统关闭信号，本地路由引擎停止调度")
 			return
 
 		case sub := <-h.Subscribe:
@@ -137,7 +137,7 @@ func (h *Hub) Run(ctx context.Context) {
 		case msg := <-h.ForwardMessage:
 			payload, err := json.Marshal(msg)
 			if err != nil {
-				log.Printf("[Local Hub 异常] 无法序列化消息 %v", err)
+				pkg.Infof("[Local Hub 异常] 无法序列化消息 %v", err)
 				continue
 			}
 
@@ -146,7 +146,7 @@ func (h *Hub) Run(ctx context.Context) {
 					select {
 					case client.Send <- payload:
 					default:
-						log.Printf("[Local Hub 绞杀] 客户端 %d 阻塞，物理断开", client.UserID)
+						pkg.Infof("[Local Hub 绞杀] 客户端 %d 阻塞，物理断开", client.UserID)
 						// 先摘除所有房间引用，再关通道，杜绝 send on closed channel
 						for rid, roomClients := range h.rooms {
 							delete(roomClients, client)

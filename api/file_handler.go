@@ -12,7 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/unicode/norm"
-	"log"
+	"lan-im-go/pkg"
 )
 
 var (
@@ -41,23 +41,23 @@ func ensureWritableDir(primary string, fallbackParts ...string) string {
 	if isDirWritable(primary) {
 		return primary
 	}
-	log.Printf("[目录] primary 不可写或创建失败，尝试回退: %s", primary)
+	pkg.Infof("[目录] primary 不可写或创建失败，尝试回退: %s", primary)
 
 	fallback := filepath.Join(append([]string{os.TempDir(), "lan-im-go"}, fallbackParts...)...)
 	if err := os.MkdirAll(fallback, 0755); err == nil && isDirWritable(fallback) {
-		log.Printf("[目录回退] 使用系统临时目录: %s", fallback)
+		pkg.Infof("[目录回退] 使用系统临时目录: %s", fallback)
 		return fallback
 	}
 
 	if home, err := os.UserHomeDir(); err == nil {
 		homeFallback := filepath.Join(append([]string{home, ".lan-im-go"}, fallbackParts...)...)
 		if err := os.MkdirAll(homeFallback, 0755); err == nil && isDirWritable(homeFallback) {
-			log.Printf("[目录回退] 使用用户主目录: %s", homeFallback)
+			pkg.Infof("[目录回退] 使用用户主目录: %s", homeFallback)
 			return homeFallback
 		}
 	}
 
-	log.Printf("[目录错误] 所有候选路径均不可写，仍使用: %s", fallback)
+	pkg.Infof("[目录错误] 所有候选路径均不可写，仍使用: %s", fallback)
 	_ = os.MkdirAll(fallback, 0755)
 	return fallback
 }
@@ -219,7 +219,7 @@ func InitFileDirs() {
 		root = filepath.Clean(root)
 		UploadBaseDir = filepath.Join(root, "uploads")
 		TempChunkDir = filepath.Join(root, "temp_chunks")
-		log.Printf("[目录] LAN_IM_DATA_DIR=%s -> uploads=%s temp_chunks=%s", root, UploadBaseDir, TempChunkDir)
+		pkg.Infof("[目录] LAN_IM_DATA_DIR=%s -> uploads=%s temp_chunks=%s", root, UploadBaseDir, TempChunkDir)
 	}
 	UploadBaseDir = ensureWritableDir(UploadBaseDir, "uploads")
 	TempChunkDir = ensureWritableDir(TempChunkDir, "temp_chunks")
@@ -229,7 +229,7 @@ func InitFileDirs() {
 	if abs, err := filepath.Abs(TempChunkDir); err == nil {
 		TempChunkDir = abs
 	}
-	log.Printf("[目录] 最终 UploadBaseDir=%s TempChunkDir=%s", UploadBaseDir, TempChunkDir)
+	pkg.Infof("[目录] 最终 UploadBaseDir=%s TempChunkDir=%s", UploadBaseDir, TempChunkDir)
 }
 
 // func InitUserDir(UserID int) {
@@ -311,7 +311,7 @@ func UploadChunk(c *gin.Context) {
 
 	chunkDirPath := getUserChunkDir(c)
 	if err := os.MkdirAll(chunkDirPath, 0755); err != nil {
-		log.Printf("[上传错误] 创建分片目录失败 path=%s err=%v", chunkDirPath, err)
+		pkg.Infof("[上传错误] 创建分片目录失败 path=%s err=%v", chunkDirPath, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片目录创建失败: " + err.Error()})
 		return
 	}
@@ -320,7 +320,7 @@ func UploadChunk(c *gin.Context) {
 	chunkFilePath := filepath.Join(chunkDirPath, chunkFileName(safeHash, chunkIndex))
 	src, err := fileHeader.Open()
 	if err != nil {
-		log.Printf("[上传错误] 打开上传流失败 idx=%d err=%v", chunkIndex, err)
+		pkg.Infof("[上传错误] 打开上传流失败 idx=%d err=%v", chunkIndex, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片流打开失败: " + err.Error()})
 		return
 	}
@@ -328,14 +328,14 @@ func UploadChunk(c *gin.Context) {
 
 	dst, err := os.OpenFile(chunkFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
-		log.Printf("[上传错误] 创建分片文件失败 path=%s idx=%d err=%v", chunkFilePath, chunkIndex, err)
+		pkg.Infof("[上传错误] 创建分片文件失败 path=%s idx=%d err=%v", chunkFilePath, chunkIndex, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片存储失败: " + err.Error()})
 		return
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, src); err != nil {
-		log.Printf("[上传错误] 写入分片失败 path=%s idx=%d err=%v", chunkFilePath, chunkIndex, err)
+		pkg.Infof("[上传错误] 写入分片失败 path=%s idx=%d err=%v", chunkFilePath, chunkIndex, err)
 		_ = os.Remove(chunkFilePath)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片写入失败: " + err.Error()})
 		return
@@ -403,7 +403,7 @@ func MergeChunks(c *gin.Context) {
 
 	// 合并完成，清理当前文件对应的临时分片
 	if err := removeHashChunkFiles(chunkDirPath, safeHash); err != nil {
-		log.Printf("[上传清理错误] 清理分片失败 path=%s hash=%s err=%v", chunkDirPath, safeHash, err)
+		pkg.Infof("[上传清理错误] 清理分片失败 path=%s hash=%s err=%v", chunkDirPath, safeHash, err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -429,7 +429,7 @@ func DownloadFile(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[download] 未找到文件 want=%s uploadDir=%s path=%s param=%q",
+	pkg.Infof("[download] 未找到文件 want=%s uploadDir=%s path=%s param=%q",
 		safeFileName, UploadBaseDir, c.Request.URL.Path, c.Param("filepath"))
 	c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
 }
@@ -454,7 +454,7 @@ func CancelUpload(c *gin.Context) {
 
 	// 清理临时分片文件
 	if err := removeHashChunkFiles(chunkDirPath, safeHash); err != nil {
-		log.Printf("[上传清理错误] 临时目录删除失败: %v", err)
+		pkg.Infof("[上传清理错误] 临时目录删除失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "临时文件清理失败"})
 		return
 	}

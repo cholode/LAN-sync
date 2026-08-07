@@ -5,7 +5,7 @@ import (
 	"lan-im-go/core"
 	"lan-im-go/models"
 	"lan-im-go/repository"
-	"log"
+	"lan-im-go/pkg"
 	"net/http"
 	"strconv"
 )
@@ -189,7 +189,7 @@ func CreateRoom(hub *core.Hub) gin.HandlerFunc {
 
 		// 事务创建群聊并添加创建者为成员
 		if err := repository.Room.CreateRoomWithCreator(room, creatorID); err != nil {
-			log.Printf("创建群聊事务执行失败: %v\n", err)
+			pkg.Infof("创建群聊事务执行失败: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建群聊失败"})
 			return
 		}
@@ -221,7 +221,7 @@ func GetMyRooms() gin.HandlerFunc {
 		rooms, err := repository.Room.GetJoinedRooms(userID)
 
 		if err != nil {
-			log.Printf("查询群聊列表失败: %v\n", err)
+			pkg.Infof("查询群聊列表失败: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "获取群聊列表失败"})
 			return
 		}
@@ -282,7 +282,7 @@ func OwnerDisbandRoom(hub *core.Hub) gin.HandlerFunc {
 		}
 
 		if err := repository.Room.SoftDeleteRoom(targetRoomID); err != nil {
-			log.Printf("群主解散群失败: room=%d user=%d err=%v", targetRoomID, userID, err)
+			pkg.Infof("群主解散群失败: room=%d user=%d err=%v", targetRoomID, userID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "解散群聊失败"})
 			return
 		}

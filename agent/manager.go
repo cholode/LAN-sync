@@ -10,7 +10,7 @@ import (
 	"lan-im-go/core"
 	"lan-im-go/models"
 	"lan-im-go/repository"
-	"log"
+	"lan-im-go/pkg"
 	"sync"
 	"time"
 
@@ -40,10 +40,10 @@ func NewAgentManager(db *gorm.DB, llmClient *llm.Client, hub *core.Hub) *AgentMa
 // Start 启动 AgentManager
 // 从 DB 加载已启用的群 Agent，并开始监听群消息
 func (m *AgentManager) Start(ctx context.Context) {
-	log.Println("[AgentManager] 正在启动...")
+	pkg.Infoln("[AgentManager] 正在启动...")
 	m.loadEnabledAgents(ctx)
 	go m.listenMessages(ctx)
-	log.Printf("[AgentManager] 启动完成, 已加载 %d 个 Agent", len(m.agents))
+	pkg.Infof("[AgentManager] 启动完成, 已加载 %d 个 Agent", len(m.agents))
 }
 
 // loadEnabledAgents 从 DB 查询所有启用了 Agent 的群，逐个启动
@@ -52,13 +52,13 @@ func (m *AgentManager) loadEnabledAgents(ctx context.Context) {
 	if err := m.db.WithContext(ctx).
 		Where("agent_enabled = ? AND type = ?", true, 2).
 		Find(&rooms).Error; err != nil {
-		log.Printf("[AgentManager] 加载已启用 Agent 的群失败: %v", err)
+		pkg.Infof("[AgentManager] 加载已启用 Agent 的群失败: %v", err)
 		return
 	}
 
 	for _, room := range rooms {
 		if err := m.AddAgent(ctx, room.ID); err != nil {
-			log.Printf("[AgentManager] 添加 Agent room=%d 失败: %v", room.ID, err)
+			pkg.Infof("[AgentManager] 添加 Agent room=%d 失败: %v", room.ID, err)
 		}
 	}
 }
@@ -96,7 +96,7 @@ func (m *AgentManager) AddAgent(ctx context.Context, roomID int64) error {
 			"agent_enabled": true,
 		})
 
-	log.Printf("[AgentManager] room=%d Agent 已启用 (botID=%d)", roomID, botUserID)
+	pkg.Infof("[AgentManager] room=%d Agent 已启用 (botID=%d)", roomID, botUserID)
 	return nil
 }
 
@@ -120,7 +120,7 @@ func (m *AgentManager) PauseAgent(ctx context.Context, roomID int64) error {
 			"agent_enabled": false,
 		})
 
-	log.Printf("[AgentManager] room=%d Agent 已暂停", roomID)
+	pkg.Infof("[AgentManager] room=%d Agent 已暂停", roomID)
 	return nil
 }
 
@@ -151,7 +151,7 @@ func (m *AgentManager) RemoveAgent(ctx context.Context, roomID int64) error {
 			"agent_enabled": false,
 		})
 
-	log.Printf("[AgentManager] room=%d Agent 已移除（含数据清理）", roomID)
+	pkg.Infof("[AgentManager] room=%d Agent 已移除（含数据清理）", roomID)
 	return nil
 }
 
@@ -169,16 +169,16 @@ func (m *AgentManager) listenMessages(ctx context.Context) {
 
 	_, err := pubsub.Receive(ctx)
 	if err != nil {
-		log.Fatalf("[AgentManager] Redis Pub/Sub 连接失败: %v", err)
+		pkg.Fatalf("[AgentManager] Redis Pub/Sub 连接失败: %v", err)
 	}
 
-	log.Println("[AgentManager] 开始监听群消息...")
+	pkg.Infoln("[AgentManager] 开始监听群消息...")
 
 	ch := pubsub.Channel()
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[AgentManager] 停止监听")
+			pkg.Infoln("[AgentManager] 停止监听")
 			return
 		case redisMsg := <-ch:
 			m.handleRedisMessage(ctx, redisMsg.Payload)

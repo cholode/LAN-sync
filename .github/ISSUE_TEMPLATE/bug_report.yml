@@ -1,0 +1,28 @@
+name: Bug Report
+description: 报告一个 bug
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: 描述
+      description: 清晰描述 bug 的表现
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 复现步骤
+      description: 如何触发这个 bug
+      placeholder: |
+        1. 启动服务
+        2. 发送消息
+        3. 观察到...
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 环境信息
+      description: Go 版本、操作系统、Docker 版本等
+      placeholder: |
+        - OS: Windows 11
+        - Go: 1.22.5
+        - Docker: 24.0.7

@@ -2,7 +2,7 @@ package config
 
 import (
 	"context"
-	"log"
+	"lan-im-go/pkg"
 	"os"
 
 	"github.com/go-redis/redis/v8"
@@ -23,7 +23,7 @@ func InitRedis() {
 	})
 
 	if err := RedisClient.Ping(context.Background()).Err(); err != nil {
-		log.Fatalf("Redis 链路断开，启动失败：%v", err)
+		pkg.Fatalf("Redis 链路断开，启动失败：%v", err)
 	}
-	log.Println("Redis 准备就绪")
+	pkg.Infoln("Redis 准备就绪")
 }

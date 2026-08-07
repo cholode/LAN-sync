@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"lan-im-go/pkg"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -47,13 +47,13 @@ func (c *MessageClient) HandleIncomingMessage(ctx context.Context, roomID string
 	})
 
 	if err != nil {
-		log.Printf("[中间件告警] Kafka 投递失败：%v", err)
+		pkg.Infof("[中间件告警] Kafka 投递失败：%v", err)
 		return fmt.Errorf("kafka 写入失败: %w", err)
 	}
 
 	redisChannel := "im:broadcast:room:" + roomID
 	if pubErr := c.redisClient.Publish(ctx, redisChannel, string(payload)).Err(); pubErr != nil {
-		log.Printf("[中间件告警] Redis 广播发布失败（消息仍已落盘Kafka）: %v", pubErr)
+		pkg.Infof("[中间件告警] Redis 广播发布失败（消息仍已落盘Kafka）: %v", pubErr)
 	}
 
 	return nil

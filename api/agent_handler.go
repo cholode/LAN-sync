@@ -4,7 +4,7 @@ import (
 	"lan-im-go/agent"
 	"lan-im-go/models"
 	"lan-im-go/repository"
-	"log"
+	"lan-im-go/pkg"
 	"net/http"
 	"strconv"
 
@@ -43,7 +43,7 @@ func (h *AgentHandler) EnableAgent(c *gin.Context) {
 	}
 
 	if err := h.agentMgr.AddAgent(c.Request.Context(), roomID); err != nil {
-		log.Printf("[AgentAPI] 启用 Agent room=%d 失败: %v", roomID, err)
+		pkg.Infof("[AgentAPI] 启用 Agent room=%d 失败: %v", roomID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "启用 Agent 失败"})
 		return
 	}
@@ -67,7 +67,7 @@ func (h *AgentHandler) DisableAgent(c *gin.Context) {
 	}
 
 	if err := h.agentMgr.PauseAgent(c.Request.Context(), roomID); err != nil {
-		log.Printf("[AgentAPI] 暂停 Agent room=%d 失败: %v", roomID, err)
+		pkg.Infof("[AgentAPI] 暂停 Agent room=%d 失败: %v", roomID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "暂停 Agent 失败"})
 		return
 	}
@@ -91,7 +91,7 @@ func (h *AgentHandler) RemoveAgent(c *gin.Context) {
 	}
 
 	if err := h.agentMgr.RemoveAgent(c.Request.Context(), roomID); err != nil {
-		log.Printf("[AgentAPI] 移除 Agent room=%d 失败: %v", roomID, err)
+		pkg.Infof("[AgentAPI] 移除 Agent room=%d 失败: %v", roomID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "移除 Agent 失败"})
 		return
 	}

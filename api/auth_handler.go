@@ -4,7 +4,7 @@ import (
 	"lan-im-go/models"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
-	"log"
+
 	"net/http"
 	//"strings"
 
@@ -23,7 +23,7 @@ func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	// 参数绑定与校验
 
-	log.Printf("登录界面进入成功\n")
+	pkg.Infof("登录界面进入成功\n")
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数不合法"})
@@ -49,12 +49,12 @@ func LoginHandler(c *gin.Context) {
 	// 生成JWT身份令牌
 	token, err := pkg.GenerateToken(user.ID, user.Role)
 	if err != nil {
-		log.Printf("token generate error: %v\n", err)
+		pkg.Infof("token generate error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "令牌生成失败"})
 		return
 	}
 
-	log.Printf("%v 登录成功\n", user.Username)
+	pkg.Infof("%v 登录成功\n", user.Username)
 	// 返回登录成功响应
 	c.JSON(http.StatusOK, gin.H{
 		"msg":   "登录成功",

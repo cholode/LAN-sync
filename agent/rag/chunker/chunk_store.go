@@ -5,7 +5,7 @@ import (
 	"fmt"
 	rag "lan-im-go/agent/rag"
 	"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 
 	"gorm.io/gorm"
 )
@@ -59,7 +59,7 @@ func (s *ChunkStore) BatchSave(ctx context.Context, chunks []*models.RAGChunk) e
 	// 5. 写入 Qdrant 向量存储
 	roomID := chunks[0].RoomID
 	if err := s.vectorStore.EnsureIndex(ctx, roomID); err != nil {
-		log.Printf("[ChunkStore] ensure index warning: %v", err)
+		pkg.Infof("[ChunkStore] ensure index warning: %v", err)
 	}
 
 	if err := s.vectorStore.Insert(ctx, chunks, vectors); err != nil {
@@ -71,7 +71,7 @@ func (s *ChunkStore) BatchSave(ctx context.Context, chunks []*models.RAGChunk) e
 		s.db.WithContext(ctx).Model(chunk).Update("vector_id", chunk.VectorID)
 	}
 
-	log.Printf("[ChunkStore] 已保存 %d 个分块 (room=%d)", len(chunks), roomID)
+	pkg.Infof("[ChunkStore] 已保存 %d 个分块 (room=%d)", len(chunks), roomID)
 	return nil
 }
 

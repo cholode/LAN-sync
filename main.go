@@ -14,7 +14,7 @@ import (
 	"lan-im-go/internal/archiver"
 	"lan-im-go/middleware"
 	"lan-im-go/repository"
-	"log"
+	"lan-im-go/pkg"
 	"net/http"
 	"os"
 	"time"
@@ -36,7 +36,7 @@ func main() {
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
 		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=Local"
-		log.Println("[警告] 未检测到DB_DSN环境变量，使用本地默认配置连接MySQL")
+		pkg.Infoln("[警告] 未检测到DB_DSN环境变量，使用本地默认配置连接MySQL")
 	}
 
 	config.InitRedis()
@@ -52,7 +52,7 @@ func main() {
 	// 阶段2：数据访问层初始化
 	// ================================
 	repository.InitRepositories(infrastructure.DB)
-	log.Println("[系统就绪] 数据访问层(DAL)初始化完成")
+	pkg.Infoln("[系统就绪] 数据访问层(DAL)初始化完成")
 
 	// ================================
 	// 阶段3：Kafka 离线消息归档消费服务
@@ -60,7 +60,7 @@ func main() {
 	kafkaAddrStr := os.Getenv("KAFKA_ADDR")
 	if kafkaAddrStr == "" {
 		kafkaAddrStr = "127.0.0.1:9092"
-		log.Println("[警告] 未检测到KAFKA_ADDR环境变量，使用本地默认配置连接Kafka")
+		pkg.Infoln("[警告] 未检测到KAFKA_ADDR环境变量，使用本地默认配置连接Kafka")
 	}
 
 	worker := archiver.NewWorker([]string{kafkaAddrStr}, "im_chat_messages", "mysql_archiver_group", config.RedisClient)
@@ -68,7 +68,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
-		log.Println("[系统启动] Kafka离线消息归档协程进入循环监听...")
+		pkg.Infoln("[系统启动] Kafka离线消息归档协程进入循环监听...")
 		worker.Start(ctx)
 	}()
 
@@ -78,7 +78,7 @@ func main() {
 	hub := core.NewHub()
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
-	log.Println("[系统就绪] WebSocket核心引擎启动完成")
+	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
 	// 阶段5：Agent 管理系统启动
@@ -118,7 +118,7 @@ func main() {
 	authorized := r.Group("/api/v1")
 	authorized.Use(middleware.JWTAuth())
 	{
-		log.Printf("进入WebSocket连接配置\n")
+		pkg.Infof("进入WebSocket连接配置\n")
 		authorized.GET("/ws", func(c *gin.Context) {
 			api.WsEndpoint(hub)(c)
 		})
@@ -177,10 +177,10 @@ func main() {
 		IdleTimeout:       15 * time.Second,
 	}
 
-	log.Printf("[系统启动] LAN-IM 服务端启动成功，监听端口 :%s", port)
+	pkg.Infof("[系统启动] LAN-IM 服务端启动成功，监听端口 :%s", port)
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("[致命错误] 服务启动失败: %v", err)
+		pkg.Fatalf("[致命错误] 服务启动失败: %v", err)
 	}
 
 	cancel()

@@ -9,7 +9,7 @@ import (
 	"context"
 	"lan-im-go/cache"
 	"lan-im-go/repository"
-	"log"
+	"lan-im-go/pkg"
 	"net/http"
 	"sync"
 	"time"
@@ -39,7 +39,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		// 1. 身份验证
 		userID, exists := c.Get("user_id")
 		if !exists {
-			log.Printf("用户身份信息不存在\n")
+			pkg.Infof("用户身份信息不存在\n")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "身份验证失败，连接拒绝"})
 			return
 		}
@@ -48,15 +48,15 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		// 2. 协议升级
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			log.Printf("[连接失败] WebSocket协议升级异常 UID:%d, Err:%v", realUserID, err)
+			pkg.Infof("[连接失败] WebSocket协议升级异常 UID:%d, Err:%v", realUserID, err)
 			return
 		}
-		log.Printf("WebSocket连接建立成功 UID:%d\n", realUserID)
+		pkg.Infof("WebSocket连接建立成功 UID:%d\n", realUserID)
 
 		// 3. 极其核心的物理动作：全局宣告上线
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		if err := cache.SetUserOnline(ctxTimeout, realUserID, CurrentNodeID); err != nil {
-			log.Printf("[状态告警] UID:%d 写入全局 Redis 状态异常: %v", realUserID, err)
+			pkg.Infof("[状态告警] UID:%d 写入全局 Redis 状态异常: %v", realUserID, err)
 			// 注意：状态写入失败不应直接阻断连接，可做降级处理允许业务继续运行
 		}
 		cancel()
@@ -64,7 +64,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		// 4. 初始化群聊订阅
 		roomIDs, err := repository.RoomMember.GetUserRoomIDs(realUserID)
 		if err != nil {
-			log.Printf("[连接警告] 获取用户%d群聊列表失败，使用空列表初始化", realUserID)
+			pkg.Infof("[连接警告] 获取用户%d群聊列表失败，使用空列表初始化", realUserID)
 			roomIDs = []int64{}
 		}
 
@@ -91,11 +91,11 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			// B. 全局分布式状态抹除
 			ctxDel, cancelDel := context.WithTimeout(context.Background(), 2*time.Second)
 			if err := cache.SetUserOffline(ctxDel, realUserID); err != nil {
-				log.Printf("[状态告警] UID:%d 删除全局 Redis 状态异常: %v", realUserID, err)
+				pkg.Infof("[状态告警] UID:%d 删除全局 Redis 状态异常: %v", realUserID, err)
 			}
 			cancelDel()
 
-			log.Printf("[WebSocket] 用户%d连接已释放，全局状态已离线", realUserID)
+			pkg.Infof("[WebSocket] 用户%d连接已释放，全局状态已离线", realUserID)
 		}()
 
 		// 7. 启动读写泵

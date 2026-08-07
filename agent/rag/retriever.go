@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 	"strings"
 )
 
@@ -51,7 +51,7 @@ func (r *Retriever) Retrieve(ctx context.Context, query string, roomID int64, to
 		out = append(out, res)
 	}
 
-	log.Printf("[Retriever] room=%d 检索完成, 返回 %d 条结果", roomID, len(out))
+	pkg.Infof("[Retriever] room=%d 检索完成, 返回 %d 条结果", roomID, len(out))
 	return out, nil
 }
 

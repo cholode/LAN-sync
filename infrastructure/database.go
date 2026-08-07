@@ -1,7 +1,7 @@
 package infrastructure
 
 import (
-	"log"
+	"lan-im-go/pkg"
 	"time"
 
 	"gorm.io/driver/mysql"
@@ -21,20 +21,20 @@ func InitDatabase(dsn string) {
 		// Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		log.Fatalf("[错误] MySQL 连接失败，请检查DSN配置: %v", err)
+		pkg.Fatalf("[错误] MySQL 连接失败，请检查DSN配置: %v", err)
 	}
 
 	// 2. 配置数据库连接池参数
 	sqlDB, err := DB.DB()
 	if err != nil {
-		log.Fatalf("[错误] 获取底层数据库连接失败: %v", err)
+		pkg.Fatalf("[错误] 获取底层数据库连接失败: %v", err)
 	}
 	sqlDB.SetMaxIdleConns(200)
 	sqlDB.SetMaxOpenConns(1000)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	// 3. 自动同步数据模型至数据库表结构
-	log.Println("开始同步数据库表结构...")
+	pkg.Infoln("开始同步数据库表结构...")
 	err = DB.AutoMigrate(
 		&models.User{},
 		&models.Room{},
@@ -45,8 +45,8 @@ func InitDatabase(dsn string) {
 		&models.RAGChunk{},
 	)
 	if err != nil {
-		log.Fatalf("[错误] 数据库表结构同步失败: %v", err)
+		pkg.Fatalf("[错误] 数据库表结构同步失败: %v", err)
 	}
 
-	log.Println("MySQL 连接成功，表结构同步完成，连接池配置生效！")
+	pkg.Infoln("MySQL 连接成功，表结构同步完成，连接池配置生效！")
 }

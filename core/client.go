@@ -7,7 +7,7 @@ import (
 	"lan-im-go/cache"
 	"lan-im-go/config"
 	//"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 	"strconv"
 	"time"
 )
@@ -54,7 +54,7 @@ func (c *Client) ReadPump() {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
+				pkg.Infof("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
 			}
 			break
 		}
@@ -67,12 +67,12 @@ func (c *Client) ReadPump() {
 		}
 
 		if err := json.Unmarshal(message, &payload); err != nil {
-			log.Printf("[消息解析失败] 用户 %d 发送了非法格式: %v", c.UserID, err)
+			pkg.Infof("[消息解析失败] 用户 %d 发送了非法格式: %v", c.UserID, err)
 			continue
 		}
 
 		if payload.ClientMsgID == "" {
-			log.Printf("[非法调用] 用户 %d 缺失防重发凭证，已拒绝处理", c.UserID)
+			pkg.Infof("[非法调用] 用户 %d 缺失防重发凭证，已拒绝处理", c.UserID)
 			continue
 		}
 
@@ -96,7 +96,7 @@ func (c *Client) ReadPump() {
 
 		if err != nil {
 			// 如果 Kafka 发生严重物理宕机，需要考虑降级策略或通知客户端发送失败
-			log.Printf("无法投递至 Kafka，消息丢弃: %v", err)
+			pkg.Infof("无法投递至 Kafka，消息丢弃: %v", err)
 			// 可选：向当前客户端回复系统异常错误码
 			continue
 		}
@@ -126,10 +126,10 @@ func (c *Client) ReadPump() {
 
 // 	for {
 // 		_, message, err := c.Conn.ReadMessage()
-// 		log.Printf("收到客户端消息：%s\n", message)
+// 		pkg.Infof("收到客户端消息：%s\n", message)
 // 		if err != nil {
 // 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-// 				log.Printf("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
+// 				pkg.Infof("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
 // 			}
 // 			break
 // 		}
@@ -141,7 +141,7 @@ func (c *Client) ReadPump() {
 // 		}
 // 		var msg models.Message
 // 		if err := json.Unmarshal(message, &payload); err != nil {
-// 			log.Printf("[消息解析失败] 用户 %d 发送了非法的 JSON 格式消息", c.UserID)
+// 			pkg.Infof("[消息解析失败] 用户 %d 发送了非法的 JSON 格式消息", c.UserID)
 // 			continue
 // 		}
 // 		// 安全校验：用户ID从服务端获取，禁止客户端伪造身份

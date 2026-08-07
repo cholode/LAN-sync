@@ -3,7 +3,7 @@ package chunker
 import (
 	"context"
 	"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 	"os"
 	"time"
 
@@ -44,7 +44,7 @@ func NewChunkingPipeline(
 
 // Start 启动定时分块
 func (p *ChunkingPipeline) Start(ctx context.Context) {
-	log.Printf("[Pipeline] room=%d 话题分块流水线启动, 间隔=%s", p.roomID, p.interval)
+	pkg.Infof("[Pipeline] room=%d 话题分块流水线启动, 间隔=%s", p.roomID, p.interval)
 
 	topicTicker := time.NewTicker(p.interval)
 	defer topicTicker.Stop()
@@ -67,9 +67,9 @@ func (p *ChunkingPipeline) tryTopicChunk(ctx context.Context) {
 	if count < int64(p.minTopicMsgs) {
 		return
 	}
-	log.Printf("[Pipeline] room=%d 累积 %d 条新消息，触发话题分块", p.roomID, count)
+	pkg.Infof("[Pipeline] room=%d 累积 %d 条新消息，触发话题分块", p.roomID, count)
 	if err := p.topicChunker.Chunk(ctx); err != nil {
-		log.Printf("[Pipeline] room=%d 话题分块失败: %v", p.roomID, err)
+		pkg.Infof("[Pipeline] room=%d 话题分块失败: %v", p.roomID, err)
 	}
 }
 

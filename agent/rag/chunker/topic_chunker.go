@@ -9,7 +9,7 @@ import (
 	"lan-im-go/agent/tool"
 	"lan-im-go/core"
 	"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 	"strings"
 
 	"gorm.io/gorm"
@@ -74,7 +74,7 @@ func (c *TopicChunker) Chunk(ctx context.Context) error {
 		return fmt.Errorf("llm combined call: %w", err)
 	}
 
-	log.Printf("[TopicChunker] room=%d 识别到 %d 个话题", c.roomID, len(segments))
+	pkg.Infof("[TopicChunker] room=%d 识别到 %d 个话题", c.roomID, len(segments))
 
 	var chunks []*models.RAGChunk
 	for _, seg := range segments {
@@ -161,10 +161,10 @@ func (c *TopicChunker) callLLMCombined(ctx context.Context, msgWithUsers []rag.M
 	for _, tc := range resp.Choices[0].Message.ToolCalls {
 		result, dispatchErr := c.reviewTools.Dispatch(tc.Function.Name, []byte(tc.Function.Arguments))
 		if dispatchErr != nil {
-			log.Printf("[TopicChunker] room=%d %s 失败: %v", c.roomID, tc.Function.Name, dispatchErr)
+			pkg.Infof("[TopicChunker] room=%d %s 失败: %v", c.roomID, tc.Function.Name, dispatchErr)
 			continue
 		}
-		log.Printf("[TopicChunker] room=%d %s: %s", c.roomID, tc.Function.Name, result)
+		pkg.Infof("[TopicChunker] room=%d %s: %s", c.roomID, tc.Function.Name, result)
 	}
 
 	// 2. 提取话题 JSON

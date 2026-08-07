@@ -12,7 +12,7 @@ import (
 	"lan-im-go/core"
 	"lan-im-go/models"
 	"lan-im-go/repository"
-	"log"
+	"lan-im-go/pkg"
 	"strings"
 	"sync"
 	"time"
@@ -83,7 +83,7 @@ func NewRoomAgent(roomID, botUserID int64, db *gorm.DB, llmClient *LLMClient, ag
 }
 
 func (a *RoomAgent) Start(ctx context.Context) {
-	log.Printf("[RoomAgent] room=%d 启动", a.roomID)
+	pkg.Infof("[RoomAgent] room=%d 启动", a.roomID)
 	go a.pipeline.Start(a.ctx)
 }
 
@@ -145,7 +145,7 @@ func (a *RoomAgent) processMessage(msg AgentMessage) {
 
 	resp, err := a.llmClient.Chat(ctx, messages, a.config.Temperature, a.tools.AllTools())
 	if err != nil {
-		log.Printf("[RoomAgent] room=%d LLM 失败: %v", a.roomID, err)
+		pkg.Infof("[RoomAgent] room=%d LLM 失败: %v", a.roomID, err)
 		a.sendReply("AI 助手暂时不可用，请稍后再试。")
 		return
 	}
@@ -163,7 +163,7 @@ func (a *RoomAgent) processMessage(msg AgentMessage) {
 
 	if reply := choice.Message.Content; reply != "" {
 		a.sendReply(reply)
-		log.Printf("[RoomAgent] room=%d 回复: %s", a.roomID, truncate(reply, 50))
+		pkg.Infof("[RoomAgent] room=%d 回复: %s", a.roomID, truncate(reply, 50))
 	}
 }
 
@@ -183,7 +183,7 @@ func (a *RoomAgent) handleToolCalls(ctx context.Context, messages []ChatMessage,
 	for _, tc := range choice.Message.ToolCalls {
 		result, err := a.tools.Dispatch(tc.Function.Name, []byte(tc.Function.Arguments))
 		if err != nil {
-			log.Printf("[RoomAgent] tool=%s 执行失败: %v", tc.Function.Name, err)
+			pkg.Infof("[RoomAgent] tool=%s 执行失败: %v", tc.Function.Name, err)
 			result = fmt.Sprintf("执行失败: %v", err)
 		}
 		messages = append(messages, ChatMessage{
@@ -195,7 +195,7 @@ func (a *RoomAgent) handleToolCalls(ctx context.Context, messages []ChatMessage,
 
 	resp2, err := a.llmClient.Chat(ctx, messages, a.config.Temperature, nil)
 	if err != nil {
-		log.Printf("[RoomAgent] room=%d 第二轮 LLM 失败: %v", a.roomID, err)
+		pkg.Infof("[RoomAgent] room=%d 第二轮 LLM 失败: %v", a.roomID, err)
 		a.sendReply("AI 助手暂时不可用，请稍后再试。")
 		return
 	}
@@ -203,7 +203,7 @@ func (a *RoomAgent) handleToolCalls(ctx context.Context, messages []ChatMessage,
 	if len(resp2.Choices) > 0 && resp2.Choices[0].Message.Content != "" {
 		reply := resp2.Choices[0].Message.Content
 		a.sendReply(reply)
-		log.Printf("[RoomAgent] room=%d function call 回复: %s", a.roomID, truncate(reply, 50))
+		pkg.Infof("[RoomAgent] room=%d function call 回复: %s", a.roomID, truncate(reply, 50))
 	}
 }
 
@@ -213,7 +213,7 @@ func (a *RoomAgent) retrieveRAG(ctx context.Context, query string) []string {
 	}
 	results, err := a.retriever.Retrieve(ctx, query, a.roomID, a.config.TopK)
 	if err != nil {
-		log.Printf("[RoomAgent] room=%d RAG 检索失败: %v", a.roomID, err)
+		pkg.Infof("[RoomAgent] room=%d RAG 检索失败: %v", a.roomID, err)
 		return nil
 	}
 	var chunks []string
@@ -230,7 +230,7 @@ func (a *RoomAgent) sendReply(content string) {
 		fmt.Sprintf("%d", a.roomID), int(a.botUserID), content,
 		fmt.Sprintf("agent-%d-%d", a.roomID, time.Now().UnixNano()))
 	if err != nil {
-		log.Printf("[RoomAgent] room=%d 发送失败: %v", a.roomID, err)
+		pkg.Infof("[RoomAgent] room=%d 发送失败: %v", a.roomID, err)
 	}
 }
 

@@ -1,0 +1,16 @@
+name: Feature Request
+description: 建议一个新功能
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: 需求背景
+      description: 为什么需要这个功能
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 期望方案
+      description: 你期望的实现方式
+    validations:
+      required: true

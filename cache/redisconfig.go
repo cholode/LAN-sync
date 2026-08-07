@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"lan-im-go/config"
 	"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 	"time"
 )
 
@@ -108,6 +108,6 @@ func BackfillRoomCache(ctx context.Context, msgs []*models.Message) {
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
-		log.Printf("[Cache] Redis 回填热点消息失败: %v", err)
+		pkg.Infof("[Cache] Redis 回填热点消息失败: %v", err)
 	}
 }

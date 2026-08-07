@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"lan-im-go/models"
-	"log"
+	"lan-im-go/pkg"
 	"os"
 	"strings"
 	"time"
@@ -33,7 +33,7 @@ func NewQdrantVectorStore() (*QdrantVectorStore, error) {
 		return nil, fmt.Errorf("qdrant connect: %w", err)
 	}
 
-	log.Printf("[Qdrant] 已连接 %s:%d", host, port)
+	pkg.Infof("[Qdrant] 已连接 %s:%d", host, port)
 	return &QdrantVectorStore{client: client}, nil
 }
 
@@ -72,7 +72,7 @@ func (s *QdrantVectorStore) EnsureIndex(ctx context.Context, roomID int64) error
 		FieldType:      &fTypeKeyword,
 	})
 
-	log.Printf("[Qdrant] 集合 %s 创建成功", name)
+	pkg.Infof("[Qdrant] 集合 %s 创建成功", name)
 	return nil
 }
 

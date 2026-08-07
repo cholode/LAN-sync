@@ -13,7 +13,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	"lan-im-go/models"
 	"lan-im-go/repository"
-	"log"
+	"lan-im-go/pkg"
 )
 
 type kafkaMessage struct {
@@ -73,7 +73,7 @@ func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client
 		if err == nil {
 			if saved, parseErr := strconv.ParseInt(val, 10, 64); parseErr == nil {
 				startOffset = saved + 1
-				log.Printf("[Archiver] 从 Redis 恢复 offset=%d, 起始位置=%d", saved, startOffset)
+				pkg.Infof("[Archiver] 从 Redis 恢复 offset=%d, 起始位置=%d", saved, startOffset)
 			}
 		}
 	}
@@ -142,7 +142,7 @@ func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*models.Message) 
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
-		log.Printf("[Archiver] Redis 热点缓存写入失败: %v", err)
+		pkg.Infof("[Archiver] Redis 热点缓存写入失败: %v", err)
 	}
 }
 
@@ -151,14 +151,14 @@ func (w *Worker) saveOffset(ctx context.Context, offset int64) {
 		return
 	}
 	if err := w.rdb.Set(ctx, w.offsetKey, offset, 0).Err(); err != nil {
-		log.Printf("[Archiver] Redis offset 保存失败: %v", err)
+		pkg.Infof("[Archiver] Redis offset 保存失败: %v", err)
 	}
 }
 
 func (w *Worker) Start(ctx context.Context) {
 	defer w.reader.Close()
 
-	log.Printf("[Archiver] 稳态消费者已启动（分区直读模式: 1000条/500ms + Redis offset）")
+	pkg.Infof("[Archiver] 稳态消费者已启动（分区直读模式: 1000条/500ms + Redis offset）")
 
 	msgBatch := make([]*models.Message, 0, batchSize)
 	var lastOffset int64
@@ -170,13 +170,13 @@ func (w *Worker) Start(ctx context.Context) {
 		count := len(msgBatch)
 		err := repository.Message.SaveMessageBatch(msgBatch)
 		if err != nil {
-			log.Printf("[Archiver] 批量写入失败，%d 条: %v", count, err)
+			pkg.Infof("[Archiver] 批量写入失败，%d 条: %v", count, err)
 			// do NOT clear batch, retry next flush
 			return
 		}
 
 		w.pushLatestToRedis(ctx, msgBatch)
-		log.Printf("[Archiver] 批量写入成功: %d 条, offset=%d", count, lastOffset)
+		pkg.Infof("[Archiver] 批量写入成功: %d 条, offset=%d", count, lastOffset)
 
 		// persist offset to Redis AFTER successful MySQL write
 		w.saveOffset(ctx, lastOffset)
@@ -191,7 +191,7 @@ func (w *Worker) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			flush()
-			log.Println("[Archiver] 消费者安全退出")
+			pkg.Infoln("[Archiver] 消费者安全退出")
 			return
 		case <-ticker.C:
 			flush()
@@ -206,18 +206,18 @@ func (w *Worker) Start(ctx context.Context) {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				continue
 			}
-			log.Printf("[Archiver] Kafka 读取异常: %v", err)
+			pkg.Infof("[Archiver] Kafka 读取异常: %v", err)
 			continue
 		}
 
 		var raw kafkaMessage
 		if err := json.Unmarshal(m.Value, &raw); err != nil {
-			log.Printf("[Archiver] 消息解析失败 offset=%d: %v", m.Offset, err)
+			pkg.Infof("[Archiver] 消息解析失败 offset=%d: %v", m.Offset, err)
 			continue
 		}
 		roomID, err := strconv.ParseInt(raw.RoomID, 10, 64)
 		if err != nil {
-			log.Printf("[Archiver] room_id 解析失败 offset=%d: %v", m.Offset, err)
+			pkg.Infof("[Archiver] room_id 解析失败 offset=%d: %v", m.Offset, err)
 			continue
 		}
 
