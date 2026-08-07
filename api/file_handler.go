@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,18 +10,59 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/unicode/norm"
+	"lan-im-go/internal/storage"
 	"lan-im-go/pkg"
 )
 
+// Storage 全局存储实例，由 main.go 初始化
+var Storage storage.Provider
+
 var (
-	UploadBaseDir = filepath.Join(".", "data", "uploads")
-	TempChunkDir  = filepath.Join(".", "data", "temp_chunks")
+	UploadBaseDir string
+	TempChunkDir  string
 )
 
-// isDirWritable 检测目录是否真实可写（已存在但无写权限时 MkdirAll 仍会“成功”）
+// InitFileStorage 初始化文件存储（替代原 InitFileDirs）
+func InitFileStorage() {
+	Storage = storage.New()
+
+	if Storage.BackendType() == storage.BackendLocal {
+		// 本地存储需要初始化目录（与原来逻辑一致）
+		if root := strings.TrimSpace(os.Getenv("LAN_IM_DATA_DIR")); root != "" {
+			root = filepath.Clean(root)
+			UploadBaseDir = filepath.Join(root, "uploads")
+			TempChunkDir = filepath.Join(root, "temp_chunks")
+			pkg.Infof("[目录] LAN_IM_DATA_DIR=%s -> uploads=%s temp_chunks=%s", root, UploadBaseDir, TempChunkDir)
+		}
+		if UploadBaseDir == "" {
+			UploadBaseDir = filepath.Join(".", "data", "uploads")
+		}
+		if TempChunkDir == "" {
+			TempChunkDir = filepath.Join(".", "data", "temp_chunks")
+		}
+		UploadBaseDir = ensureWritableDir(UploadBaseDir, "uploads")
+		TempChunkDir = ensureWritableDir(TempChunkDir, "temp_chunks")
+		if abs, err := filepath.Abs(UploadBaseDir); err == nil {
+			UploadBaseDir = abs
+		}
+		if abs, err := filepath.Abs(TempChunkDir); err == nil {
+			TempChunkDir = abs
+		}
+		pkg.Infof("[目录] 最终 UploadBaseDir=%s TempChunkDir=%s", UploadBaseDir, TempChunkDir)
+	}
+}
+
+// ---------- 原 InitFileDirs 保留兼容 ----------
+func InitFileDirs() {
+	InitFileStorage()
+}
+
+// ---------- 目录工具函数 ----------
+
 func isDirWritable(dir string) bool {
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
@@ -70,53 +112,55 @@ func sanitizeHash(raw string) (string, error) {
 	return safeHash, nil
 }
 
-func getUserChunkDir(c *gin.Context) string {
+// ---------- 预签名上传（MinIO 场景） ----------
+
+// PreSignUploadRequest 预签名上传请求
+type PreSignUploadRequest struct {
+	FileName string `json:"filename" binding:"required"`
+	FileType string `json:"file_type"` // 如 "png", "jpg", "pdf"
+	FileSize int64  `json:"file_size"`
+}
+
+// PreSignUploadHandler 生成预签名上传 URL
+// POST /api/v1/files/presign
+// 客户端拿到 URL 直传 MinIO，不经过服务器中转
+func PreSignUploadHandler(c *gin.Context) {
+	var req PreSignUploadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数不合法"})
+		return
+	}
+
+	now := time.Now()
 	userID := c.GetInt64("user_id")
-	return filepath.Join(TempChunkDir, strconv.FormatInt(userID, 10))
-}
 
-func chunkFileName(hash string, idx int) string {
-	return fmt.Sprintf("%s_%d", hash, idx)
-}
+	// 构造对象键：{date}/{userID}/{timestamp}_{filename}
+	key := fmt.Sprintf("%s/%d/%d_%s",
+		now.Format("2006-01-02"),
+		userID,
+		now.UnixMilli(),
+		req.FileName,
+	)
 
-func parseChunkIndexByPrefix(fileName string, hashPrefix string) (int, bool) {
-	if !strings.HasPrefix(fileName, hashPrefix) {
-		return 0, false
-	}
-	part := strings.TrimPrefix(fileName, hashPrefix)
-	idx, err := strconv.Atoi(part)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	uploadURL, err := Storage.PreSignedUploadURL(ctx, key, 15*time.Minute)
 	if err != nil {
-		return 0, false
+		pkg.Errorf("[PreSign] 生成预签名 URL 失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成上传链接失败"})
+		return
 	}
-	return idx, true
+
+	c.JSON(http.StatusOK, gin.H{
+		"upload_url": uploadURL,
+		"object_key": key,
+		"expires_in": 900,
+	})
 }
 
-func removeHashChunkFiles(chunkDirPath string, safeHash string) error {
-	entries, err := os.ReadDir(chunkDirPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
+// ---------- 下载（兼容本地 + MinIO） ----------
 
-	prefix := safeHash + "_"
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasPrefix(name, prefix) {
-			continue
-		}
-		if err := os.Remove(filepath.Join(chunkDirPath, name)); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	return nil
-}
-
-// downloadSegmentFromRequest 从请求路径解析 /download/ 后的文件名（兼容通配路由与编码差异）。
 func downloadSegmentFromRequest(c *gin.Context) string {
 	path := c.Request.URL.Path
 	marker := "/download/"
@@ -150,94 +194,128 @@ func isHex64(s string) bool {
 	return true
 }
 
-// findUploadedObject 在 uploadDir 中按：精确保留名、小写、Unicode NFC、仅 SHA256 前缀唯一 等策略查找文件。
 func findUploadedObject(uploadDir, logicalName string) (string, bool) {
-	tryDirect := func(dir string) (string, bool) {
-		p := filepath.Join(dir, logicalName)
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
-			return p, true
-		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return "", false
-		}
-		wantLow := strings.ToLower(logicalName)
-		wantNFC := norm.NFC.String(logicalName)
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			n := e.Name()
-			if strings.ToLower(n) == wantLow || norm.NFC.String(n) == wantNFC {
-				return filepath.Join(dir, n), true
-			}
-		}
-		if len(logicalName) >= 65 && logicalName[64] == '_' {
-			hash := logicalName[:64]
-			if isHex64(hash) {
-				prefix := hash + "_"
-				var hits []string
-				for _, e := range entries {
-					if !e.IsDir() && strings.HasPrefix(e.Name(), prefix) {
-						hits = append(hits, e.Name())
-					}
-				}
-				if len(hits) == 1 {
-					return filepath.Join(dir, hits[0]), true
-				}
-			}
-		}
-		return "", false
-	}
-
-	if p, ok := tryDirect(uploadDir); ok {
+	p := filepath.Join(uploadDir, logicalName)
+	if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
 		return p, true
 	}
-
-	legacy, err := filepath.Abs(filepath.Join(".", "data", "uploads"))
-	if err != nil || strings.EqualFold(legacy, uploadDir) {
+	entries, err := os.ReadDir(uploadDir)
+	if err != nil {
 		return "", false
 	}
-	return tryDirect(legacy)
-}
-
-// clientDownloadName 磁盘文件名为「64位hex_原始名」时，向浏览器提供原始文件名以便另存为对话框显示合理名称。
-func clientDownloadName(storedBase string) string {
-	if len(storedBase) >= 65 && storedBase[64] == '_' {
-		h := storedBase[:64]
-		if isHex64(h) {
-			return filepath.Base(storedBase[65:])
+	wantLow := strings.ToLower(logicalName)
+	wantNFC := norm.NFC.String(logicalName)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		n := e.Name()
+		if strings.ToLower(n) == wantLow || norm.NFC.String(n) == wantNFC {
+			return filepath.Join(uploadDir, n), true
 		}
 	}
-	return storedBase
+	if len(logicalName) >= 65 && logicalName[64] == '_' {
+		hash := logicalName[:64]
+		if isHex64(hash) {
+			prefix := hash + "_"
+			var hits []string
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				if strings.HasPrefix(e.Name(), prefix) {
+					hits = append(hits, e.Name())
+				}
+			}
+			if len(hits) == 1 {
+				return filepath.Join(uploadDir, hits[0]), true
+			}
+		}
+	}
+	return "", false
 }
 
-// InitFileDirs 初始化文件上传目录。
-// 可通过环境变量 LAN_IM_DATA_DIR 指定可写根目录（其下会创建 uploads、temp_chunks）。
-func InitFileDirs() {
-	if root := strings.TrimSpace(os.Getenv("LAN_IM_DATA_DIR")); root != "" {
-		root = filepath.Clean(root)
-		UploadBaseDir = filepath.Join(root, "uploads")
-		TempChunkDir = filepath.Join(root, "temp_chunks")
-		pkg.Infof("[目录] LAN_IM_DATA_DIR=%s -> uploads=%s temp_chunks=%s", root, UploadBaseDir, TempChunkDir)
+func clientDownloadName(raw string) string {
+	clean := filepath.Base(filepath.Clean(raw))
+	if idx := strings.Index(clean, "_"); idx >= 0 && isHex64(clean[:idx]) {
+		return clean[idx+1:]
 	}
-	UploadBaseDir = ensureWritableDir(UploadBaseDir, "uploads")
-	TempChunkDir = ensureWritableDir(TempChunkDir, "temp_chunks")
-	if abs, err := filepath.Abs(UploadBaseDir); err == nil {
-		UploadBaseDir = abs
-	}
-	if abs, err := filepath.Abs(TempChunkDir); err == nil {
-		TempChunkDir = abs
-	}
-	pkg.Infof("[目录] 最终 UploadBaseDir=%s TempChunkDir=%s", UploadBaseDir, TempChunkDir)
+	return clean
 }
 
-// func InitUserDir(UserID int) {
-// 	os.MkdirAll(fmt.Sprintf("./data/temp_chunks/%s", strconv.Itoa(UserID)), 0755)
-// }
+// DownloadFile 文件下载接口
+func DownloadFile(c *gin.Context) {
+	raw := downloadSegmentFromRequest(c)
+	safeFileName := filepath.Base(filepath.Clean(raw))
 
-// CheckUploadStatus 断点续传-文件状态校验（秒传检测）
-// 前端上传文件前调用，校验文件是否已存在/已上传分片
+	if safeFileName == "." || safeFileName == "/" || safeFileName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件请求非法"})
+		return
+	}
+
+	// MinIO 场景：生成预签名下载 URL 并重定向
+	if Storage != nil && Storage.BackendType() == storage.BackendMinIO {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+
+		downloadURL, err := Storage.GetDownloadURL(ctx, safeFileName)
+		if err != nil {
+			pkg.Infof("[download] MinIO 下载 URL 生成失败: %v", err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
+			return
+		}
+		c.Redirect(http.StatusTemporaryRedirect, downloadURL)
+		return
+	}
+
+	// 本地存储场景：直接返回文件
+	if UploadBaseDir != "" {
+		if filePath, ok := findUploadedObject(UploadBaseDir, safeFileName); ok {
+			c.FileAttachment(filePath, clientDownloadName(safeFileName))
+			return
+		}
+	}
+
+	pkg.Infof("[download] 未找到文件 want=%s uploadDir=%s", safeFileName, UploadBaseDir)
+	c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
+}
+
+// ---------- 以下为存量分片上传代码（保持兼容） ----------
+
+func getUserChunkDir(c *gin.Context) string {
+	userID := c.GetInt64("user_id")
+	return filepath.Join(TempChunkDir, strconv.FormatInt(userID, 10))
+}
+
+func chunkFileName(hash string, idx int) string {
+	return fmt.Sprintf("%s_%d", hash, idx)
+}
+
+func removeHashChunkFiles(chunkDirPath string, safeHash string) error {
+	entries, err := os.ReadDir(chunkDirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	prefix := safeHash + "_"
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(chunkDirPath, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// CheckUploadStatus 断点续传-文件状态校验
 func CheckUploadStatus(c *gin.Context) {
 	fileHash := c.Query("hash")
 	fileName := c.Query("filename")
@@ -254,98 +332,105 @@ func CheckUploadStatus(c *gin.Context) {
 	safeFileName := filepath.Base(fileName)
 	finalFilePath := filepath.Join(UploadBaseDir, fmt.Sprintf("%s_%s", safeHash, safeFileName))
 
-	// 1. 秒传检测：文件已存在，直接返回下载地址
 	if _, err := os.Stat(finalFilePath); err == nil {
 		c.JSON(http.StatusOK, gin.H{
-			"status":       "completed",
-			"msg":          "文件已存在，秒传成功",
+			"msg":          "文件已存在，无需重复上传",
 			"download_url": fmt.Sprintf("/api/v1/download/%s_%s", safeHash, safeFileName),
 		})
 		return
 	}
 
-	// 2. 已上传分片扫描：获取临时目录中已上传的分片索引
 	chunkDirPath := getUserChunkDir(c)
-	var uploadedChunks []int
+	if err := os.MkdirAll(chunkDirPath, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "临时目录创建失败"})
+		return
+	}
 
 	entries, err := os.ReadDir(chunkDirPath)
-	if err == nil {
-		prefix := safeHash + "_"
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				if index, ok := parseChunkIndexByPrefix(entry.Name(), prefix); ok {
-					uploadedChunks = append(uploadedChunks, index)
-				}
+	if err != nil && !os.IsNotExist(err) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片索引读取失败"})
+		return
+	}
+	prefix := safeHash + "_"
+	existing := make([]int, 0)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.HasPrefix(entry.Name(), prefix) {
+			if idx, ok := parseChunkIndex(entry.Name(), prefix); ok {
+				existing = append(existing, idx)
 			}
 		}
 	}
 
-	// 3. 返回已上传分片，前端仅需上传缺失分片
 	c.JSON(http.StatusOK, gin.H{
-		"status":          "uploading",
-		"uploaded_chunks": uploadedChunks,
+		"msg":              "续传检测完成",
+		"uploaded_chunks":  existing,
+		"uploaded_count":   len(existing),
 	})
 }
 
+func parseChunkIndex(fileName string, prefix string) (int, bool) {
+	part := strings.TrimPrefix(fileName, prefix)
+	idx, err := strconv.Atoi(part)
+	if err != nil {
+		return 0, false
+	}
+	return idx, true
+}
+
 // UploadChunk 断点续传-分片上传
-// 接收并存储单个文件分片，支持覆盖上传
 func UploadChunk(c *gin.Context) {
 	fileHash := c.PostForm("hash")
-	chunkIndexStr := c.PostForm("chunk_index")
-	chunkIndex, err := strconv.Atoi(chunkIndexStr)
-	if err != nil || fileHash == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "分片参数非法"})
-		return
-	}
-	safeHash, err := sanitizeHash(fileHash)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "分片参数非法"})
+	chunkIdxStr := c.PostForm("chunk_index")
+	chunkTotalStr := c.PostForm("total_chunks")
+
+	chunkIdx, err := strconv.Atoi(chunkIdxStr)
+	chunkTotal, err2 := strconv.Atoi(chunkTotalStr)
+	if err != nil || err2 != nil || fileHash == "" || chunkIdx < 0 || chunkTotal <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数非法"})
 		return
 	}
 
-	fileHeader, err := c.FormFile("chunk")
+	safeHash, err := sanitizeHash(fileHash)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "文件流读取失败"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数非法"})
 		return
 	}
 
 	chunkDirPath := getUserChunkDir(c)
 	if err := os.MkdirAll(chunkDirPath, 0755); err != nil {
-		pkg.Infof("[上传错误] 创建分片目录失败 path=%s err=%v", chunkDirPath, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片目录创建失败: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "临时目录创建失败"})
 		return
 	}
 
-	// 存储分片，自动覆盖已存在的分片文件
-	chunkFilePath := filepath.Join(chunkDirPath, chunkFileName(safeHash, chunkIndex))
-	src, err := fileHeader.Open()
+	file, _, err := c.Request.FormFile("file")
 	if err != nil {
-		pkg.Infof("[上传错误] 打开上传流失败 idx=%d err=%v", chunkIndex, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片流打开失败: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "分片文件缺失"})
 		return
 	}
-	defer src.Close()
+	defer file.Close()
 
-	dst, err := os.OpenFile(chunkFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	chunkFilePath := filepath.Join(chunkDirPath, chunkFileName(safeHash, chunkIdx))
+	dst, err := os.Create(chunkFilePath)
 	if err != nil {
-		pkg.Infof("[上传错误] 创建分片文件失败 path=%s idx=%d err=%v", chunkFilePath, chunkIndex, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片存储失败: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片创建失败"})
 		return
 	}
 	defer dst.Close()
 
-	if _, err := io.Copy(dst, src); err != nil {
-		pkg.Infof("[上传错误] 写入分片失败 path=%s idx=%d err=%v", chunkFilePath, chunkIndex, err)
+	_, err = io.Copy(dst, file)
+	if err != nil {
 		_ = os.Remove(chunkFilePath)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "分片写入失败: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"msg": fmt.Sprintf("分片 %d 上传成功", chunkIndex)})
+	c.JSON(http.StatusOK, gin.H{"msg": fmt.Sprintf("分片 %d 上传成功", chunkIdx)})
 }
 
 // MergeChunks 断点续传-分片合并
-// 按顺序合并所有分片，生成完整文件，合并后清理临时分片
 func MergeChunks(c *gin.Context) {
 	fileHash := c.PostForm("hash")
 	fileName := c.PostForm("filename")
@@ -364,7 +449,6 @@ func MergeChunks(c *gin.Context) {
 	safeFileName := filepath.Base(fileName)
 	finalFilePath := filepath.Join(UploadBaseDir, fmt.Sprintf("%s_%s", safeHash, safeFileName))
 
-	// 防重复合并：文件已存在则直接返回
 	if _, err := os.Stat(finalFilePath); err == nil {
 		c.JSON(http.StatusOK, gin.H{
 			"msg":          "文件已存在，无需重复合并",
@@ -382,7 +466,6 @@ func MergeChunks(c *gin.Context) {
 
 	chunkDirPath := getUserChunkDir(c)
 
-	// 按顺序合并分片，保证文件完整性
 	for i := 0; i < totalChunks; i++ {
 		chunkFilePath := filepath.Join(chunkDirPath, chunkFileName(safeHash, i))
 		chunkFile, err := os.Open(chunkFilePath)
@@ -401,7 +484,6 @@ func MergeChunks(c *gin.Context) {
 		}
 	}
 
-	// 合并完成，清理当前文件对应的临时分片
 	if err := removeHashChunkFiles(chunkDirPath, safeHash); err != nil {
 		pkg.Infof("[上传清理错误] 清理分片失败 path=%s hash=%s err=%v", chunkDirPath, safeHash, err)
 	}
@@ -412,30 +494,7 @@ func MergeChunks(c *gin.Context) {
 	})
 }
 
-// DownloadFile 文件下载接口（注册在公开路由组，无需 JWT）。
-// 对象名为「整文件 SHA-256 + 原始文件名」，相当于难猜测的能力链接，便于群成员在浏览器中直接下载。
-// 安全校验文件路径，防止目录遍历攻击。
-func DownloadFile(c *gin.Context) {
-	raw := downloadSegmentFromRequest(c)
-	safeFileName := filepath.Base(filepath.Clean(raw))
-
-	if safeFileName == "." || safeFileName == "/" || safeFileName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "文件请求非法"})
-		return
-	}
-
-	if filePath, ok := findUploadedObject(UploadBaseDir, safeFileName); ok {
-		c.FileAttachment(filePath, clientDownloadName(safeFileName))
-		return
-	}
-
-	pkg.Infof("[download] 未找到文件 want=%s uploadDir=%s path=%s param=%q",
-		safeFileName, UploadBaseDir, c.Request.URL.Path, c.Param("filepath"))
-	c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
-}
-
 // CancelUpload 取消文件上传
-// 终止上传流程，清理对应的临时分片文件
 func CancelUpload(c *gin.Context) {
 	fileHash := c.Query("hash")
 	if fileHash == "" {
@@ -443,7 +502,6 @@ func CancelUpload(c *gin.Context) {
 		return
 	}
 
-	// 安全防护：校验文件哈希合法性
 	safeHash, err := sanitizeHash(fileHash)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数非法"})
@@ -452,7 +510,6 @@ func CancelUpload(c *gin.Context) {
 
 	chunkDirPath := getUserChunkDir(c)
 
-	// 清理临时分片文件
 	if err := removeHashChunkFiles(chunkDirPath, safeHash); err != nil {
 		pkg.Infof("[上传清理错误] 临时目录删除失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "临时文件清理失败"})

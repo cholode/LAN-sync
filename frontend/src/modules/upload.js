@@ -1,4 +1,4 @@
-﻿// src/modules/upload.js —— 文件分片上传（断点续传 + Web Worker 哈希 + 原生 crypto.subtle）
+// src/modules/upload.js —— 文件分片上传（断点续传 + Web Worker 哈希 + 原生 crypto.subtle）
 import { state } from '../store/index.js';
 import { request, readErrorMessage } from '../api/api.js';
 
@@ -65,6 +65,64 @@ export async function computeFileSha256Hex(file) {
     });
 }
 
+
+// ---------- Presigned URL 直传（MinIO 场景） ----------
+
+async function tryPresignedUpload(file) {
+    var fileName = encodeURIComponent(file.name);
+    var ext = (file.name.split('.').pop() || '').toLowerCase();
+
+    var presignRes = await request('/files/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            filename: fileName,
+            file_type: ext,
+            file_size: file.size
+        })
+    });
+
+    if (!presignRes.ok) return null; // 后端不支持预签名，降级为分片上传
+
+    var presignData = await presignRes.json();
+    if (!presignData.upload_url) return null;
+
+    return presignData;
+}
+
+async function uploadViaPresignedURL(file, presignData) {
+    return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', presignData.upload_url, true);
+
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                var percent = Math.round((e.loaded / e.total) * 100);
+                document.getElementById('progress-bar').style.width = percent + '%';
+                document.getElementById('upload-status').textContent = 'MinIO 直传 ' + percent + '%';
+            }
+        };
+
+        xhr.onload = function() {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve({ object_key: presignData.object_key });
+            } else {
+                reject(new Error('MinIO 上传失败: HTTP ' + xhr.status));
+            }
+        };
+
+        xhr.onerror = function() {
+            reject(new Error('MinIO 网络错误'));
+        };
+
+        xhr.ontimeout = function() {
+            reject(new Error('MinIO 上传超时'));
+        };
+
+        xhr.timeout = 600000; // 10 分钟
+        xhr.send(file);
+    });
+}
 export async function startUpload() {
     if (!state.currentRoomId) return alert('请先选择群聊！');
     if (isUploading) return;

@@ -49,7 +49,7 @@ func main() {
 
 	infrastructure.InitDatabase(dsn)
 	taskpool.Init(0) // 0=默认线程数(CPU*2)
-	api.InitFileDirs()
+	api.InitFileStorage()
 
 	// ================================
 	// 阶段2：数据访问层初始化
@@ -130,6 +130,7 @@ func main() {
 		authorized.POST("/upload/chunk", api.UploadChunk)
 		authorized.POST("/upload/merge", api.MergeChunks)
 		authorized.DELETE("/upload/cancel", api.CancelUpload)
+		authorized.POST("/files/presign", api.PreSignUploadHandler)
 
 		authorized.GET("/rooms/:id/messages", api.GetChatHistory())
 		authorized.POST("/rooms/:id/join", api.JoinRoom(hub))

@@ -7,6 +7,7 @@ volumes:
   redis_data:
   kafka_data:
   qdrant_data:
+  minio_data:
 
 services:
   # --- [1] 持久层：MySQL ---
@@ -109,6 +110,11 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - TOPIC_CHUNK_INTERVAL=${TOPIC_CHUNK_INTERVAL}
       - LAN_IM_DATA_DIR=/app/data
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=
+      - MINIO_SECRET_KEY=
+      - MINIO_BUCKET=lan-im-files
+      - STORAGE_BACKEND=local
     deploy:
       resources:
         limits:
@@ -124,6 +130,8 @@ services:
       kafka:
         condition: service_started
       qdrant:
+        condition: service_started
+      minio:
         condition: service_started
     ulimits:
       nofile:
