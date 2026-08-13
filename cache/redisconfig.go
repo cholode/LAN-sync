@@ -76,6 +76,10 @@ func GetLatestMessages(ctx context.Context, roomID int64, limit int) ([]CachedMs
 		}
 		out = append(out, m)
 	}
+	// LPush + LRange 返回的是新→旧，翻转为旧→新，跟 MySQL 路径保持一致
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
 	return out, nil
 }
 

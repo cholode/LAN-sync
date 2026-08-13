@@ -109,19 +109,17 @@ services:
       - SERVER_PORT=${SERVER_PORT}
       - JWT_SECRET=${JWT_SECRET}
       - TOPIC_CHUNK_INTERVAL=${TOPIC_CHUNK_INTERVAL}
-      - LAN_IM_DATA_DIR=/app/data
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=
-      - MINIO_SECRET_KEY=
-      - MINIO_BUCKET=lan-im-files
-      - STORAGE_BACKEND=local
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-lan-im-files}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
     deploy:
       resources:
         limits:
           cpus: '4.0'
           memory: 8G
-    volumes:
-      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -132,7 +130,7 @@ services:
       qdrant:
         condition: service_started
       minio:
-        condition: service_started
+        condition: service_healthy
     ulimits:
       nofile:
         soft: 65535
@@ -156,6 +154,34 @@ services:
           cpus: '2.0'
           memory: 2G
 
+  # --- [5.5] 对象存储：MinIO ---
+  minio:
+    image: minio/minio:latest
+    container_name: im-minio
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
   # --- [6] 接入层：Nginx ---
   nginx:
     build:
@@ -170,7 +196,6 @@ services:
       - "443:443"
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
-      - ./data_storage/uploads:/var/www/uploads:ro
     ulimits:
       nofile:
         soft: 65535

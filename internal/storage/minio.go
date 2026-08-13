@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -11,12 +14,20 @@ import (
 )
 
 // MinioProvider MinIO 对象存储
+//
+// 维护两个客户端：
+//   - client   : 连内部地址（Docker DNS），用于 Save / Delete 等数据操作
+//   - urlClient: 连公网地址，用于生成浏览器可访问的预签名 URL
+//     urlClient 使用自定义 Transport 将对公网地址的网络请求转发到内部地址，
+//     但签名中的 Host 仍为公网地址。
 type MinioProvider struct {
-	client *minio.Client
-	bucket string
+	client    *minio.Client
+	urlClient *minio.Client
+	bucket    string
 }
 
 func NewMinioProvider(endpoint, accessKey, secretKey, bucket string) (*MinioProvider, error) {
+	// 内部客户端
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: false,
@@ -40,9 +51,37 @@ func NewMinioProvider(endpoint, accessKey, secretKey, bucket string) (*MinioProv
 		}
 	}
 
+	// 预签名 URL 客户端：使用宿主机地址，但网络请求转发到内部地址
+	publicEndpoint := os.Getenv("MINIO_PUBLIC_ENDPOINT")
+	var urlClient *minio.Client
+	if publicEndpoint != "" && publicEndpoint != endpoint {
+		// 自定义 Transport：签名按 publicEndpoint 计算，但实际 TCP 连接走内部地址
+		transport := &http.Transport{
+			DialContext: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+				// 将对 publicEndpoint 的连接重定向到内部 MinIO 地址
+				if addr == publicEndpoint {
+					addr = endpoint
+				}
+				dialer := &net.Dialer{Timeout: 10 * time.Second}
+				return dialer.DialContext(dialCtx, network, addr)
+			},
+		}
+		urlClient, err = minio.New(publicEndpoint, &minio.Options{
+			Creds:     credentials.NewStaticV4(accessKey, secretKey, ""),
+			Secure:    false,
+			Transport: transport,
+		})
+		if err != nil {
+			urlClient = client // 降级
+		}
+	} else {
+		urlClient = client
+	}
+
 	return &MinioProvider{
-		client: client,
-		bucket: bucket,
+		client:    client,
+		urlClient: urlClient,
+		bucket:    bucket,
 	}, nil
 }
 
@@ -50,7 +89,7 @@ func (p *MinioProvider) PreSignedUploadURL(ctx context.Context, key string, ttl 
 	if ttl <= 0 {
 		ttl = 15 * time.Minute
 	}
-	url, err := p.client.PresignedPutObject(ctx, p.bucket, key, ttl)
+	url, err := p.urlClient.PresignedPutObject(ctx, p.bucket, key, ttl)
 	if err != nil {
 		return "", fmt.Errorf("生成预签名 URL 失败: %w", err)
 	}
@@ -71,8 +110,7 @@ func (p *MinioProvider) Save(ctx context.Context, key string, reader io.Reader, 
 }
 
 func (p *MinioProvider) GetDownloadURL(ctx context.Context, key string) (string, error) {
-	// 生成预签名下载 URL（1小时有效）
-	url, err := p.client.PresignedGetObject(ctx, p.bucket, key, 1*time.Hour, nil)
+	url, err := p.urlClient.PresignedGetObject(ctx, p.bucket, key, 1*time.Hour, nil)
 	if err != nil {
 		return "", fmt.Errorf("生成下载 URL 失败: %w", err)
 	}

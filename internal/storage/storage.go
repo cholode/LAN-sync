@@ -2,89 +2,99 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
-	"lan-im-go/pkg"
+	"strings"
 	"time"
+
+	"lan-im-go/pkg"
 )
 
-// Backend 存储后端类型
+// Backend identifies the object storage backend.
 type Backend string
 
 const (
-	BackendLocal Backend = "local"
 	BackendMinIO Backend = "minio"
+	BackendOSS   Backend = "oss"
 )
 
-// UploadResult 上传结果
+// UploadResult is returned after an object is saved.
 type UploadResult struct {
-	Key       string // 对象键（MinIO objectKey 或本地文件名）
-	PublicURL string // 可公开访问的 URL
-	Size      int64  // 文件大小（字节）
+	Key       string
+	PublicURL string
+	Size      int64
 }
 
-// Provider 存储抽象接口
+// Provider abstracts object storage operations.
 type Provider interface {
-	// PreSignedUploadURL 生成预签名上传 URL（MinIO 场景）
-	// 客户端拿到 URL 后直传，不经过 IM 服务器
 	PreSignedUploadURL(ctx context.Context, key string, ttl time.Duration) (url string, err error)
-
-	// Save 保存文件内容（本地存储场景）
 	Save(ctx context.Context, key string, reader io.Reader, size int64) (*UploadResult, error)
-
-	// GetDownloadURL 获取下载 URL 或文件路径
 	GetDownloadURL(ctx context.Context, key string) (string, error)
-
-	// Delete 删除文件
 	Delete(ctx context.Context, key string) error
-
-	// Backend 返回当前后端类型
 	BackendType() Backend
 }
 
-// New 根据配置创建存储实例
+// New creates an object storage provider from environment variables.
+// Only MinIO and Aliyun OSS are supported; MinIO is the default.
+// Invalid or incomplete configuration stops startup instead of falling back to local disk.
 func New() Provider {
-	backend := Backend(os.Getenv("STORAGE_BACKEND"))
+	backend := Backend(strings.TrimSpace(os.Getenv("STORAGE_BACKEND")))
 	if backend == "" {
-		backend = BackendLocal
+		backend = BackendMinIO
 	}
 
 	switch backend {
+	case BackendOSS:
+		return newOSSProviderFromEnv()
 	case BackendMinIO:
-		endpoint := os.Getenv("MINIO_ENDPOINT")
-		accessKey := os.Getenv("MINIO_ACCESS_KEY")
-		secretKey := os.Getenv("MINIO_SECRET_KEY")
-		bucket := os.Getenv("MINIO_BUCKET")
-		if bucket == "" {
-			bucket = "lan-im-files"
-		}
-
-		if endpoint != "" && accessKey != "" {
-			provider, err := NewMinioProvider(endpoint, accessKey, secretKey, bucket)
-			if err != nil {
-				pkg.Errorf("[Storage] MinIO 初始化失败，降级为本地存储: %v", err)
-			} else {
-				pkg.Infof("[Storage] 使用 MinIO 对象存储, endpoint=%s, bucket=%s", endpoint, bucket)
-				return provider
-			}
-		}
-		pkg.Infoln("[Storage] MinIO 配置不完整，降级为本地存储")
-
-	case BackendLocal:
-		fallthrough
+		return newMinioProviderFromEnv()
 	default:
-		dir := os.Getenv("LAN_IM_UPLOAD_DIR")
-		if dir == "" {
-			dir = "./data/uploads"
-		}
-		pkg.Infof("[Storage] 使用本地磁盘存储, dir=%s", dir)
-		return NewLocalProvider(dir)
+		panic(fmt.Sprintf("unsupported STORAGE_BACKEND: %s (supported: minio, oss)", backend))
+	}
+}
+
+func newOSSProviderFromEnv() Provider {
+	endpoint := os.Getenv("OSS_ENDPOINT")
+	accessKey := os.Getenv("OSS_ACCESS_KEY")
+	secretKey := os.Getenv("OSS_SECRET_KEY")
+	bucket := os.Getenv("OSS_BUCKET")
+	if bucket == "" {
+		bucket = "lan-im-files"
+	}
+	if endpoint == "" || accessKey == "" {
+		panic("[Storage] OSS 配置不完整")
 	}
 
-	// 兜底
-	dir := os.Getenv("LAN_IM_UPLOAD_DIR")
-	if dir == "" {
-		dir = "./data/uploads"
+	provider, err := NewOssProvider(endpoint, accessKey, secretKey, bucket)
+	if err != nil {
+		storagePanic("[Storage] OSS 初始化失败", err)
 	}
-	return NewLocalProvider(dir)
+	pkg.Infof("[Storage] 使用 OSS 对象存储, endpoint=%s, bucket=%s", endpoint, bucket)
+	return provider
+}
+
+func newMinioProviderFromEnv() Provider {
+	endpoint := os.Getenv("MINIO_ENDPOINT")
+	accessKey := os.Getenv("MINIO_ACCESS_KEY")
+	secretKey := os.Getenv("MINIO_SECRET_KEY")
+	bucket := os.Getenv("MINIO_BUCKET")
+	if bucket == "" {
+		bucket = "lan-im-files"
+	}
+	if endpoint == "" || accessKey == "" {
+		panic("[Storage] MinIO 配置不完整")
+	}
+
+	provider, err := NewMinioProvider(endpoint, accessKey, secretKey, bucket)
+	if err != nil {
+		storagePanic("[Storage] MinIO 初始化失败", err)
+	}
+	pkg.Infof("[Storage] 使用 MinIO 对象存储, endpoint=%s, bucket=%s", endpoint, bucket)
+	return provider
+}
+
+func storagePanic(format string, args ...interface{}) {
+	pkg.Errorf(format, args...)
+	panic(fmt.Sprintf(format, args...))
 }

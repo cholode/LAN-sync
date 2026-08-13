@@ -14,8 +14,8 @@ import (
 	"lan-im-go/internal/archiver"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/middleware"
-	"lan-im-go/repository"
 	"lan-im-go/pkg"
+	"lan-im-go/repository"
 	"net/http"
 	"os"
 	"time"
@@ -126,10 +126,6 @@ func main() {
 			api.WsEndpoint(hub)(c)
 		})
 
-		authorized.GET("/upload/status", api.CheckUploadStatus)
-		authorized.POST("/upload/chunk", api.UploadChunk)
-		authorized.POST("/upload/merge", api.MergeChunks)
-		authorized.DELETE("/upload/cancel", api.CancelUpload)
 		authorized.POST("/files/presign", api.PreSignUploadHandler)
 
 		authorized.GET("/rooms/:id/messages", api.GetChatHistory())

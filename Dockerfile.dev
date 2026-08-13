@@ -51,8 +51,7 @@ COPY --from=builder /build/im-server /app/
 # 安全规范：业务进程使用非 root；启动时 root 修正挂载卷权限后由 entrypoint 降为 imuser
 RUN adduser -S -D -H -h /app imuser
 
-RUN mkdir -p /app/data/uploads /app/data/temp_chunks && \
-    chown -R imuser:nobody /app && \
+RUN chown -R imuser:nobody /app && \
     chmod +x /app/im-server
 
 COPY deploy/backend-entrypoint.sh /app/docker-entrypoint.sh
