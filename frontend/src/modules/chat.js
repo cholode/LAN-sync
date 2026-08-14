@@ -4,6 +4,7 @@ import { request, readErrorMessage } from '../api/api.js';
 import {
     notifyLine,
     insertMessageNode,
+    prependMessageNode,
     isNearBottom,
     ensureChatScrollable,
     resetChatArea,
@@ -78,6 +79,7 @@ export function initChat() {
         if (avatar) avatar.textContent = (state.user.username || '?')[0].toUpperCase();
     }
     connectWS();
+    bindHistoryScroll();
     loadMyRooms();
 }
 
@@ -156,8 +158,30 @@ export function filterRooms() {
     renderRoomList(searchInput ? searchInput.value : '');
 }
 
+var historyMeta = {};
+
+function getHistoryMeta(roomId) {
+    var key = String(roomId);
+    if (!historyMeta[key]) {
+        historyMeta[key] = { cursor: 0, hasMore: false, loading: false };
+    }
+    return historyMeta[key];
+}
+
+function resetHistoryMeta(roomId) {
+    historyMeta[String(roomId)] = { cursor: 0, hasMore: false, loading: false };
+}
+
+function setHistoryHint(text) {
+    var hint = document.getElementById('history-hint');
+    if (hint) hint.textContent = text || '';
+}
+
 export async function selectRoom(roomId) {
     if (state.currentRoomId === roomId) return;
+
+    resetHistoryMeta(roomId);
+    bindHistoryScroll();
 
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
         try {
@@ -200,44 +224,97 @@ export async function selectRoom(roomId) {
 
 // ============ 历史消息 ============
 
-export async function loadHistory(roomId) {
+export async function loadHistory(roomId, prepend) {
+    var meta = getHistoryMeta(roomId);
+    if (meta.loading) return;
+    meta.loading = true;
+
+    var cursor = prepend ? meta.cursor : 0;
+    var endpoint = '/rooms/' + roomId + '/messages?limit=50&cursor=' + cursor;
+
     try {
-        var res = await request('/rooms/' + roomId + '/messages');
+        if (prepend) setHistoryHint('加载更多历史消息...');
+        else setHistoryHint('正在加载历史消息...');
+
+        var res = await request(endpoint);
         if (!res.ok) {
             var cacheKey = String(roomId);
-            if (!state.messageCache[cacheKey] || state.messageCache[cacheKey].length === 0) {
+            if (!prepend && (!state.messageCache[cacheKey] || state.messageCache[cacheKey].length === 0)) {
                 setChatPlaceholder('加载失败 (HTTP ' + res.status + ')，请重试');
             }
+            setHistoryHint('');
             return;
         }
+
         var data = await res.json();
         var messages = data.messages || data || [];
+        var nextCursor = data.next_cursor ? Number(data.next_cursor) : 0;
+        var hasMore = data.has_more === true;
+
         if (messages.length === 0) {
-            var cacheKey2 = String(roomId);
-            if (!state.messageCache[cacheKey2] || state.messageCache[cacheKey2].length === 0) {
-                setChatPlaceholder('暂无消息，发送第一条吧');
+            meta.cursor = 0;
+            meta.hasMore = false;
+            if (!prepend) {
+                var cacheKey2 = String(roomId);
+                if (!state.messageCache[cacheKey2] || state.messageCache[cacheKey2].length === 0) {
+                    setChatPlaceholder('暂无消息，发送第一条吧');
+                }
             }
+            setHistoryHint('没有更多历史消息');
             return;
         }
 
-        // 追加前先判断当前是否在底部
-        var box = ensureChatScrollable();
-        var nearBefore = isNearBottom(box);
+        meta.cursor = nextCursor || 0;
+        meta.hasMore = hasMore;
 
-        resetChatArea();
-        messages.forEach(function(msg) { insertMessageNode(msg, 'hist'); });
+        if (!prepend) {
+            var nearBefore = isNearBottom(ensureChatScrollable());
+            resetChatArea();
+            messages.forEach(function(msg) { insertMessageNode(msg, 'hist'); });
 
-        // 追加前就在底部 → 追加后滚到底；追加前在看历史 → 保持原位
-        if (box && nearBefore) box.scrollTop = box.scrollHeight;
+            var box = ensureChatScrollable();
+            if (nearBefore && box) box.scrollTop = box.scrollHeight;
+        } else {
+            var box2 = ensureChatScrollable();
+            var oldHeight = box2 ? box2.scrollHeight : 0;
+            var oldTop = box2 ? box2.scrollTop : 0;
+
+            messages.forEach(function(msg) { prependMessageNode(msg, 'hist'); });
+
+            if (box2) box2.scrollTop = oldTop + (box2.scrollHeight - oldHeight);
+        }
+
+        setHistoryHint(hasMore ? '向上滚动加载更多历史消息' : '已加载全部历史消息');
     } catch (e) {
         var cacheKey3 = String(roomId);
-        if (!state.messageCache[cacheKey3] || state.messageCache[cacheKey3].length === 0) {
+        if (!prepend && (!state.messageCache[cacheKey3] || state.messageCache[cacheKey3].length === 0)) {
             setChatPlaceholder('加载失败：' + (e.message || '网络异常'));
         }
+        setHistoryHint('');
+    } finally {
+        meta.loading = false;
     }
 }
 
-// ============ 群成员 ============
+export async function loadMoreHistory() {
+    if (!state.currentRoomId) return;
+    var meta = getHistoryMeta(state.currentRoomId);
+    if (!meta.hasMore || meta.loading) return;
+    await loadHistory(state.currentRoomId, true);
+}
+
+function bindHistoryScroll() {
+    var wrap = document.getElementById('chat-wrap');
+    if (!wrap || wrap.dataset.historyBound) return;
+    wrap.dataset.historyBound = '1';
+    wrap.addEventListener('scroll', function() {
+        if (!state.currentRoomId) return;
+        if (wrap.scrollTop <= 40) {
+            loadMoreHistory();
+        }
+    });
+}
+
 
 export async function loadRoomMembers(roomId) {
     var list = document.getElementById('member-list');

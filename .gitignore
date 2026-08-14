@@ -9,3 +9,6 @@ frontend/public.html
 .gotmp
 lan-im-go.exe
 lan-im-go-new.exe
+__pycache__/
+*.py[cod]
+agent-service/.venv/

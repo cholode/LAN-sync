@@ -124,6 +124,26 @@ export function insertMessageNode(msg, kind) {
     return true;
 }
 
+export function prependMessageNode(msg, kind) {
+    var id = msg.id != null ? msg.id : msg.ID;
+    if (id != null && state.loadedMessageIds.has(String(id))) return false;
+    if (id != null) state.loadedMessageIds.add(String(id));
+
+    var box = getChatBox();
+    clearChatPlaceholder();
+    var wrap = document.createElement('div');
+    var sid = msg.sender_id != null ? msg.sender_id : msg.SenderID;
+    var selfUserId = state.user ? Number(state.user.id || state.user.user_id) : null;
+    var own = selfUserId != null && Number(sid) === selfUserId;
+    wrap.className = 'msg-row ' + (own ? 'own' : 'other') + (kind === 'hist' ? ' hist' : '');
+    wrap.innerHTML = renderMessageRecord(msg, kind);
+
+    var firstMsg = box.querySelector('.msg-row');
+    if (firstMsg) box.insertBefore(wrap, firstMsg);
+    else box.appendChild(wrap);
+    return true;
+}
+
 export function resetChatArea() {
     state.loadedMessageIds.clear();
     var hint = document.getElementById('history-hint');
