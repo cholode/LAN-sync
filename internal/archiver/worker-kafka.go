@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
@@ -179,6 +180,12 @@ func (w *Worker) Start(ctx context.Context) {
 			if err != nil {
 				pkg.Infof("[Archiver] 批量写入失败，%d 条 %v", count, err)
 				return
+			}
+
+			if indexErr := search.IndexMessages(ctx, batch); indexErr != nil {
+				pkg.Warnf("[Archiver] Elasticsearch index failed: %d msgs: %v", count, indexErr)
+			} else {
+				pkg.Infof("[Archiver] Elasticsearch indexed: %d msgs offset=%d", count, savedOffset)
 			}
 
 			w.pushLatestToRedis(ctx, batch)
