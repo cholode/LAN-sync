@@ -1,0 +1,127 @@
+﻿syntax = "proto3";
+
+package lan_im.agent.v1;
+
+option go_package = "lan-im-go/proto/agent/v1;agentv1";
+
+service AgentService {
+  rpc ProcessMessage(ProcessMessageRequest) returns (ProcessMessageResponse);
+  rpc EnableAgent(EnableAgentRequest) returns (EnableAgentResponse);
+  rpc PauseAgent(PauseAgentRequest) returns (PauseAgentResponse);
+  rpc RemoveAgent(RemoveAgentRequest) returns (RemoveAgentResponse);
+  rpc TriggerChunking(TriggerChunkingRequest) returns (TriggerChunkingResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+service IMService {
+  rpc FetchMessages(FetchMessagesRequest) returns (FetchMessagesResponse);
+  rpc KickUser(KickUserRequest) returns (KickUserResponse);
+  rpc SendReply(SendReplyRequest) returns (SendReplyResponse);
+}
+
+message AgentRuntimeConfig {
+  string system_prompt = 1;
+  int32 trigger_mode = 2;
+  repeated string trigger_words = 3;
+  int32 max_history = 4;
+  double temperature = 5;
+  string model_name = 6;
+  bool rag_enabled = 7;
+  int32 top_k = 8;
+  double similarity_thold = 9;
+  bool rerank_enabled = 10;
+  int32 max_chunk_tokens = 11;
+  int32 topic_chunk_min_msgs = 12;
+  string topic_chunk_model = 13;
+}
+
+message ProcessMessageRequest {
+  int64 room_id = 1;
+  int64 bot_user_id = 2;
+  int64 sender_id = 3;
+  string sender_name = 4;
+  string content = 5;
+  int64 message_time_unix_ms = 6;
+  AgentRuntimeConfig config = 7;
+  string room_name = 8;
+}
+
+message ProcessMessageResponse {
+  string reply = 1;
+  bool skip = 2;
+  string error = 3;
+}
+
+message EnableAgentRequest {
+  int64 room_id = 1;
+  int64 bot_user_id = 2;
+  AgentRuntimeConfig config = 3;
+}
+
+message EnableAgentResponse {}
+
+message PauseAgentRequest {
+  int64 room_id = 1;
+}
+
+message PauseAgentResponse {}
+
+message RemoveAgentRequest {
+  int64 room_id = 1;
+}
+
+message RemoveAgentResponse {}
+
+message TriggerChunkingRequest {
+  int64 room_id = 1;
+}
+
+message TriggerChunkingResponse {
+  int32 chunked_messages = 1;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string version = 2;
+}
+
+message MessageRecord {
+  int64 message_id = 1;
+  int64 sender_id = 2;
+  string sender_name = 3;
+  string content = 4;
+  int64 created_at_unix_ms = 5;
+}
+
+message FetchMessagesRequest {
+  int64 room_id = 1;
+  int64 start_time_unix_ms = 2;
+  int64 end_time_unix_ms = 3;
+  int32 limit = 4;
+}
+
+message FetchMessagesResponse {
+  repeated MessageRecord messages = 1;
+}
+
+message KickUserRequest {
+  int64 room_id = 1;
+  int64 user_id = 2;
+  string reason = 3;
+}
+
+message KickUserResponse {
+  bool removed = 1;
+  string message = 2;
+}
+
+message SendReplyRequest {
+  int64 room_id = 1;
+  int64 bot_user_id = 2;
+  string content = 3;
+  string message_id = 4;
+}
+
+message SendReplyResponse {}
