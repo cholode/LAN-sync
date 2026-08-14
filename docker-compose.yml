@@ -5,6 +5,8 @@ networks:
 volumes:
   mysql_data:
   redis_data:
+  mongo_data:
+  es_data:
   kafka_data:
   qdrant_data:
   minio_data:
@@ -12,7 +14,7 @@ volumes:
 services:
   # --- [1] 持久层：MySQL ---
   db:
-    image: mysql:8.0
+    image: docker.m.daocloud.io/mysql:8.0
     container_name: im-mysql
     restart: unless-stopped
     networks:
@@ -39,7 +41,7 @@ services:
 
   # --- [2] 缓存层：Redis ---
   redis:
-    image: redis:7.0-alpine
+    image: docker.m.daocloud.io/redis:7.0-alpine
     container_name: im-redis
     restart: unless-stopped
     networks:
@@ -55,9 +57,55 @@ services:
           cpus: '2.0'
           memory: 2G
 
+  # --- [2.3] Search: Elasticsearch ---
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: im-elasticsearch
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # --- [2.5] Message Storage: MongoDB ---
+  mongo:
+    image: docker.m.daocloud.io/mongo:7.0
+    container_name: im-mongo
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   # --- [3] 消息中间件：Kafka (KRaft 模式) ---
   kafka:
-    image: apache/kafka:latest
+    image: docker.m.daocloud.io/apache/kafka:latest
     container_name: kafka
     restart: always
     networks:
@@ -99,7 +147,14 @@ services:
       - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
       - REDIS_ADDR=redis:6379
       - KAFKA_ADDR=kafka:9092
+      - MESSAGE_STORE=${MESSAGE_STORE:-mysql}
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB=${MONGO_DB:-lan_im}
+      - ES_ENABLED=${ES_ENABLED:-true}
+      - ES_ADDR=http://elasticsearch:9200
+      - ES_INDEX_MESSAGES=${ES_INDEX_MESSAGES:-lan-im-messages}
       - QDRANT_HOST=qdrant
+      - AGENT_GRPC_ADDR=agent-service:50051
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL}
@@ -125,6 +180,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      mongo:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
       kafka:
         condition: service_started
       qdrant:
@@ -138,7 +197,7 @@ services:
 
   # --- [5] 向量数据库：Qdrant ---
   qdrant:
-    image: qdrant/qdrant:latest
+    image: docker.m.daocloud.io/qdrant/qdrant:latest
     container_name: im-qdrant
     restart: unless-stopped
     networks:
@@ -156,7 +215,7 @@ services:
 
   # --- [5.5] 对象存储：MinIO ---
   minio:
-    image: minio/minio:latest
+    image: docker.m.daocloud.io/minio/minio:latest
     container_name: im-minio
     restart: unless-stopped
     networks:
@@ -181,6 +240,30 @@ services:
         limits:
           cpus: '2.0'
           memory: 2G
+
+  # --- [5.6] AI Agent Service: LangChain + LangGraph (gRPC) ---
+  agent-service:
+    build:
+      context: ./agent-service
+    container_name: im-agent
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "${AGENT_GRPC_PORT:-50051}:50051"
+    volumes:
+      - ./agent-service/config.yaml:/app/config.yaml:ro
+    environment:
+      - AGENT_CONFIG_PATH=/app/config.yaml
+      - LLM_API_KEY=${LLM_API_KEY}
+      - EMBED_API_KEY=${EMBED_API_KEY}
+    depends_on:
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started
 
   # --- [6] 接入层：Nginx ---
   nginx:
