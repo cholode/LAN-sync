@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"lan-im-go/internal/protocol"
 	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/models"
@@ -17,14 +18,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
 )
-
-type kafkaMessage struct {
-	RoomID      string `json:"room_id"`
-	SenderID    int64  `json:"sender_id"`
-	Content     string `json:"content"`
-	ClientMsgID string `json:"client_msg_id"`
-	Timestamp   int64  `json:"timestamp"`
-}
 
 // idSeq 使用雪花算法简化版：毫秒时间戳(42位) + 序列号(10位)
 // 支持每毫秒 1024 个 ID，可用约 140 年
@@ -220,25 +213,20 @@ func (w *Worker) Start(ctx context.Context) {
 			continue
 		}
 
-		var raw kafkaMessage
-		if err := json.Unmarshal(m.Value, &raw); err != nil {
-			pkg.Infof("[Archiver] 消息解析失败 offset=%d: %v", m.Offset, err)
-			continue
-		}
-		roomID, err := strconv.ParseInt(raw.RoomID, 10, 64)
+		envelope, err := protocol.Unmarshal(m.Value)
 		if err != nil {
-			pkg.Infof("[Archiver] room_id 解析失败 offset=%d: %v", m.Offset, err)
+			pkg.Infof("[Archiver] message parse failed offset=%d: %v", m.Offset, err)
 			continue
 		}
 
 		msgBatch = append(msgBatch, &models.Message{
 			ID:          nextID(),
-			RoomID:      roomID,
-			SenderID:    raw.SenderID,
-			ClientMsgID: raw.ClientMsgID,
-			Type:        1,
-			Content:     raw.Content,
-			CreatedAt:   parseTime(raw.Timestamp),
+			RoomID:      envelope.RoomID,
+			SenderID:    envelope.SenderID,
+			ClientMsgID: envelope.ClientMsgID,
+			Type:        envelope.Type,
+			Content:     envelope.Content,
+			CreatedAt:   envelope.CreatedAt,
 		})
 		lastOffset = m.Offset
 
@@ -246,11 +234,4 @@ func (w *Worker) Start(ctx context.Context) {
 			flush()
 		}
 	}
-}
-
-func parseTime(ns int64) time.Time {
-	if ns == 0 {
-		return time.Now()
-	}
-	return time.Unix(0, ns)
 }

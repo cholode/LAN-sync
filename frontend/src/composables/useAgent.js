@@ -23,7 +23,7 @@ async function enableAgent() {
       alert('启用失败');
     }
   } catch (e) {
-    alert('启用失败');
+    console.error('enableAgent', e);
   }
 }
 
@@ -34,12 +34,12 @@ async function disableAgent() {
     });
     if (res.ok) {
       state.agent.enabled = false;
-      notifyLine('Agent 已启用', 'sys');
+      notifyLine('Agent 已暂停', 'sys');
     } else {
-      alert('启用失败');
+      alert('暂停失败');
     }
   } catch (e) {
-    alert('启用失败');
+    console.error('disableAgent', e);
   }
 }
 
@@ -73,7 +73,7 @@ export async function saveAgentConfig() {
       alert(data.error || '保存失败');
     }
   } catch (e) {
-    alert('启用失败');
+    alert('网络异常');
   }
 }
 
@@ -92,10 +92,10 @@ export async function removeAgent() {
       notifyLine('Agent 已移除（含数据清理）', 'sys');
     } else {
       const data = await res.json().catch(() => ({}));
-      alert(data.error || '保存失败');
+      alert(data.error || '移除失败');
     }
   } catch (e) {
-    alert('启用失败');
+    alert('网络异常');
   }
 }
 

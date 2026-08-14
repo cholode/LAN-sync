@@ -2,16 +2,15 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"gorm.io/gorm"
 
 	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/internal/agentclient"
+	"lan-im-go/internal/protocol"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
@@ -193,16 +192,12 @@ func (m *AgentManager) listenMessages(ctx context.Context) {
 // handleRedisMessage 解析 Pub/Sub 消息，路由到对应群的 Agent。
 // 过滤 bot 自身消息，避免 Agent 回环。
 func (m *AgentManager) handleRedisMessage(ctx context.Context, payload string) {
-	var raw struct {
-		RoomID   string `json:"room_id"`
-		SenderID int64  `json:"sender_id"`
-		Content  string `json:"content"`
-	}
-	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+	envelope, err := protocol.Unmarshal([]byte(payload))
+	if err != nil {
 		return
 	}
 
-	roomID := parseInt64(raw.RoomID)
+	roomID := envelope.RoomID
 	if roomID == 0 {
 		return
 	}
@@ -212,15 +207,15 @@ func (m *AgentManager) handleRedisMessage(ctx context.Context, payload string) {
 		return
 	}
 
-	if raw.SenderID == agent.botUserID {
+	if envelope.SenderID == agent.botUserID {
 		return
 	}
 
 	msg := AgentMessage{
 		RoomID:   roomID,
-		SenderID: raw.SenderID,
-		Content:  raw.Content,
-		Time:     time.Now(),
+		SenderID: envelope.SenderID,
+		Content:  envelope.Content,
+		Time:     envelope.CreatedAt,
 	}
 
 	agent.HandleMessage(msg)

@@ -48,7 +48,12 @@ function resetHistoryMeta(roomId) {
 
 export function connectWS() {
   if (state.ws) {
-    state.ws.close();
+    const oldWs = state.ws;
+    oldWs.onopen = null;
+    oldWs.onmessage = null;
+    oldWs.onclose = null;
+    oldWs.onerror = null;
+    oldWs.close();
   }
 
   state.ws = new WebSocket(state.wsBase + '?token=' + state.jwtToken);
@@ -72,6 +77,7 @@ export function connectWS() {
           ID: parsed.ID,
           sender_id: sender,
           content,
+          client_msg_id: parsed.client_msg_id || parsed.ClientMsgID || '',
           created_at: parsed.created_at || parsed.CreatedAt || new Date().toISOString(),
           kind: 'live',
         });
@@ -162,6 +168,7 @@ export async function selectRoom(roomId) {
   state.members = [];
   state.membersHint = '正在加载成员...';
   state.agent.visible = true;
+  state.agent.configVisible = false;
   state.agent.enabled = false;
 
   const key = cacheKeyFor(roomId);
@@ -229,7 +236,7 @@ export async function loadHistory(roomId, prepend = false) {
 
     if (!prepend) {
       state.messages = messages;
-      state.messageCache[cacheKeyFor(roomId)] = messages;
+      state.messageCache[cacheKeyFor(roomId)] = messages.slice();
       state.loadedMessageIds = new Set(
         messages.filter((msg) => msg.id != null).map((msg) => String(msg.id)),
       );
@@ -370,23 +377,25 @@ export async function removeMember(targetId) {
   }
 }
 
-export async function disbandCurrentRoom() {
-  if (!state.currentRoomId) return;
-  if (!confirm('警告：解散群聊后不可恢复！确定解散 #' + state.currentRoomId + '？')) {
+export async function disbandRoom(roomId) {
+  if (!roomId) return;
+  if (!confirm('警告：解散群聊后不可恢复！确定解散 #' + roomId + '？')) {
     return;
   }
 
   try {
-    const res = await request('/rooms/' + state.currentRoomId + '/disband', {
+    const res = await request('/rooms/' + roomId + '/disband', {
       method: 'DELETE',
     });
     if (res.ok) {
-      state.currentRoomId = null;
-      state.currentRoomName = '';
-      state.messages = [];
-      state.members = [];
-      state.membersHint = '暂无成员';
-      state.agent.visible = false;
+      if (String(state.currentRoomId) === String(roomId)) {
+        state.currentRoomId = null;
+        state.currentRoomName = '';
+        state.messages = [];
+        state.members = [];
+        state.membersHint = '暂无成员';
+        state.agent.visible = false;
+      }
       await loadMyRooms();
     } else {
       const err = await readErrorMessage(res);
@@ -395,4 +404,8 @@ export async function disbandCurrentRoom() {
   } catch (e) {
     alert('网络异常');
   }
+}
+
+export async function disbandCurrentRoom() {
+  await disbandRoom(state.currentRoomId);
 }

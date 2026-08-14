@@ -1,14 +1,16 @@
-﻿package producer
+package producer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"lan-im-go/pkg"
+	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
+
+	"lan-im-go/internal/protocol"
+	"lan-im-go/pkg"
 )
 
 type MessageClient struct {
@@ -29,14 +31,19 @@ func NewMessageClient(brokers []string, topic string, redisClient *redis.Client)
 }
 
 func (c *MessageClient) HandleIncomingMessage(ctx context.Context, roomID string, senderID int, content string, clientMsgID string) error {
-	payload, err := json.Marshal(map[string]interface{}{
-		"room_id":       roomID,
-		"sender_id":     senderID,
-		"content":       content,
-		"client_msg_id": clientMsgID,
-		"timestamp":     time.Now().UnixNano(),
-	})
+	roomIDInt, err := strconv.ParseInt(roomID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("非法 room_id: %w", err)
+	}
 
+	payload, err := protocol.Marshal(protocol.MessageEnvelope{
+		RoomID:      roomIDInt,
+		SenderID:    int64(senderID),
+		ClientMsgID: clientMsgID,
+		Type:        1,
+		Content:     content,
+		CreatedAt:   time.Now(),
+	})
 	if err != nil {
 		return fmt.Errorf("消息负载序列化失败: %w", err)
 	}
@@ -45,14 +52,13 @@ func (c *MessageClient) HandleIncomingMessage(ctx context.Context, roomID string
 		Key:   []byte(roomID),
 		Value: payload,
 	})
-
 	if err != nil {
 		pkg.Infof("[中间件告警] Kafka 投递失败：%v", err)
 		return fmt.Errorf("kafka 写入失败: %w", err)
 	}
 
 	redisChannel := "im:broadcast:room:" + roomID
-	if pubErr := c.redisClient.Publish(ctx, redisChannel, string(payload)).Err(); pubErr != nil {
+	if pubErr := c.redisClient.Publish(ctx, redisChannel, payload).Err(); pubErr != nil {
 		pkg.Infof("[中间件告警] Redis 广播发布失败（消息仍已落盘Kafka）: %v", pubErr)
 	}
 

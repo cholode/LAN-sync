@@ -30,6 +30,7 @@ export const state = reactive({
   kickUserId: '',
   agent: {
     visible: false,
+    configVisible: false,
     enabled: false,
     dirty: false,
     config: {
@@ -101,6 +102,7 @@ export function resetState() {
   state.joinRoomId = '';
   state.kickUserId = '';
   state.agent.visible = false;
+  state.agent.configVisible = false;
   state.agent.enabled = false;
   state.agent.dirty = false;
   state.agent.config = {
@@ -125,6 +127,10 @@ export function resetState() {
   };
 
   if (state.ws) {
+    state.ws.onopen = null;
+    state.ws.onmessage = null;
+    state.ws.onclose = null;
+    state.ws.onerror = null;
     state.ws.close();
     state.ws = null;
   }

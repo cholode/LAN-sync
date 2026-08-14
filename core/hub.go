@@ -3,12 +3,11 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"strconv"
-	"time"
 
 	"github.com/go-redis/redis/v8"
 
 	"lan-im-go/config"
+	"lan-im-go/internal/protocol"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
@@ -18,15 +17,6 @@ const (
 	// poolDispatchThreshold 房间成员数超过此阈值时，使用协程池分发消息
 	poolDispatchThreshold = 100
 )
-
-// redisMessage 是 Redis Pub/Sub 消息的中间表示，JSON key 对齐生产者使用的 snake_case 格式
-type redisMessage struct {
-	RoomID      string `json:"room_id"`
-	SenderID    int64  `json:"sender_id"`
-	Content     string `json:"content"`
-	ClientMsgID string `json:"client_msg_id"`
-	Timestamp   int64  `json:"timestamp"`
-}
 
 type RoomAction struct {
 	UserID int64
@@ -85,30 +75,19 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 			pkg.Infoln("[全局中枢] 收到系统关闭信号，Redis 监听协程安全退出")
 			return
 		case redisMsg := <-ch:
-			var raw redisMessage
-			if err := json.Unmarshal([]byte(redisMsg.Payload), &raw); err != nil {
-				pkg.Infof("[数据脏污] 跨节点广播载荷解析失败 %v", err)
-				continue
-			}
-
-			roomID, err := strconv.ParseInt(raw.RoomID, 10, 64)
+			envelope, err := protocol.Unmarshal([]byte(redisMsg.Payload))
 			if err != nil {
-				pkg.Infof("[数据脏污] room_id 格式非法: %q %v", raw.RoomID, err)
+				pkg.Infof("[data dirty] cross-node broadcast parse failed: %v", err)
 				continue
-			}
-
-			createdAt := time.Unix(0, raw.Timestamp)
-			if createdAt.IsZero() {
-				createdAt = time.Now()
 			}
 
 			msg := &models.Message{
-				RoomID:      roomID,
-				SenderID:    raw.SenderID,
-				Content:     raw.Content,
-				ClientMsgID: raw.ClientMsgID,
-				Type:        1,
-				CreatedAt:   createdAt,
+				RoomID:      envelope.RoomID,
+				SenderID:    envelope.SenderID,
+				Content:     envelope.Content,
+				ClientMsgID: envelope.ClientMsgID,
+				Type:        envelope.Type,
+				CreatedAt:   envelope.CreatedAt,
 			}
 
 			select {
