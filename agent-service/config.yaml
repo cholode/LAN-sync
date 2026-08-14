@@ -1,0 +1,48 @@
+# Agent service configuration.
+# Values containing ${VAR} are resolved from environment variables at startup.
+
+grpc:
+  host: "[::]"
+  port: 50051
+  max_workers: 10
+
+llm:
+  base_url: "https://api.deepseek.com/v1"
+  api_key: "${LLM_API_KEY}"
+  model: "deepseek-chat"
+  timeout_seconds: 60
+
+embedding:
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  api_key: "${EMBED_API_KEY}"
+  model: "doubao-embedding-vision-251215"
+  dimension: 1024
+  batch_size: 100
+  timeout_seconds: 30
+
+qdrant:
+  host: "qdrant"
+  grpc_port: 6334
+  vector_size: 1024
+
+redis:
+  addr: "redis:6379"
+
+im_service:
+  grpc_addr: "backend:50052"
+
+agent:
+  cooldown_seconds: 5.0
+  system_prompt: ""
+  trigger_mode: 1
+  trigger_words: []
+  max_history: 20
+  temperature: 0.7
+  model_name: "deepseek-chat"
+  rag_enabled: true
+  top_k: 5
+  similarity_thold: 0.7
+  rerank_enabled: true
+  max_chunk_tokens: 4000
+  topic_chunk_min_msgs: 30
+  topic_chunk_model: "deepseek-chat"

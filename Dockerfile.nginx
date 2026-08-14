@@ -1,4 +1,4 @@
-FROM nginx:alpine
+FROM docker.m.daocloud.io/nginx:alpine
 # 注入 OpenSSL 依赖包
 RUN apk add --no-cache openssl
 

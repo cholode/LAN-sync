@@ -4,41 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"lan-im-go/agent/llm"
-	"lan-im-go/agent/rag"
-	"lan-im-go/config"
-	"lan-im-go/core"
-	"lan-im-go/models"
-	"lan-im-go/repository"
-	"lan-im-go/pkg"
 	"sync"
 	"time"
 
 	"gorm.io/gorm"
+
+	"lan-im-go/config"
+	"lan-im-go/core"
+	"lan-im-go/internal/agentclient"
+	"lan-im-go/models"
+	"lan-im-go/pkg"
+	"lan-im-go/repository"
 )
 
-// AgentManager Agent 生命周期管理器
-// 负责群的 Agent 启停、消息监听与分发
+// AgentManager 管理每个群的 Agent 生命周期：启用、暂停、移除，
+// 并监听 Redis 群消息广播后分发给对应群的 Agent。
+// 消息处理链（trigger / RAG / LLM / tools）委托给 Python agent-service。
 type AgentManager struct {
-	agents    map[int64]*RoomAgent // roomID → Agent 实例
-	mu        sync.RWMutex
-	llmClient *llm.Client
-	db        *gorm.DB
-	hub       *core.Hub
+	agents      map[int64]*RoomAgent
+	mu          sync.RWMutex
+	agentClient *agentclient.Client
+	db          *gorm.DB
+	hub         *core.Hub
 }
 
-// NewAgentManager 创建 AgentManager
-func NewAgentManager(db *gorm.DB, llmClient *llm.Client, hub *core.Hub) *AgentManager {
+// NewAgentManager 创建 AgentManager。
+func NewAgentManager(db *gorm.DB, agentClient *agentclient.Client, hub *core.Hub) *AgentManager {
 	return &AgentManager{
-		agents:    make(map[int64]*RoomAgent),
-		llmClient: llmClient,
-		db:        db,
-		hub:       hub,
+		agents:      make(map[int64]*RoomAgent),
+		agentClient: agentClient,
+		db:          db,
+		hub:         hub,
 	}
 }
 
-// Start 启动 AgentManager
-// 从 DB 加载已启用的群 Agent，并开始监听群消息
+// Start 从 DB 加载已启用的群 Agent，并开始监听群消息。
 func (m *AgentManager) Start(ctx context.Context) {
 	pkg.Infoln("[AgentManager] 正在启动...")
 	m.loadEnabledAgents(ctx)
@@ -46,7 +46,7 @@ func (m *AgentManager) Start(ctx context.Context) {
 	pkg.Infof("[AgentManager] 启动完成, 已加载 %d 个 Agent", len(m.agents))
 }
 
-// loadEnabledAgents 从 DB 查询所有启用了 Agent 的群，逐个启动
+// loadEnabledAgents 从 DB 查询所有启用了 Agent 的群，逐个启动。
 func (m *AgentManager) loadEnabledAgents(ctx context.Context) {
 	var rooms []models.Room
 	if err := m.db.WithContext(ctx).
@@ -63,8 +63,8 @@ func (m *AgentManager) loadEnabledAgents(ctx context.Context) {
 	}
 }
 
-// AddAgent 为指定群添加并启动 Agent
-// 若已存在则跳过；否则自动创建 Bot 用户、加入群、初始化 RoomAgent 并启动流水线
+// AddAgent 为指定群添加并启动 Agent。
+// 若已存在则跳过；否则创建 Bot 用户、加入群、初始化配置并通知 Python 服务。
 func (m *AgentManager) AddAgent(ctx context.Context, roomID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -84,8 +84,8 @@ func (m *AgentManager) AddAgent(ctx context.Context, roomID int64) error {
 
 	agentConfig := m.ensureAgentConfig(ctx, roomID)
 
-	roomAgent := NewRoomAgent(roomID, botUserID, m.db, m.llmClient, agentConfig, m.hub)
-	go roomAgent.Start(ctx)
+	roomAgent := NewRoomAgent(roomID, botUserID, m.db, m.agentClient, agentConfig, m.hub)
+	go roomAgent.Start()
 
 	m.agents[roomID] = roomAgent
 
@@ -96,12 +96,15 @@ func (m *AgentManager) AddAgent(ctx context.Context, roomID int64) error {
 			"agent_enabled": true,
 		})
 
+	if err := m.agentClient.EnableAgent(ctx, roomID, botUserID, runtimeConfigFromModel(agentConfig)); err != nil {
+		pkg.Infof("[AgentManager] 通知 Python 启用 room=%d 失败: %v", roomID, err)
+	}
+
 	pkg.Infof("[AgentManager] room=%d Agent 已启用 (botID=%d)", roomID, botUserID)
 	return nil
 }
 
-// PauseAgent 暂停指定群的 Agent
-// 停止 RoomAgent、标记禁用，但保留 Qdrant 向量和 MySQL 分块数据，可以重新启用
+// PauseAgent 暂停指定群的 Agent。
 func (m *AgentManager) PauseAgent(ctx context.Context, roomID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -120,30 +123,31 @@ func (m *AgentManager) PauseAgent(ctx context.Context, roomID int64) error {
 			"agent_enabled": false,
 		})
 
+	if err := m.agentClient.PauseAgent(ctx, roomID); err != nil {
+		pkg.Infof("[AgentManager] 通知 Python 暂停 room=%d 失败: %v", roomID, err)
+	}
+
 	pkg.Infof("[AgentManager] room=%d Agent 已暂停", roomID)
 	return nil
 }
 
-// RemoveAgent 停止并移除指定群的 Agent
-// 同时清理 Qdrant 向量集合和 MySQL 分块记录，不可恢复
+// RemoveAgent 停止并移除指定群的 Agent。
+// Python 侧负责清理 Qdrant 向量；Go 侧清理 MySQL 分块记录。
 func (m *AgentManager) RemoveAgent(ctx context.Context, roomID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	agent, exists := m.agents[roomID]
-	if !exists {
-		return nil
+	if exists {
+		agent.Stop()
+		delete(m.agents, roomID)
 	}
 
-	agent.Stop()
-
-	// 清理 Qdrant 向量集合 + MySQL 分块
-	if vs, err := rag.NewQdrantVectorStore(); err == nil {
-		vs.DeleteByRoom(ctx, roomID)
+	if err := m.agentClient.RemoveAgent(ctx, roomID); err != nil {
+		pkg.Infof("[AgentManager] 通知 Python 移除 room=%d 失败: %v", roomID, err)
 	}
+
 	m.db.WithContext(ctx).Where("room_id = ?", roomID).Delete(&models.RAGChunk{})
-
-	delete(m.agents, roomID)
 
 	m.db.WithContext(ctx).Model(&models.Room{}).
 		Where("id = ?", roomID).
@@ -155,14 +159,14 @@ func (m *AgentManager) RemoveAgent(ctx context.Context, roomID int64) error {
 	return nil
 }
 
-// GetAgent 获取指定群的 Agent 实例，不存在返回 nil
+// GetAgent 获取指定群的 Agent 实例，不存在返回 nil。
 func (m *AgentManager) GetAgent(roomID int64) *RoomAgent {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.agents[roomID]
 }
 
-// listenMessages 通过 Redis Pub/Sub 监听群消息广播，分发给对应群的 Agent
+// listenMessages 通过 Redis Pub/Sub 监听群消息广播，分发给对应群的 Agent。
 func (m *AgentManager) listenMessages(ctx context.Context) {
 	pubsub := config.RedisClient.PSubscribe(ctx, "im:broadcast:room:*")
 	defer pubsub.Close()
@@ -186,8 +190,8 @@ func (m *AgentManager) listenMessages(ctx context.Context) {
 	}
 }
 
-// handleRedisMessage 解析 Pub/Sub 消息，路由到对应群的 Agent.HandleMessage
-// 过滤 bot 自身消息，避免 Agent 回环
+// handleRedisMessage 解析 Pub/Sub 消息，路由到对应群的 Agent。
+// 过滤 bot 自身消息，避免 Agent 回环。
 func (m *AgentManager) handleRedisMessage(ctx context.Context, payload string) {
 	var raw struct {
 		RoomID   string `json:"room_id"`
@@ -222,8 +226,7 @@ func (m *AgentManager) handleRedisMessage(ctx context.Context, payload string) {
 	agent.HandleMessage(msg)
 }
 
-// ensureBotUser 获取或创建群的 Bot 用户
-// 如果 Room 已有 BotUserID 则直接返回；否则新建 IsBot=true 的用户
+// ensureBotUser 获取或创建群的 Bot 用户。
 func (m *AgentManager) ensureBotUser(ctx context.Context, roomID int64) (int64, error) {
 	var room models.Room
 	if err := m.db.WithContext(ctx).First(&room, roomID).Error; err != nil {
@@ -246,7 +249,7 @@ func (m *AgentManager) ensureBotUser(ctx context.Context, roomID int64) (int64, 
 	return bot.ID, nil
 }
 
-// ensureBotInRoom 确保 Bot 用户已加入群，未加入则添加为普通成员
+// ensureBotInRoom 确保 Bot 用户已加入群，未加入则添加为普通成员。
 func (m *AgentManager) ensureBotInRoom(ctx context.Context, roomID, botUserID int64) error {
 	isMember, err := repository.RoomMember.CheckIsMember(roomID, botUserID)
 	if err != nil {
@@ -259,7 +262,7 @@ func (m *AgentManager) ensureBotInRoom(ctx context.Context, roomID, botUserID in
 	return repository.RoomMember.AddMember(roomID, botUserID, 1)
 }
 
-// ensureAgentConfig 获取或创建群的 Agent 配置，不存在时写入默认配置
+// ensureAgentConfig 获取或创建群的 Agent 配置。
 func (m *AgentManager) ensureAgentConfig(ctx context.Context, roomID int64) *models.AgentConfig {
 	var cfg models.AgentConfig
 	err := m.db.WithContext(ctx).Where("room_id = ?", roomID).First(&cfg).Error
@@ -272,7 +275,7 @@ func (m *AgentManager) ensureAgentConfig(ctx context.Context, roomID int64) *mod
 	return &cfg
 }
 
-// parseInt64 从字符串中提取前导数字部分转为 int64
+// parseInt64 从字符串中提取前导数字部分转为 int64。
 func parseInt64(s string) int64 {
 	var n int64
 	for _, c := range s {
