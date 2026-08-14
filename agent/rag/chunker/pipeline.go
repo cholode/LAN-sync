@@ -2,8 +2,8 @@ package chunker
 
 import (
 	"context"
-	"lan-im-go/models"
 	"lan-im-go/pkg"
+	"lan-im-go/repository"
 	"os"
 	"time"
 
@@ -75,10 +75,5 @@ func (p *ChunkingPipeline) tryTopicChunk(ctx context.Context) {
 
 // 计算有多少新消息
 func (p *ChunkingPipeline) countNewMessages(ctx context.Context, sinceID int64) (int64, error) {
-	var count int64
-	err := p.db.WithContext(ctx).
-		Model(&models.Message{}).
-		Where("room_id = ? AND id > ?", p.roomID, sinceID).
-		Count(&count).Error
-	return count, err
+	return repository.Message.CountMessagesAfterID(p.roomID, sinceID)
 }

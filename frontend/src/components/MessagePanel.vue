@@ -7,7 +7,19 @@
           {{ state.currentRoomId ? 'ID: ' + state.currentRoomId : '' }}
         </div>
       </div>
+      <div class="chat-header-actions">
+        <button
+          type="button"
+          class="btn-ghost"
+          :disabled="!state.currentRoomId"
+          @click="toggleSearch"
+        >
+          搜索消息
+        </button>
+      </div>
     </div>
+
+    <MessageSearchPanel />
 
     <div class="chat-wrap" ref="chatWrap" @scroll="handleScroll">
       <div class="chat-history-hint" id="history-hint">{{ state.historyHint }}</div>
@@ -54,6 +66,7 @@ import {
   formatChatMessageHtml,
   formatMessageTime,
 } from '../utils/message.js';
+import MessageSearchPanel from './MessageSearchPanel.vue';
 
 const chatWrap = ref(null);
 const draft = ref('');
@@ -63,6 +76,10 @@ onMounted(() => {
     nextTick(() => scrollToBottom());
   });
 });
+
+function toggleSearch() {
+  state.messageSearch.visible = !state.messageSearch.visible;
+}
 
 function messageKey(message) {
   return (

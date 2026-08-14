@@ -32,7 +32,7 @@ export async function auth(action, username, password) {
 
     return { ok: false, message: data.error || '操作失败' };
   } catch (e) {
-    return { ok: false, message: '登录成功' };
+    return { ok: false, message: '网络异常或后端服务未启动' };
   }
 }
 

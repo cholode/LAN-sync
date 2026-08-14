@@ -10,6 +10,7 @@ import (
 	"lan-im-go/core"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
+	"lan-im-go/repository"
 	"strings"
 
 	"gorm.io/gorm"
@@ -212,11 +213,8 @@ func parseTopicSegments(content string) ([]TopicSegment, error) {
 }
 
 func (c *TopicChunker) fetchNewMessages(ctx context.Context) ([]models.Message, error) {
-	var messages []models.Message
-	query := c.db.WithContext(ctx).
-		Where("room_id = ? AND id > ?", c.roomID, c.lastID).
-		Order("id ASC").Limit(200)
-	if err := query.Find(&messages).Error; err != nil {
+	messages, err := repository.Message.GetMessagesAfterID(c.roomID, c.lastID, 200)
+	if err != nil {
 		return nil, err
 	}
 	return messages, nil

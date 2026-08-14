@@ -16,11 +16,18 @@ function cacheKeyFor(roomId) {
 function normalizeMessage(raw) {
   return {
     id: raw.id != null ? raw.id : raw.ID,
+    client_msg_id:
+      raw.client_msg_id != null ? raw.client_msg_id : raw.ClientMsgID || '',
     sender_id: raw.sender_id != null ? raw.sender_id : raw.SenderID,
     content: raw.content != null ? raw.content : raw.Content,
-    created_at: raw.created_at || raw.CreatedAt || new Date().toISOString(),
+    created_at: normalizeCreatedAt(raw.created_at || raw.CreatedAt),
     kind: raw.kind || 'live',
   };
+}
+
+function normalizeCreatedAt(value) {
+  if (value && value !== '0001-01-01T00:00:00Z') return value;
+  return new Date().toISOString();
 }
 
 function getHistoryMeta(roomId) {
@@ -69,11 +76,16 @@ export function connectWS() {
           kind: 'live',
         });
 
-        if (message.id != null && state.loadedMessageIds.has(String(message.id))) {
+        const dedupeKey =
+          message.id != null && Number(message.id) !== 0
+            ? String(message.id)
+            : message.client_msg_id || '';
+
+        if (dedupeKey && state.loadedMessageIds.has(dedupeKey)) {
           return;
         }
-        if (message.id != null) {
-          state.loadedMessageIds.add(String(message.id));
+        if (dedupeKey) {
+          state.loadedMessageIds.add(dedupeKey);
         }
 
         const key = cacheKeyFor(room);

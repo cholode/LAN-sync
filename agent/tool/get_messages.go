@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"lan-im-go/agent/llm"
 	"lan-im-go/models"
+	"lan-im-go/repository"
 	"strings"
 	"time"
 
@@ -67,11 +68,10 @@ func (h *GetMessagesHandler) Handle(args json.RawMessage) (string, error) {
 }
 
 func (h *GetMessagesHandler) queryMessages(startTime, endTime time.Time) string {
-	var msgs []models.Message
-	h.db.Where("room_id = ? AND created_at >= ? AND created_at < ?", h.roomID, startTime, endTime).
-		Order("created_at ASC").
-		Limit(200).
-		Find(&msgs)
+	msgs, err := repository.Message.GetMessagesByTimeRange(h.roomID, startTime, endTime, 200)
+	if err != nil {
+		return fmt.Sprintf("查询消息失败: %v", err)
+	}
 
 	if len(msgs) == 0 {
 		return "该时间段内没有消息记录。"

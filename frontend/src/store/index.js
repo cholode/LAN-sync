@@ -46,6 +46,15 @@ export const state = reactive({
     progress: 0,
     status: '等待上传',
   },
+  messageSearch: {
+    visible: false,
+    query: '',
+    results: [],
+    total: 0,
+    from: 0,
+    loading: false,
+    error: '',
+  },
 });
 
 export const filteredRooms = computed(() => {
@@ -105,6 +114,15 @@ export function resetState() {
   state.upload.isUploading = false;
   state.upload.progress = 0;
   state.upload.status = '等待上传';
+  state.messageSearch = {
+    visible: false,
+    query: '',
+    results: [],
+    total: 0,
+    from: 0,
+    loading: false,
+    error: '',
+  };
 
   if (state.ws) {
     state.ws.close();
