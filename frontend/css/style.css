@@ -23,6 +23,16 @@
 
 * { box-sizing: border-box; }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
+#app {
+  width: 100%;
+}
+
 body {
   margin: 0;
   height: 100vh;
