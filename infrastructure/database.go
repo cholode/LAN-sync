@@ -1,12 +1,14 @@
 package infrastructure
 
 import (
-	"lan-im-go/pkg"
+	"os"
 	"time"
+
+	"lan-im-go/pkg"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"lan-im-go/models" // 导入数据模型
+	"lan-im-go/models"
 )
 
 // DB 全局数据库实例，应用全局复用
@@ -35,15 +37,18 @@ func InitDatabase(dsn string) {
 
 	// 3. 自动同步数据模型至数据库表结构
 	pkg.Infoln("开始同步数据库表结构...")
-	err = DB.AutoMigrate(
+	migrateModels := []interface{}{
 		&models.User{},
 		&models.Room{},
 		&models.RoomMember{},
-		&models.Message{},
-		// ★ Agent + RAG 新增表
 		&models.AgentConfig{},
 		&models.RAGChunk{},
-	)
+	}
+	if os.Getenv("MESSAGE_STORE") != "mongo" {
+		migrateModels = append(migrateModels, &models.Message{})
+	}
+
+	err = DB.AutoMigrate(migrateModels...)
 	if err != nil {
 		pkg.Fatalf("[错误] 数据库表结构同步失败: %v", err)
 	}

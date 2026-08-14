@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 	"lan-im-go/models"
 )
@@ -58,6 +60,39 @@ func (r *messageRepoImpl) GetHistoryByCursor(roomID int64, cursorMsgID int64, li
 }
 
 // SoftDeleteUserMessagesInRoom 软删除指定用户在群聊内的所有消息
+// GetMessagesByTimeRange 返回 created_at 在 [start, end) 范围内的消息，按升序排列。
+func (r *messageRepoImpl) GetMessagesByTimeRange(roomID int64, start, end time.Time, limit int) ([]models.Message, error) {
+	var messages []models.Message
+	err := r.db.Model(&models.Message{}).
+		Where("room_id = ? AND created_at >= ? AND created_at < ?", roomID, start, end).
+		Order("created_at ASC, id ASC").
+		Limit(limit).
+		Find(&messages).Error
+	return messages, err
+}
+
+// GetMessagesAfterID 返回 id 大于 sinceID 的消息，按升序排列。
+func (r *messageRepoImpl) GetMessagesAfterID(roomID int64, sinceID int64, limit int) ([]models.Message, error) {
+	var messages []models.Message
+	query := r.db.Model(&models.Message{}).Where("room_id = ?", roomID)
+	if sinceID > 0 {
+		query = query.Where("id > ?", sinceID)
+	}
+	err := query.Order("id ASC").Limit(limit).Find(&messages).Error
+	return messages, err
+}
+
+// CountMessagesAfterID 统计 id 大于 sinceID 的消息数量。
+func (r *messageRepoImpl) CountMessagesAfterID(roomID int64, sinceID int64) (int64, error) {
+	var count int64
+	query := r.db.Model(&models.Message{}).Where("room_id = ?", roomID)
+	if sinceID > 0 {
+		query = query.Where("id > ?", sinceID)
+	}
+	err := query.Count(&count).Error
+	return count, err
+}
+
 func (r *messageRepoImpl) SoftDeleteUserMessagesInRoom(roomID int64, userID int64) error {
 	// 采用软删除而非物理删除：
 	// 1. 保留数据记录，满足数据追溯需求

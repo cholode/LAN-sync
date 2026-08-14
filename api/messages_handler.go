@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -59,9 +60,9 @@ func GetChatHistory() gin.HandlerFunc {
 		var nextCursor int64 = 0
 		hasMore := false
 
-		if cursorMsgID == 0 {
+		if cursorMsgID == 0 && os.Getenv("MESSAGE_STORE") != "mongo" {
 			cached, err := cache.GetLatestMessages(c.Request.Context(), roomID, limit)
-			if err == nil && len(cached) > 0 {
+			if err == nil && len(cached) == limit {
 				messages = cached
 				// 缓存命中：判断是否还有更多（缓存满则说明 MySQL 可能还有更老的）
 				hasMore = len(cached) == limit

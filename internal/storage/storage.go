@@ -11,7 +11,7 @@ import (
 	"lan-im-go/pkg"
 )
 
-// Backend identifies the object storage backend.
+// Backend 标识对象存储的后端类型
 type Backend string
 
 const (
@@ -19,14 +19,14 @@ const (
 	BackendOSS   Backend = "oss"
 )
 
-// UploadResult is returned after an object is saved.
+// UploadResult 保存对象后返回的结果
 type UploadResult struct {
 	Key       string
 	PublicURL string
 	Size      int64
 }
 
-// Provider abstracts object storage operations.
+// Provider 抽象了对象存储的操作接口
 type Provider interface {
 	PreSignedUploadURL(ctx context.Context, key string, ttl time.Duration) (url string, err error)
 	Save(ctx context.Context, key string, reader io.Reader, size int64) (*UploadResult, error)
@@ -35,9 +35,9 @@ type Provider interface {
 	BackendType() Backend
 }
 
-// New creates an object storage provider from environment variables.
-// Only MinIO and Aliyun OSS are supported; MinIO is the default.
-// Invalid or incomplete configuration stops startup instead of falling back to local disk.
+// New 根据环境变量创建对象存储提供者。
+// 仅支持 MinIO 和阿里云 OSS，默认使用 MinIO。
+// 若配置无效或不完整，会直接 panic 停止启动，不会降级到本地磁盘。
 func New() Provider {
 	backend := Backend(strings.TrimSpace(os.Getenv("STORAGE_BACKEND")))
 	if backend == "" {
@@ -50,7 +50,7 @@ func New() Provider {
 	case BackendMinIO:
 		return newMinioProviderFromEnv()
 	default:
-		panic(fmt.Sprintf("unsupported STORAGE_BACKEND: %s (supported: minio, oss)", backend))
+		panic(fmt.Sprintf("不支持的 STORAGE_BACKEND: %s（支持: minio, oss）", backend))
 	}
 }
 

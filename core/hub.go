@@ -3,12 +3,15 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"time"
+
 	"github.com/go-redis/redis/v8"
+
 	"lan-im-go/config"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
-	"strconv"
 )
 
 const (
@@ -22,6 +25,7 @@ type redisMessage struct {
 	SenderID    int64  `json:"sender_id"`
 	Content     string `json:"content"`
 	ClientMsgID string `json:"client_msg_id"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 type RoomAction struct {
@@ -93,12 +97,18 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 				continue
 			}
 
+			createdAt := time.Unix(0, raw.Timestamp)
+			if createdAt.IsZero() {
+				createdAt = time.Now()
+			}
+
 			msg := &models.Message{
 				RoomID:      roomID,
 				SenderID:    raw.SenderID,
 				Content:     raw.Content,
 				ClientMsgID: raw.ClientMsgID,
 				Type:        1,
+				CreatedAt:   createdAt,
 			}
 
 			select {
