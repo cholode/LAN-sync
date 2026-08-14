@@ -6,12 +6,14 @@ import (
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"lan-im-go/agent"
-	"lan-im-go/agent/llm"
 	"lan-im-go/api"
 	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/infrastructure"
+	"lan-im-go/internal/agentclient"
 	"lan-im-go/internal/archiver"
+	"lan-im-go/internal/imservice"
+	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/middleware"
 	"lan-im-go/pkg"
@@ -48,13 +50,24 @@ func main() {
 	defer config.KafkaProducer.Close()
 
 	infrastructure.InitDatabase(dsn)
-	taskpool.Init(0) // 0=默认线程数(CPU*2)
+	messageRepo := repository.NewMessageRepoImpl(infrastructure.DB)
+	if os.Getenv("MESSAGE_STORE") == "mongo" {
+		infrastructure.InitMongo()
+		defer infrastructure.CloseMongo()
+		messageRepo = repository.NewMongoMessageRepo(infrastructure.MessageCollection)
+	}
+	taskpool.Init(0) // 0=default workers(CPU*2)
+	if err := search.Init(context.Background()); err != nil {
+		pkg.Fatalf("[Elasticsearch] init failed: %v", err)
+	}
+	defer search.Close()
+
 	api.InitFileStorage()
 
 	// ================================
 	// 阶段2：数据访问层初始化
 	// ================================
-	repository.InitRepositories(infrastructure.DB)
+	repository.InitRepositories(infrastructure.DB, messageRepo)
 	pkg.Infoln("[系统就绪] 数据访问层(DAL)初始化完成")
 
 	// ================================
@@ -86,8 +99,28 @@ func main() {
 	// ================================
 	// 阶段5：Agent 管理系统启动
 	// ================================
-	llmClient := llm.NewClient()
-	agentMgr := agent.NewAgentManager(infrastructure.DB, llmClient, hub)
+	agentAddr := os.Getenv("AGENT_GRPC_ADDR")
+	if agentAddr == "" {
+		agentAddr = "127.0.0.1:50051"
+	}
+	agentClient, err := agentclient.New(agentAddr)
+	if err != nil {
+		pkg.Fatalf("[致命错误] 创建 Agent gRPC 客户端失败: %v", err)
+	}
+	defer agentClient.Close()
+
+	imGRPCAddr := os.Getenv("IM_GRPC_ADDR")
+	if imGRPCAddr == "" {
+		imGRPCAddr = "0.0.0.0:50052"
+	}
+	imSrv := imservice.NewServer(hub)
+	go func() {
+		if err := imSrv.Start(ctx, imGRPCAddr); err != nil {
+			pkg.Fatalf("[致命错误] IMService gRPC 服务启动失败: %v", err)
+		}
+	}()
+
+	agentMgr := agent.NewAgentManager(infrastructure.DB, agentClient, hub)
 	go agentMgr.Start(ctx)
 
 	// ================================
@@ -129,6 +162,7 @@ func main() {
 		authorized.POST("/files/presign", api.PreSignUploadHandler)
 
 		authorized.GET("/rooms/:id/messages", api.GetChatHistory())
+		authorized.GET("/rooms/:id/messages/search", api.SearchMessages())
 		authorized.POST("/rooms/:id/join", api.JoinRoom(hub))
 		authorized.GET("/rooms/:id/members", api.GetRoomMembers())
 		authorized.DELETE("/rooms/:id/members/:user_id", api.RemoveRoomMember(hub))
