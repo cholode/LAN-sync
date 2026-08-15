@@ -64,6 +64,45 @@ type ModerationEventItem struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+// ModerationOverview ????????????????
+type ModerationOverview struct {
+	TodayReviewed   int64     `json:"today_reviewed"`
+	TodayViolations int64     `json:"today_violations"`
+	ViolationRate   float64   `json:"violation_rate"`
+	PendingReviews  int64     `json:"pending_reviews"`
+	GeneratedAt     time.Time `json:"generated_at"`
+}
+
+// Overview ??????????????????????
+func (s *ModerationService) Overview(ctx context.Context) (ModerationOverview, error) {
+	start := startOfDay(time.Now())
+	var row struct {
+		Total      int64 `gorm:"column:total"`
+		Violations int64 `gorm:"column:violations"`
+		Pending    int64 `gorm:"column:pending"`
+	}
+	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+		Select(`COUNT(*) AS total,
+			COALESCE(SUM(CASE WHEN model_result <> ? THEN 1 ELSE 0 END), 0) AS violations,
+			COALESCE(SUM(CASE WHEN review_status = ? THEN 1 ELSE 0 END), 0) AS pending`, "safe", "pending").
+		Where("created_at >= ?", start).
+		Scan(&row).Error; err != nil {
+		return ModerationOverview{}, err
+	}
+
+	var rate float64
+	if row.Total > 0 {
+		rate = float64(row.Violations) / float64(row.Total)
+	}
+	return ModerationOverview{
+		TodayReviewed:   row.Total,
+		TodayViolations: row.Violations,
+		ViolationRate:   rate,
+		PendingReviews:  row.Pending,
+		GeneratedAt:     time.Now(),
+	}, nil
+}
+
 // Dashboard ???????????
 func (s *ModerationService) Dashboard(ctx context.Context) (*ModerationDashboard, error) {
 	start := startOfDay(time.Now())

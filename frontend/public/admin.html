@@ -193,25 +193,71 @@
         const m = data.sections.messages;
         const rt = data.sections.realtime;
         content.innerHTML = '<div class="metric-grid">' +
-          metricCard('???????', u.total) +
+          metricCard('????', u.total) +
           metricCard('??????', u.new_today) +
           metricCard('7 ?????', u.new_last_7_days) +
           metricCard('30 ?????', u.new_last_30_days) +
-          metricCard('???????', u.online) +
-          metricCard('?? WebSocket ???', rt.websocket_connections) +
+          metricCard('??????', u.online) +
+          metricCard('?? WebSocket ??', rt.websocket_connections) +
           metricCard('?????? DAU', u.active_today) +
           metricCard('7 ????? WAU', u.active_last_7_days) +
           metricCard('30 ????? MAU', u.active_last_30_days) +
-          metricCard('??????', r.total) +
+          metricCard('????', r.total) +
           metricCard('??????', r.new_today) +
-          metricCard('????????', m.today) +
-          metricCard('????????', m.private_today) +
-          metricCard('????????', m.group_today) +
-          metricCard('????????', m.file_today) +
-          metricCard('?? @Agent ????', m.agent_today) +
+          metricCard('?????', m.today) +
+          metricCard('??????', m.private_today) +
+          metricCard('??????', m.group_today) +
+          metricCard('??????', m.file_today) +
+          metricCard('?? @Agent ??', m.agent_today) +
           '</div>';
-        loadRuntime();
-        loadHealthCards();
+
+        const ws = data.websocket || {};
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">WebSocket ????</h3><div class="metric-grid">' +
+          metricCard('????', ws.current_connections || 0) +
+          metricCard('??????', ws.established_total || 0) +
+          metricCard('??????', ws.closed_total || 0) +
+          metricCard('??????', ws.abnormal_closed_total || 0) +
+          metricCard('??????(ms)', Math.round(ws.average_connection_duration_ms || 0)) +
+          metricCard('??????', ws.read_messages_per_minute || 0) +
+          metricCard('??????', ws.write_messages_per_minute || 0) +
+          metricCard('??????', ws.send_queue_backlog || 0) +
+          metricCard('????', ws.slow_clients || 0) +
+          '</div>');
+
+        const mod = data.moderation || {};
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">AI ??????</h3><div class="metric-grid">' +
+          metricCard('????', mod.today_reviewed || 0) +
+          metricCard('????', mod.today_violations || 0) +
+          metricCard('???', ((mod.violation_rate || 0) * 100).toFixed(2) + '%') +
+          metricCard('?????', mod.pending_reviews || 0) +
+          '</div>');
+
+        const agent = data.agent || {};
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">Agent ????</h3><div class="metric-grid">' +
+          metricCard('????', agent.calls_today || 0) +
+          metricCard('????', agent.current_requests || 0) +
+          metricCard('???', ((agent.success_rate || 0) * 100).toFixed(2) + '%') +
+          metricCard('????(ms)', (agent.average_response_ms || 0).toFixed(2)) +
+          metricCard('? Token', agent.total_tokens || 0) +
+          metricCard('Tool Calling', agent.tool_calls || 0) +
+          metricCard('RAG ??', agent.rag_calls || 0) +
+          metricCard('Embedding ??', agent.embedding_calls || 0) +
+          '</div>');
+
+        const rag = data.rag || {};
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">RAG / Qdrant</h3><div class="metric-grid">' +
+          metricCard('Qdrant', rag.qdrant_online ? '??' : '??') +
+          metricCard('Collection ?', rag.collection_count || 0) +
+          metricCard('????', rag.vector_count || 0) +
+          metricCard('??????', rag.today_new_vectors || 0) +
+          metricCard('Top K', rag.top_k || 0) +
+          metricCard('????', rag.vector_dimension || 0) +
+          '</div>');
+
+        const systemItems = data.system || [];
+        const healthRows = systemItems.map(item => '<div class="metric-card"><div class="metric-value">' + item.status + '</div><div class="metric-label">' + item.name + ' (' + Number(item.latency_ms || 0).toFixed(2) + 'ms)</div>' + (item.error ? '<div class="error">' + item.error + '</div>' : '') + '</div>').join('');
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">System Health</h3><div class="metric-grid">' + healthRows + '</div>');
+
         loadAlertBadge();
         loadQuickActions();
       } catch (error) {

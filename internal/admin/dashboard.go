@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -9,20 +10,32 @@ import (
 
 	"lan-im-go/config"
 	"lan-im-go/core"
+	"lan-im-go/internal/metrics"
 	"lan-im-go/models"
 )
 
-// DashboardService ?????? Dashboard ?????????
-// ??????????????? Handler ???? SQL?
+// DashboardService ?????????????????????????????
+// ??????????? service ???? Handler ???? SQL?
 type DashboardService struct {
 	db           *gorm.DB
 	messageStore MessageStatsStore
 	hub          *core.Hub
+	moderation   *ModerationService
+	rag          *RAGService
+	health       *HealthService
 }
 
-// NewDashboardService ?? Dashboard ???
-// messageStore ???? MySQL ?????
-func NewDashboardService(db *gorm.DB, messageCollection *mongo.Collection, messageStore string, hub *core.Hub) *DashboardService {
+// NewDashboardService ????????????
+// messageStore ???? MySQL ? MongoDB ?????????
+func NewDashboardService(
+	db *gorm.DB,
+	messageCollection *mongo.Collection,
+	messageStore string,
+	hub *core.Hub,
+	moderation *ModerationService,
+	rag *RAGService,
+	health *HealthService,
+) *DashboardService {
 	var store MessageStatsStore
 	if messageStore == "mongo" && messageCollection != nil {
 		store = newMongoMessageStats(messageCollection, db)
@@ -33,10 +46,13 @@ func NewDashboardService(db *gorm.DB, messageCollection *mongo.Collection, messa
 		db:           db,
 		messageStore: store,
 		hub:          hub,
+		moderation:   moderation,
+		rag:          rag,
+		health:       health,
 	}
 }
 
-// MetricPoint ????????????
+// MetricPoint ?????????????
 type MetricPoint struct {
 	Value          int64   `json:"value"`
 	YesterdayValue int64   `json:"yesterday_value"`
@@ -44,7 +60,7 @@ type MetricPoint struct {
 	Trend          []int64 `json:"trend"`
 }
 
-// OverviewSection ?????
+// OverviewSection ????????????
 type OverviewSection struct {
 	Users    UserOverview     `json:"users"`
 	Rooms    RoomOverview     `json:"rooms"`
@@ -80,13 +96,18 @@ type RealtimeOverview struct {
 	WebSocketConnections int64 `json:"websocket_connections"`
 }
 
-// DashboardOverview ?????????
+// DashboardOverview ???????????
 type DashboardOverview struct {
-	GeneratedAt time.Time       `json:"generated_at"`
-	Sections    OverviewSection `json:"sections"`
+	GeneratedAt time.Time                    `json:"generated_at"`
+	Sections    OverviewSection              `json:"sections"`
+	Websocket   metrics.WebSocketRuntime     `json:"websocket"`
+	Moderation  ModerationOverview           `json:"moderation"`
+	Agent       metrics.AgentRuntimeSnapshot `json:"agent"`
+	RAG         *RAGDashboard                `json:"rag"`
+	System      []HealthItem                 `json:"system"`
 }
 
-// CoreOverview ?????????
+// CoreOverview ????????????????????????
 func (s *DashboardService) CoreOverview(ctx context.Context) (*DashboardOverview, error) {
 	now := time.Now()
 	todayStart := startOfDay(now)
@@ -109,9 +130,31 @@ func (s *DashboardService) CoreOverview(ctx context.Context) (*DashboardOverview
 		return nil, err
 	}
 
-	ws := int64(0)
+	ws := metrics.RuntimeSnapshotNow().WebSocket
 	if s.hub != nil {
-		ws = int64(s.hub.Stats().ClientCount)
+		stats := s.hub.Stats()
+		ws.CurrentConnections = int64(stats.ClientCount)
+	}
+
+	moderation := ModerationOverview{}
+	if s.moderation != nil {
+		moderation, err = s.moderation.Overview(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rag := &RAGDashboard{}
+	if s.rag != nil {
+		rag, err = s.rag.Dashboard(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	system := []HealthItem{}
+	if s.health != nil {
+		system = s.health.CheckAll(ctx)
 	}
 
 	return &DashboardOverview{
@@ -120,8 +163,13 @@ func (s *DashboardService) CoreOverview(ctx context.Context) (*DashboardOverview
 			Users:    users,
 			Rooms:    rooms,
 			Messages: messages,
-			Realtime: RealtimeOverview{WebSocketConnections: ws},
+			Realtime: RealtimeOverview{WebSocketConnections: ws.CurrentConnections},
 		},
+		Websocket:  ws,
+		Moderation: moderation,
+		Agent:      metrics.AgentRuntimeSnapshotNow(),
+		RAG:        rag,
+		System:     system,
 	}, nil
 }
 
@@ -163,7 +211,6 @@ func (s *DashboardService) userOverview(ctx context.Context, now, todayStart, ye
 		*item.Out = count
 	}
 
-	// ???????????????????? 30 ????
 	return out, nil
 }
 
@@ -215,6 +262,60 @@ func (s *DashboardService) onlineUserCount(ctx context.Context) int64 {
 		count++
 	}
 	return count
+}
+
+// DashboardTimeSeries ??????????????
+type DashboardTimeSeries struct {
+	Metric      string      `json:"metric"`
+	Period      string      `json:"period"`
+	Points      []TimeCount `json:"points"`
+	GeneratedAt time.Time   `json:"generated_at"`
+}
+
+// TimeSeries ??????????????
+// ???? metric=messages?period ?? 1h?24h?7d?30d?
+func (s *DashboardService) TimeSeries(ctx context.Context, metric, period string) (*DashboardTimeSeries, error) {
+	if metric != "messages" {
+		return nil, fmt.Errorf("???????: %s", metric)
+	}
+
+	now := time.Now()
+	start, hourly, err := timeSeriesWindow(period)
+	if err != nil {
+		return nil, err
+	}
+
+	var points []TimeCount
+	if hourly {
+		points, err = s.messageStore.HourlyCounts(ctx, now.Add(-start), now)
+	} else {
+		points, err = s.messageStore.DailyCounts(ctx, now.Add(-start), now)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &DashboardTimeSeries{
+		Metric:      metric,
+		Period:      period,
+		Points:      points,
+		GeneratedAt: now,
+	}, nil
+}
+
+func timeSeriesWindow(period string) (time.Duration, bool, error) {
+	switch period {
+	case "1h":
+		return time.Hour, true, nil
+	case "24h":
+		return 24 * time.Hour, true, nil
+	case "7d":
+		return 7 * 24 * time.Hour, false, nil
+	case "30d":
+		return 30 * 24 * time.Hour, false, nil
+	default:
+		return 24 * time.Hour, true, nil
+	}
 }
 
 func startOfDay(t time.Time) time.Time {

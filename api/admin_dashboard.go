@@ -59,3 +59,21 @@ func AdminDashboardMessageTraffic(c *gin.Context) {
 func AdminAgentDashboard(c *gin.Context) {
 	c.JSON(http.StatusOK, metrics.AgentRuntimeSnapshotNow())
 }
+
+// AdminDashboardTimeSeries ????????????????
+// GET /api/v1/admin/dashboard/timeseries?metric=messages&period=24h
+func AdminDashboardTimeSeries(c *gin.Context) {
+	if adminDashboardService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard ??????"})
+		return
+	}
+
+	metric := c.DefaultQuery("metric", "messages")
+	period := c.DefaultQuery("period", "24h")
+	data, err := adminDashboardService.TimeSeries(c.Request.Context(), metric, period)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}

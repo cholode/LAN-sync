@@ -113,26 +113,32 @@ func main() {
 	hub := core.NewHub()
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
-	api.InitAdminDashboardService(adminservice.NewDashboardService(
+	adminAuditService := adminservice.NewAuditService(infrastructure.DB)
+	adminMessageStore := adminservice.NewMessageStatsStore(infrastructure.DB, infrastructure.MessageCollection, os.Getenv("MESSAGE_STORE"))
+	ragService := adminservice.NewRAGService(infrastructure.DB)
+	moderationService := adminservice.NewModerationService(infrastructure.DB, adminAuditService)
+	adminHealthService := adminservice.NewHealthService(infrastructure.DB, config.RedisClient, api.Storage, hub)
+	dashboardService := adminservice.NewDashboardService(
 		infrastructure.DB,
 		infrastructure.MessageCollection,
 		os.Getenv("MESSAGE_STORE"),
 		hub,
-	))
-	api.InitAdminRAGService(adminservice.NewRAGService(infrastructure.DB))
-	adminAuditService := adminservice.NewAuditService(infrastructure.DB)
-	adminMessageStore := adminservice.NewMessageStatsStore(infrastructure.DB, infrastructure.MessageCollection, os.Getenv("MESSAGE_STORE"))
+		moderationService,
+		ragService,
+		adminHealthService,
+	)
+	api.InitAdminDashboardService(dashboardService)
+	api.InitAdminRAGService(ragService)
+	api.InitAdminModerationService(moderationService)
+	api.InitAdminHealthService(adminHealthService)
 	api.InitAdminUserService(adminservice.NewUserService(infrastructure.DB, adminMessageStore, hub, adminAuditService))
 	api.InitAdminConnectionService(adminservice.NewConnectionService(hub, adminAuditService))
-	api.InitAdminModerationService(adminservice.NewModerationService(infrastructure.DB, adminAuditService))
 	api.InitAdminFileService(adminservice.NewFileService(infrastructure.DB, api.Storage, adminAuditService))
 	api.InitAdminAgentConfigService(adminservice.NewAgentConfigService(infrastructure.DB, adminAuditService))
 	api.InitAdminToolCallService(adminservice.NewToolCallService(infrastructure.DB))
 	adminErrorService := adminservice.NewErrorCenterService(infrastructure.DB)
 	api.InitAdminErrorService(adminErrorService)
 	api.InitAdminAuditService(adminAuditService)
-	adminHealthService := adminservice.NewHealthService(infrastructure.DB, config.RedisClient, api.Storage, hub)
-	api.InitAdminHealthService(adminHealthService)
 	api.InitAdminAlertService(adminservice.NewAlertService(infrastructure.DB, adminHealthService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
@@ -227,6 +233,7 @@ func main() {
 	{
 		admin.GET("/dashboard/runtime", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardRuntime)
 		admin.GET("/dashboard/message-traffic", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardMessageTraffic)
+		admin.GET("/dashboard/timeseries", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardTimeSeries)
 		admin.GET("/dashboard/agent", middleware.RequirePermission(models.PermAgentRead), api.AdminAgentDashboard)
 		admin.GET("/dashboard/rag", middleware.RequireAnyPermission(models.PermDashboardRead, models.PermAgentRead), api.AdminRAGDashboard)
 		admin.GET("/rag/queries", middleware.RequirePermission(models.PermAgentRead), api.AdminRAGQueries)
