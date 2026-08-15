@@ -51,6 +51,7 @@ func InitDatabase(dsn string) {
 		&models.FileRecord{},
 		&models.GlobalAgentConfig{},
 		&models.AgentConfigHistory{},
+		&models.ToolCallLog{},
 	}
 	if os.Getenv("MESSAGE_STORE") != "mongo" {
 		migrateModels = append(migrateModels, &models.Message{})

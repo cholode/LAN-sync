@@ -54,6 +54,7 @@
       <a href="#message-traffic" data-page="message-traffic">????</a>
       <a href="#agent" data-page="agent">Agent监控</a>
       <a href="#agent-config" data-page="agent-config">Agent配置</a>
+      <a href="#tool-calls" data-page="tool-calls">Tool Calls</a>
       <a href="#rag" data-page="rag">RAG/Qdrant</a>
       <a href="#moderation" data-page="moderation">????</a>
       <a href="#users" data-page="users">????</a>
@@ -80,6 +81,7 @@
       'message-traffic': '????',
       agent: 'Agent监控',
       'agent-config': 'Agent配置',
+      'tool-calls': 'Tool Calling 运行记录',
       rag: 'RAG/Qdrant',
       moderation: '????',
       users: '????',
@@ -148,6 +150,8 @@
         loadFiles();
       } else if (page === 'agent-config') {
         loadAgentConfigPage();
+      } else if (page === 'tool-calls') {
+        loadToolCalls();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -244,6 +248,30 @@
     }
     window.connectionClose = connectionClose;
     window.connectionForceOffline = connectionForceOffline;
+
+    async function loadToolCalls() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d Tool Calling \u8bb0\u5f55...</div>';
+      try {
+        const toolName = document.getElementById('toolCallToolName') ? document.getElementById('toolCallToolName').value : '';
+        const userId = document.getElementById('toolCallUserId') ? document.getElementById('toolCallUserId').value : '';
+        const roomId = document.getElementById('toolCallRoomId') ? document.getElementById('toolCallRoomId').value : '';
+        const success = document.getElementById('toolCallSuccess') ? document.getElementById('toolCallSuccess').value : '';
+        const params = new URLSearchParams({ page: 1, page_size: 50 });
+        if (toolName) params.set('tool_name', toolName);
+        if (userId) params.set('user_id', userId);
+        if (roomId) params.set('room_id', roomId);
+        if (success) params.set('success', success);
+        const data = await request('/admin/tool-calls?' + params.toString());
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.tool_call_id + '</td><td>' + item.agent_request_id + '</td><td>' + item.user_id + ' (' + item.username + ')</td><td>' + item.room_id + ' (' + item.room_name + ')</td><td>' + item.tool_name + '</td><td>' + item.arguments + '</td><td>' + new Date(item.started_at).toLocaleString() + '</td><td>' + new Date(item.finished_at).toLocaleString() + '</td><td>' + item.latency_ms.toFixed(2) + '</td><td>' + (item.success ? '\u6210\u529f' : '\u5931\u8d25') + '</td><td>' + (item.error || '') + '</td></tr>').join('');
+        content.innerHTML = '<div class="toolbar"><input id="toolCallToolName" placeholder="Tool\u540d\u79f0"><input id="toolCallUserId" placeholder="\u7528\u6237ID"><input id="toolCallRoomId" placeholder="\u7fa4\u804aID"><select id="toolCallSuccess"><option value="">\u5168\u90e8</option><option value="true">\u6210\u529f</option><option value="false">\u5931\u8d25</option></select><button onclick="loadToolCalls()">\u67e5\u8be2</button></div>' +
+          '<h3 style="margin-top:14px">Tool Calling \u8fd0\u884c\u8bb0\u5f55</h3><table class="admin-table"><thead><tr><th>ID</th><th>Tool Call ID</th><th>Agent Request ID</th><th>\u7528\u6237</th><th>\u7fa4\u804a</th><th>\u5de5\u5177\u540d\u79f0</th><th>\u53c2\u6570</th><th>\u5f00\u59cb\u65f6\u95f4</th><th>\u7ed3\u675f\u65f6\u95f4</th><th>\u8017\u65f6(ms)</th><th>\u7ed3\u679c</th><th>\u9519\u8bef</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    window.loadToolCalls = loadToolCalls;
 
     async function loadAgentConfigPage() {
       const content = document.getElementById('content');

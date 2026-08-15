@@ -12,6 +12,7 @@ import (
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -160,12 +161,39 @@ func (c *TopicChunker) callLLMCombined(ctx context.Context, msgWithUsers []rag.M
 
 	// 1. 处理审核 tool_calls
 	for _, tc := range resp.Choices[0].Message.ToolCalls {
+		startedAt := time.Now()
 		result, dispatchErr := c.reviewTools.Dispatch(tc.Function.Name, []byte(tc.Function.Arguments))
+		finishedAt := time.Now()
+		success := dispatchErr == nil
 		if dispatchErr != nil {
 			pkg.Infof("[TopicChunker] room=%d %s 失败: %v", c.roomID, tc.Function.Name, dispatchErr)
-			continue
+		} else {
+			pkg.Infof("[TopicChunker] room=%d %s: %s", c.roomID, tc.Function.Name, result)
 		}
-		pkg.Infof("[TopicChunker] room=%d %s: %s", c.roomID, tc.Function.Name, result)
+		toolCallID := tc.ID
+		if toolCallID == "" {
+			toolCallID = fmt.Sprintf("tool-%d-%d", c.roomID, startedAt.UnixNano())
+		}
+		userID := parseToolTargetUserID(tc.Function.Arguments)
+		errorText := ""
+		if dispatchErr != nil {
+			errorText = dispatchErr.Error()
+		}
+		if err := c.db.Create(&models.ToolCallLog{
+			ToolCallID:     toolCallID,
+			UserID:         userID,
+			RoomID:         c.roomID,
+			AgentRequestID: resp.ID,
+			ToolName:       tc.Function.Name,
+			Arguments:      tc.Function.Arguments,
+			StartedAt:      startedAt,
+			FinishedAt:     finishedAt,
+			LatencyMS:      float64(finishedAt.Sub(startedAt).Microseconds()) / 1000.0,
+			Success:        success,
+			Error:          errorText,
+		}).Error; err != nil {
+			pkg.Infof("[TopicChunker] room=%d 写入 ToolCallLog 失败: %v", c.roomID, err)
+		}
 	}
 
 	// 2. 提取话题 JSON
@@ -203,6 +231,17 @@ func (c *TopicChunker) callLLMCombined(ctx context.Context, msgWithUsers []rag.M
 }
 
 // parseTopicSegments 从 LLM 回复中提取并解析话题分段 JSON
+func parseToolTargetUserID(raw string) int64 {
+	var args map[string]any
+	if err := json.Unmarshal([]byte(raw), &args); err != nil {
+		return 0
+	}
+	if id, ok := args["user_id"].(float64); ok {
+		return int64(id)
+	}
+	return 0
+}
+
 func parseTopicSegments(content string) ([]TopicSegment, error) {
 	jsonStr := extractJSON(content)
 	var segments []TopicSegment
