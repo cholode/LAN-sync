@@ -24,6 +24,11 @@
     main { padding: 24px; }
     .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
     .placeholder { background: #fff; border-radius: 12px; padding: 32px; color: #64748b; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+    .metric-card { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 8px 20px rgba(15,23,42,.05); }
+    .metric-value { font-size: 28px; font-weight: 700; color: #111827; }
+    .metric-label { margin-top: 6px; color: #64748b; font-size: 13px; }
+    .loading { color: #64748b; }
   </style>
 </head>
 <body>
@@ -110,7 +115,57 @@
         a.classList.toggle('active', a.dataset.page === page);
       });
       document.getElementById('pageTitle').textContent = pageTitles[page] || page;
-      document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
+      if (page === 'dashboard') {
+        loadDashboard();
+      } else {
+        document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
+      }
+    }
+
+    async function request(endpoint) {
+      const headers = { 'Content-Type': 'application/json' };
+      const token = getToken();
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(API_BASE + endpoint, { headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.msg || '????');
+      return data;
+    }
+
+    function metricCard(label, value) {
+      return '<div class="metric-card"><div class="metric-value">' + value + '</div><div class="metric-label">' + label + '</div></div>';
+    }
+
+    async function loadDashboard() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">???? Dashboard...</div>';
+      try {
+        const data = await request('/admin/dashboard/overview');
+        const u = data.sections.users;
+        const r = data.sections.rooms;
+        const m = data.sections.messages;
+        const rt = data.sections.realtime;
+        content.innerHTML = '<div class="metric-grid">' +
+          metricCard('???????', u.total) +
+          metricCard('??????', u.new_today) +
+          metricCard('7 ?????', u.new_last_7_days) +
+          metricCard('30 ?????', u.new_last_30_days) +
+          metricCard('???????', u.online) +
+          metricCard('?? WebSocket ???', rt.websocket_connections) +
+          metricCard('?????? DAU', u.active_today) +
+          metricCard('7 ????? WAU', u.active_last_7_days) +
+          metricCard('30 ????? MAU', u.active_last_30_days) +
+          metricCard('??????', r.total) +
+          metricCard('??????', r.new_today) +
+          metricCard('????????', m.today) +
+          metricCard('????????', m.private_today) +
+          metricCard('????????', m.group_today) +
+          metricCard('????????', m.file_today) +
+          metricCard('?? @Agent ????', m.agent_today) +
+          '</div>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
     }
 
     document.getElementById('loginForm').addEventListener('submit', async e => {

@@ -9,6 +9,7 @@ import (
 	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/infrastructure"
+	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/internal/agentclient"
 	"lan-im-go/internal/archiver"
 	"lan-im-go/internal/imservice"
@@ -112,6 +113,12 @@ func main() {
 	hub := core.NewHub()
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
+	api.InitAdminDashboardService(adminservice.NewDashboardService(
+		infrastructure.DB,
+		infrastructure.MessageCollection,
+		os.Getenv("MESSAGE_STORE"),
+		hub,
+	))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -195,6 +202,7 @@ func main() {
 	admin := r.Group("/api/v1/admin")
 	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin())
 	{
+		admin.GET("/dashboard/overview", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardOverview)
 		admin.DELETE("/users/:id", middleware.RequirePermission(models.PermUserDelete), api.AdminDeleteUser(hub))
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
