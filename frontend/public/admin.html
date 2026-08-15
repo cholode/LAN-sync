@@ -206,6 +206,7 @@
           metricCard('?? @Agent ????', m.agent_today) +
           '</div>';
         loadRuntime();
+        loadHealthCards();
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -711,6 +712,18 @@
       }
     }
 
+    async function loadHealthCards() {
+      const content = document.getElementById('content');
+      try {
+        const data = await request('/admin/health');
+        const rows = (data.items || []).map(item => '<div class="metric-card"><div class="metric-value">' + item.status + '</div><div class="metric-label">' + item.name + ' (' + item.latency_ms.toFixed(2) + 'ms)</div>' + (item.error ? '<div class="error">' + item.error + '</div>' : '') + '</div>').join('');
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin-top:22px">System Health</h3><div class="metric-grid">' + rows + '</div>');
+      } catch (error) {
+        content.insertAdjacentHTML('beforeend', '<div class="error">\u5065\u5eb7\u68c0\u67e5\u5931\u8d25\uff1a' + error.message + '</div>');
+      }
+    }
+
+    async function loadMessageTraffic() {
     async function loadMessageTraffic() {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">??????????...</div>';
