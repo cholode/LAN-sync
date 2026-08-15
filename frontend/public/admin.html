@@ -213,6 +213,7 @@
         loadRuntime();
         loadHealthCards();
         loadAlertBadge();
+        loadQuickActions();
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -534,11 +535,12 @@
     window.fileScan = fileScan;
     window.fileCleanup = fileCleanup;
 
-    async function loadRooms() {
+    async function loadRooms(keyword) {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">????????...</div>';
       try {
-        const data = await request('/admin/rooms?page=1&page_size=50');
+        const roomQuery = keyword ? '&keyword=' + encodeURIComponent(keyword) : '';
+        const data = await request('/admin/rooms?page=1&page_size=50' + roomQuery);
         const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.name + '</td><td>' + item.owner_id + '</td><td>' + item.member_count + '</td><td>' + item.online_member_count + '</td><td>' + item.today_message_count + '</td><td>' + item.total_message_count + '</td><td>' + (item.agent_enabled ? '??' : '??') + '</td><td>' + (item.status === 1 ? '???' : '??') + '</td><td>' + item.violation_count + '</td><td>' +
           '<button onclick="roomAction(' + item.id + ',\'freeze\')">??</button> ' +
           '<button onclick="roomAction(' + item.id + ',\'unfreeze\')">??</button> ' +
@@ -566,11 +568,12 @@
       }
     }
     window.roomAction = roomAction;
-    async function loadUsers() {
+    async function loadUsers(keyword) {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">????????...</div>';
       try {
-        const data = await request('/admin/users?page=1&page_size=50');
+        const userQuery = keyword ? '&keyword=' + encodeURIComponent(keyword) : '';
+        const data = await request('/admin/users?page=1&page_size=50' + userQuery);
         const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.username + '</td><td>' + item.role_name + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + (item.last_login_at ? new Date(item.last_login_at).toLocaleString() : '-') + '</td><td>' + (item.online ? '??' : '??') + '</td><td>' + (item.status === 1 ? '???' : '??') + '</td><td>' + item.room_count + '</td><td>' + item.message_count + '</td><td>' + item.violation_count + '</td><td>' +
           '<button onclick="userAction(' + item.id + ',\'force_offline\')">????</button> ' +
           '<button onclick="userAction(' + item.id + ',\'ban\')">??</button> ' +
@@ -718,6 +721,39 @@
       }
     }
 
+    async function loadQuickActions() {
+      const content = document.getElementById('content');
+      const html = '<h3 style="margin-top:22px">Quick Actions</h3>' +
+        '<div class="toolbar">' +
+        '<input id="quickUserKeyword" placeholder="\u7528\u6237\u540d/\u7528\u6237ID"><button onclick="quickUserSearch()">\u641c\u7d22\u7528\u6237</button>' +
+        '<input id="quickRoomKeyword" placeholder="\u7fa4\u540d/\u7fa4ID"><button onclick="quickRoomSearch()">\u641c\u7d22\u7fa4\u804a</button>' +
+        '<button onclick="selectPage(\'message-traffic\')">\u6d88\u606f\u6d41\u91cf</button>' +
+        '<button onclick="selectPage(\'connections\')">\u5728\u7ebf\u7528\u6237</button>' +
+        '<button onclick="selectPage(\'moderation\')">\u6700\u65b0\u8fdd\u89c4</button>' +
+        '<button onclick="selectPage(\'tool-calls\')">Agent \u9519\u8bef</button>' +
+        '<button onclick="selectPage(\'alerts\')">\u7cfb\u7edf\u544a\u8b66</button>' +
+        '<button onclick="fileCleanup()">\u6e05\u7406\u4e34\u65f6\u5206\u7247</button>' +
+        '</div>';
+      content.insertAdjacentHTML('beforeend', html);
+    }
+
+    async function quickUserSearch() {
+      const keyword = document.getElementById('quickUserKeyword').value.trim();
+      if (!keyword) return alert('\u8bf7\u8f93\u5165\u7528\u6237\u641c\u7d22\u5173\u952e\u5b57');
+      selectPage('users');
+      loadUsers(keyword);
+    }
+
+    async function quickRoomSearch() {
+      const keyword = document.getElementById('quickRoomKeyword').value.trim();
+      if (!keyword) return alert('\u8bf7\u8f93\u5165\u7fa4\u804a\u641c\u7d22\u5173\u952e\u5b57');
+      selectPage('rooms');
+      loadRooms(keyword);
+    }
+
+    window.quickUserSearch = quickUserSearch;
+    window.quickRoomSearch = quickRoomSearch;
+
     async function loadAlertBadge() {
       const content = document.getElementById('content');
       try {
@@ -781,7 +817,6 @@
       }
     }
 
-    async function loadMessageTraffic() {
     async function loadMessageTraffic() {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">??????????...</div>';
