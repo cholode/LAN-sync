@@ -9,6 +9,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
 
+	"lan-im-go/internal/metrics"
 	"lan-im-go/internal/protocol"
 	"lan-im-go/pkg"
 )
@@ -16,6 +17,7 @@ import (
 type MessageClient struct {
 	writer      *kafka.Writer
 	redisClient *redis.Client
+	topic       string
 }
 
 func NewMessageClient(brokers []string, topic string, redisClient *redis.Client) *MessageClient {
@@ -27,6 +29,7 @@ func NewMessageClient(brokers []string, topic string, redisClient *redis.Client)
 			Async:    true,
 		},
 		redisClient: redisClient,
+		topic:       topic,
 	}
 }
 
@@ -48,17 +51,21 @@ func (c *MessageClient) HandleIncomingMessage(ctx context.Context, roomID string
 		return fmt.Errorf("消息负载序列化失败: %w", err)
 	}
 
+	start := time.Now()
 	err = c.writer.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(roomID),
 		Value: payload,
 	})
+	metrics.ObserveKafkaProduce(c.topic, start, err)
 	if err != nil {
 		pkg.Infof("[中间件告警] Kafka 投递失败：%v", err)
 		return fmt.Errorf("kafka 写入失败: %w", err)
 	}
 
 	redisChannel := "im:broadcast:room:" + roomID
-	if pubErr := c.redisClient.Publish(ctx, redisChannel, payload).Err(); pubErr != nil {
+	pubErr := c.redisClient.Publish(ctx, redisChannel, payload).Err()
+	metrics.ObserveRedisPubSub(redisChannel, "publish", pubErr)
+	if pubErr != nil {
 		pkg.Infof("[中间件告警] Redis 广播发布失败（消息仍已落盘Kafka）: %v", pubErr)
 	}
 

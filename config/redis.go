@@ -2,8 +2,10 @@ package config
 
 import (
 	"context"
-	"lan-im-go/pkg"
 	"os"
+
+	"lan-im-go/internal/metrics"
+	"lan-im-go/pkg"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -22,8 +24,13 @@ func InitRedis() {
 		DB:       0,
 	})
 
+	RedisClient.AddHook(metrics.NewRedisHook())
+	metrics.RegisterRedisPoolMetrics(RedisClient)
+
 	if err := RedisClient.Ping(context.Background()).Err(); err != nil {
+		metrics.SetRedisUp(false)
 		pkg.Fatalf("Redis 链路断开，启动失败：%v", err)
 	}
+	metrics.SetRedisUp(true)
 	pkg.Infoln("Redis 准备就绪")
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"lan-im-go/internal/metrics"
 	"lan-im-go/internal/protocol"
 	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
@@ -202,6 +203,7 @@ func (w *Worker) Start(ctx context.Context) {
 		default:
 		}
 
+		readStart := time.Now()
 		readCtx, cancel := context.WithTimeout(ctx, flushInterval)
 		m, err := w.reader.ReadMessage(readCtx)
 		cancel()
@@ -209,9 +211,12 @@ func (w *Worker) Start(ctx context.Context) {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				continue
 			}
+			metrics.ObserveKafkaReadError(w.topic, err)
 			pkg.Infof("[Archiver] Kafka 读取异常: %v", err)
 			continue
 		}
+		metrics.ObserveKafkaConsume(w.topic, readStart, nil)
+		metrics.SetKafkaConsumerLag(w.topic, w.partition, w.reader.Lag())
 
 		envelope, err := protocol.Unmarshal(m.Value)
 		if err != nil {

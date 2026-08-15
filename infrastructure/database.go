@@ -4,11 +4,12 @@ import (
 	"os"
 	"time"
 
+	"lan-im-go/internal/metrics"
+	"lan-im-go/models"
 	"lan-im-go/pkg"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"lan-im-go/models"
 )
 
 // DB 全局数据库实例，应用全局复用
@@ -34,6 +35,7 @@ func InitDatabase(dsn string) {
 	sqlDB.SetMaxIdleConns(200)
 	sqlDB.SetMaxOpenConns(1000)
 	sqlDB.SetConnMaxLifetime(time.Hour)
+	metrics.RegisterMySQLPoolMetrics(sqlDB)
 
 	// 3. 自动同步数据模型至数据库表结构
 	pkg.Infoln("开始同步数据库表结构...")
@@ -52,6 +54,8 @@ func InitDatabase(dsn string) {
 	if err != nil {
 		pkg.Fatalf("[错误] 数据库表结构同步失败: %v", err)
 	}
+
+	metrics.RegisterGORMMetrics(DB, "mysql")
 
 	pkg.Infoln("MySQL 连接成功，表结构同步完成，连接池配置生效！")
 }

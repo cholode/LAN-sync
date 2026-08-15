@@ -10,6 +10,7 @@ import (
 	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/internal/agentclient"
+	"lan-im-go/internal/metrics"
 	"lan-im-go/internal/protocol"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
@@ -42,6 +43,7 @@ func (m *AgentManager) Start(ctx context.Context) {
 	pkg.Infoln("[AgentManager] 正在启动...")
 	m.loadEnabledAgents(ctx)
 	go m.listenMessages(ctx)
+	metrics.SetAgentRoomsEnabled(len(m.agents))
 	pkg.Infof("[AgentManager] 启动完成, 已加载 %d 个 Agent", len(m.agents))
 }
 
@@ -87,6 +89,7 @@ func (m *AgentManager) AddAgent(ctx context.Context, roomID int64) error {
 	go roomAgent.Start()
 
 	m.agents[roomID] = roomAgent
+	metrics.SetAgentRoomsEnabled(len(m.agents))
 
 	m.db.WithContext(ctx).Model(&models.Room{}).
 		Where("id = ?", roomID).
@@ -115,6 +118,7 @@ func (m *AgentManager) PauseAgent(ctx context.Context, roomID int64) error {
 
 	agent.Stop()
 	delete(m.agents, roomID)
+	metrics.SetAgentRoomsEnabled(len(m.agents))
 
 	m.db.WithContext(ctx).Model(&models.Room{}).
 		Where("id = ?", roomID).
@@ -141,6 +145,7 @@ func (m *AgentManager) RemoveAgent(ctx context.Context, roomID int64) error {
 		agent.Stop()
 		delete(m.agents, roomID)
 	}
+	metrics.SetAgentRoomsEnabled(len(m.agents))
 
 	if err := m.agentClient.RemoveAgent(ctx, roomID); err != nil {
 		pkg.Infof("[AgentManager] 通知 Python 移除 room=%d 失败: %v", roomID, err)
@@ -171,6 +176,7 @@ func (m *AgentManager) listenMessages(ctx context.Context) {
 	defer pubsub.Close()
 
 	_, err := pubsub.Receive(ctx)
+	metrics.ObserveRedisPubSub("im:broadcast:room:*", "subscribe", err)
 	if err != nil {
 		pkg.Fatalf("[AgentManager] Redis Pub/Sub 连接失败: %v", err)
 	}
@@ -206,6 +212,8 @@ func (m *AgentManager) handleRedisMessage(ctx context.Context, payload string) {
 	if agent == nil {
 		return
 	}
+
+	metrics.ObserveAgentMessageReceived(roomID, "redis")
 
 	if envelope.SenderID == agent.botUserID {
 		return

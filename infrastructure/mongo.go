@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
+	"lan-im-go/internal/metrics"
 	"lan-im-go/pkg"
 )
 
@@ -33,7 +34,7 @@ func InitMongo() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(options.Client().ApplyURI(uri).SetMonitor(metrics.NewMongoCommandMonitor("mongo")))
 	if err != nil {
 		pkg.Fatalf("[MongoDB] 连接配置失败: %v", err)
 	}

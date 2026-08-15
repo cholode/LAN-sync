@@ -8,8 +8,9 @@ import (
 	//"lan-im-go/models"
 	"context"
 	"lan-im-go/cache"
-	"lan-im-go/repository"
+	"lan-im-go/internal/metrics"
 	"lan-im-go/pkg"
+	"lan-im-go/repository"
 	"net/http"
 	"sync"
 	"time"
@@ -32,7 +33,7 @@ var upgrader = websocket.Upgrader{
 // 路由：authorized.GET("/ws", api.WsEndpoint(hub))
 // 前端连接地址：ws://ip:port/api/v1/ws?token=JWT令牌
 
-var CurrentNodeID = "node-1-8080"
+var CurrentNodeID = metrics.NodeID()
 
 func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -52,6 +53,8 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			return
 		}
 		pkg.Infof("WebSocket连接建立成功 UID:%d\n", realUserID)
+		connStart := time.Now()
+		metrics.WSConnected()
 
 		// 3. 极其核心的物理动作：全局宣告上线
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -84,6 +87,8 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 
 		// 6. 工业级防线：资源极致回收与状态宣告下线
 		defer func() {
+			metrics.WSDisconnected(time.Since(connStart), "normal")
+
 			// A. 本地物理连接与路由表清退
 			hub.Unsubscribe <- subscription
 			conn.Close()

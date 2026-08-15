@@ -6,13 +6,14 @@ import (
 	"github.com/gorilla/websocket"
 	"lan-im-go/cache"
 	"lan-im-go/config"
+	"lan-im-go/internal/metrics"
 	//"lan-im-go/models"
 	"lan-im-go/pkg"
 	"strconv"
 	"time"
 )
 
-var CurrentGatewayNodeID = "node-1-192.168.1.100"
+var CurrentGatewayNodeID = metrics.NodeID()
 
 const (
 	// WebSocket 配置参数
@@ -51,13 +52,15 @@ func (c *Client) ReadPump() {
 	})
 
 	for {
-		_, message, err := c.Conn.ReadMessage()
+		messageType, message, err := c.Conn.ReadMessage()
 		if err != nil {
+			metrics.ObserveWSReadError(err)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				pkg.Infof("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
 			}
 			break
 		}
+		metrics.ObserveWSReadMessage(messageType)
 
 		// 1. 强制要求前端上报 ClientMsgID
 		var payload struct {
@@ -125,7 +128,7 @@ func (c *Client) ReadPump() {
 // 	})
 
 // 	for {
-// 		_, message, err := c.Conn.ReadMessage()
+// 		messageType, message, err := c.Conn.ReadMessage()
 // 		pkg.Infof("收到客户端消息：%s\n", message)
 // 		if err != nil {
 // 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -178,24 +181,29 @@ func (c *Client) WritePump() {
 			// 写入消息数据
 			w, err := c.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
+				metrics.ObserveWSWriteError(err)
 				return
 			}
 			w.Write(message)
+			metrics.ObserveWSWriteMessage(websocket.TextMessage)
 
 			// 批量写入优化：合并积压消息，减少系统IO调用
 			n := len(c.Send)
 			for i := 0; i < n; i++ {
 				w.Write([]byte{'\n'})
 				w.Write(<-c.Send)
+				metrics.ObserveWSWriteMessage(websocket.TextMessage)
 			}
 
 			if err := w.Close(); err != nil {
+				metrics.ObserveWSWriteError(err)
 				return
 			}
 		case <-ticker.C:
 			// 定时发送心跳包，维持连接存活
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				metrics.ObserveWSWriteError(err)
 				return
 			}
 

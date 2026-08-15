@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"lan-im-go/agent"
 	"lan-im-go/api"
@@ -13,25 +12,42 @@ import (
 	"lan-im-go/internal/agentclient"
 	"lan-im-go/internal/archiver"
 	"lan-im-go/internal/imservice"
+	"lan-im-go/internal/metrics"
 	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/middleware"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"strings"
 	"time"
 )
 
 // main 程序入口函数
 func main() {
-	// 独立启动pprof性能分析服务
-	go func() {
-		err := http.ListenAndServe("0.0.0.0:6060", nil)
-		if err != nil {
-			panic("pprof start failed: " + err.Error())
+	// 独立启动指标与pprof管理服务
+	if strings.ToLower(os.Getenv("METRICS_ENABLED")) != "false" {
+		metricsAddr := os.Getenv("METRICS_ADDR")
+		if metricsAddr == "" {
+			metricsAddr = "0.0.0.0:6060"
 		}
-	}()
+		metricsPath := os.Getenv("METRICS_PATH")
+		if metricsPath == "" {
+			metricsPath = "/metrics"
+		}
+		if !strings.HasPrefix(metricsPath, "/") {
+			metricsPath = "/" + metricsPath
+		}
+		http.Handle(metricsPath, metrics.Handler())
+		go func() {
+			pkg.Infof("[系统启动] 指标与pprof管理服务监听 %s", metricsAddr)
+			if err := http.ListenAndServe(metricsAddr, nil); err != nil {
+				pkg.Fatalf("[致命错误] 指标服务启动失败: %v", err)
+			}
+		}()
+	}
 
 	// ================================
 	// 阶段1：环境与基础设施初始化
@@ -57,6 +73,7 @@ func main() {
 		messageRepo = repository.NewMongoMessageRepo(infrastructure.MessageCollection)
 	}
 	taskpool.Init(0) // 0=default workers(CPU*2)
+	metrics.RegisterTaskPoolMetrics()
 	if err := search.Init(context.Background()); err != nil {
 		pkg.Fatalf("[Elasticsearch] init failed: %v", err)
 	}
@@ -130,8 +147,6 @@ func main() {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
-
-	pprof.Register(r)
 
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,

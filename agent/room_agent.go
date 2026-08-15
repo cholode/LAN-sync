@@ -11,6 +11,7 @@ import (
 	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/internal/agentclient"
+	"lan-im-go/internal/metrics"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
@@ -60,6 +61,7 @@ func (a *RoomAgent) HandleMessage(msg AgentMessage) {
 	if !a.shouldTrigger(msg) {
 		return
 	}
+	metrics.ObserveAgentMessageTriggered(a.roomID, fmt.Sprintf("%d", a.config.TriggerMode))
 	if time.Since(a.lastReplyTime) < a.coolDown {
 		return
 	}
@@ -91,6 +93,9 @@ func (a *RoomAgent) processMessage(msg AgentMessage) {
 	ctx, cancel := context.WithTimeout(a.ctx, 60*time.Second)
 	defer cancel()
 	a.lastReplyTime = time.Now()
+	start := time.Now()
+	model := a.config.ModelName
+	metrics.AgentRequestStarted(a.roomID)
 
 	in := agentclient.IncomingMessage{
 		RoomID:     a.roomID,
@@ -105,13 +110,16 @@ func (a *RoomAgent) processMessage(msg AgentMessage) {
 
 	reply, skip, err := a.client.ProcessMessage(ctx, in)
 	if err != nil {
+		metrics.AgentRequestFinished(a.roomID, model, "error", start, err)
 		pkg.Infof("[RoomAgent] room=%d agent 调用失败: %v", a.roomID, err)
 		a.sendReply("AI 助手暂时不可用，请稍后再试。")
 		return
 	}
 	if skip {
+		metrics.AgentRequestFinished(a.roomID, model, "skip", start, nil)
 		return
 	}
+	metrics.AgentRequestFinished(a.roomID, model, "success", start, nil)
 	if reply != "" {
 		a.sendReply(reply)
 		pkg.Infof("[RoomAgent] room=%d 回复: %s", a.roomID, truncate(reply, 50))

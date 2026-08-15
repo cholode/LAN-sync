@@ -7,10 +7,12 @@ import (
 	"github.com/go-redis/redis/v8"
 
 	"lan-im-go/config"
+	"lan-im-go/internal/metrics"
 	"lan-im-go/internal/protocol"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
+	"time"
 )
 
 const (
@@ -62,6 +64,7 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 	defer pubsub.Close()
 
 	_, err := pubsub.Receive(ctx)
+	metrics.ObserveRedisPubSub("im:broadcast:room:*", "subscribe", err)
 	if err != nil {
 		pkg.Fatalf("[物理阻断] Redis Pub/Sub 全局总线连接失败: %v", err)
 	}
@@ -93,6 +96,7 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 			select {
 			case localHub.ForwardMessage <- msg:
 			default:
+				metrics.ObserveHubQueueDrop(msg.RoomID, "forward_queue_full")
 				pkg.Infoln("[性能预警] 本地 Hub 转发队列满，物理抛弃当前广播")
 			}
 		}
@@ -107,15 +111,22 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 		return
 	}
 
+	start := time.Now()
+	defer metrics.ObserveHubDispatchLatency(msg.RoomID, time.Since(start).Seconds())
+
 	// 小房间：内联分发，零开销
 	if len(clients) < poolDispatchThreshold {
+		dispatched := 0
 		for client := range clients {
 			select {
 			case client.Send <- payload:
+				dispatched++
 			default:
+				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
 				h.evictClient(client)
 			}
 		}
+		metrics.ObserveHubDispatch(msg.RoomID, dispatched)
 		return
 	}
 
@@ -125,7 +136,9 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 		taskpool.Go(func() {
 			select {
 			case c.Send <- payload:
+				metrics.ObserveHubDispatch(msg.RoomID, 1)
 			default:
+				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
 				// 慢客户端：通知 Hub 主循环安全清理
 				select {
 				case h.killClient <- c:
@@ -137,8 +150,6 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 	}
 }
 
-// evictClient 从所有房间和用户表中摘除客户端，关闭发送通道
-// 必须在 Hub 主循环中调用（非线程安全）
 func (h *Hub) evictClient(client *Client) {
 	pkg.Infof("[Local Hub 绞杀] 客户端 %d 阻塞，物理断开", client.UserID)
 	for rid, roomClients := range h.rooms {
@@ -173,6 +184,8 @@ func (h *Hub) Run(ctx context.Context) {
 				}
 				h.rooms[roomID][sub.Client] = true
 			}
+			metrics.SetHubClientCount(len(h.users))
+			metrics.SetHubRoomCount(len(h.rooms))
 
 		case unsub := <-h.Unsubscribe:
 			for rid, roomClients := range h.rooms {
@@ -185,6 +198,8 @@ func (h *Hub) Run(ctx context.Context) {
 				delete(h.users, unsub.Client.UserID)
 				close(unsub.Client.Send)
 			}
+			metrics.SetHubClientCount(len(h.users))
+			metrics.SetHubRoomCount(len(h.rooms))
 
 		case msg := <-h.ForwardMessage:
 			payload, err := json.Marshal(msg)
@@ -214,6 +229,8 @@ func (h *Hub) Run(ctx context.Context) {
 					delete(h.rooms, action.RoomID)
 				}
 			}
+			metrics.SetHubClientCount(len(h.users))
+			metrics.SetHubRoomCount(len(h.rooms))
 
 		case targetUserID := <-h.Kick:
 			if client, ok := h.users[targetUserID]; ok {
@@ -222,6 +239,8 @@ func (h *Hub) Run(ctx context.Context) {
 
 		case client := <-h.killClient:
 			h.evictClient(client)
+			metrics.SetHubClientCount(len(h.users))
+			metrics.SetHubRoomCount(len(h.rooms))
 		}
 	}
 }
