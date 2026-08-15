@@ -183,15 +183,17 @@ func (s *FileService) DeleteFile(ctx context.Context, id int64, action AuditActi
 	if err != nil {
 		return err
 	}
+	// \u5148\u5220\u9664\u6570\u636e\u5e93\u8bb0\u5f55\uff0c\u518d\u5220\u9664\u5bf9\u8c61\u5b58\u50a8\u6587\u4ef6\uff1b\u82e5\u5bf9\u8c61\u5220\u9664\u5931\u8d25\u5219\u56de\u8865\u6570\u636e\u5e93\u8bb0\u5f55\uff0c\u907f\u514d\u4ea7\u751f\u5b64\u513f\u5bf9\u8c61\u6216\u60ac\u7a7a\u8bb0\u5f55\u3002
+	if err := s.db.WithContext(ctx).Delete(&models.FileRecord{}, id).Error; err != nil {
+		return err
+	}
 	if s.storage != nil {
 		delCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		if err := s.storage.Delete(delCtx, record.ObjectKey); err != nil {
-			return fmt.Errorf("??????????: %w", err)
+			_ = s.db.WithContext(ctx).Create(&record)
+			return fmt.Errorf("\u5bf9\u8c61\u5b58\u50a8\u6587\u4ef6\u5220\u9664\u5931\u8d25: %w", err)
 		}
-	}
-	if err := s.db.WithContext(ctx).Delete(&models.FileRecord{}, id).Error; err != nil {
-		return err
 	}
 	if s.audit != nil {
 		_ = s.audit.Log(ctx, AuditEntry{

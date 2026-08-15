@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"lan-im-go/cache"
 	"lan-im-go/core"
 	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/repository"
@@ -21,17 +22,23 @@ func AdminDeleteUser(hub *core.Hub) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "非法的用户 ID 参数"})
 			return
 		}
+		if targetUserID == c.GetInt64("user_id") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "不能删除当前登录的管理员账号"})
+			return
+		}
 
 		// 1. 数据库软删除用户
-		// 配合中间件，用户的JWT令牌后续请求将失效
 		if err := repository.User.SoftDeleteUser(targetUserID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "用户删除失败，请查看日志"})
 			return
 		}
 
-		// 2. 强制断开用户的WebSocket长连接
-		// 若用户在线，立即关闭连接并禁止重连
-		hub.Kick <- targetUserID
+		// 2. 非阻塞地断开在线连接，并清理 Redis 在线状态
+		select {
+		case hub.Kick <- targetUserID:
+		default:
+		}
+		_ = cache.SetUserOffline(c.Request.Context(), targetUserID)
 
 		if adminAuditServiceVar != nil {
 			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
@@ -63,36 +70,27 @@ func AdminDeleteRoom(hub *core.Hub) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "非法的群聊 ID 参数"})
 			return
 		}
-
-		// 1. 数据库软删除群聊
-		// 删除后，该群聊的相关接口请求将被拦截
-		if err := repository.Room.SoftDeleteRoom(targetRoomID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "解散群聊失败"})
+		if adminRoomService == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "房间服务未初始化"})
 			return
 		}
 
-		// 2. 向群内所有在线用户广播解散通知
-		// 保证前端实时感知群聊状态变更，提升用户体验
-		// sysMsg := &models.Message{
-		// 	RoomID:   targetRoomID,
-		// 	SenderID: 0, // 系统标识
-		// 	Content:  "【系统通知】该群聊已被管理员解散",
-		// }
-		// 通过核心引擎广播消息
-		//hub.Broadcast <- sysMsg
-
-		if adminAuditServiceVar != nil {
-			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
-				AdminUserID:   c.GetInt64("user_id"),
-				AdminUsername: c.GetString("admin_username"),
-				Action:        "room.delete",
-				TargetType:    "room",
-				TargetID:      strconv.FormatInt(targetRoomID, 10),
-				RequestID:     c.GetString("request_id"),
-				RemoteIP:      c.ClientIP(),
-				UserAgent:     c.Request.UserAgent(),
-				Result:        "success",
-			})
+		adminID := c.GetInt64("user_id")
+		adminName := c.GetString("admin_username")
+		if adminName == "" {
+			adminName = strconv.FormatInt(adminID, 10)
+		}
+		err = adminRoomService.ApplyAction(c.Request.Context(), targetRoomID, adminservice.RoomAction{
+			Action:      "disband",
+			AdminUserID: adminID,
+			AdminName:   adminName,
+			RequestID:   c.GetString("request_id"),
+			RemoteIP:    c.ClientIP(),
+			UserAgent:   c.Request.UserAgent(),
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "解散群聊失败"})
+			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{

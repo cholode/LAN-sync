@@ -52,6 +52,19 @@ func AdminAlertEvaluate(c *gin.Context) {
 	items, err := adminAlertService.Evaluate(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u544a\u8b66\u8bc4\u4f30\u5931\u8d25"})
+		if adminAuditServiceVar != nil {
+			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
+				AdminUserID:   c.GetInt64("user_id"),
+				AdminUsername: c.GetString("admin_username"),
+				Action:        "alert.evaluate",
+				TargetType:    "alert",
+				TargetID:      "all",
+				RequestID:     c.GetString("request_id"),
+				RemoteIP:      c.ClientIP(),
+				UserAgent:     c.Request.UserAgent(),
+				Result:        "success",
+			})
+		}
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
@@ -71,6 +84,19 @@ func AdminAlertResolve(c *gin.Context) {
 	if err := adminAlertService.Resolve(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u5904\u7406\u544a\u8b66\u5931\u8d25"})
 		return
+		if adminAuditServiceVar != nil {
+			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
+				AdminUserID:   c.GetInt64("user_id"),
+				AdminUsername: c.GetString("admin_username"),
+				Action:        "alert.resolve",
+				TargetType:    "alert",
+				TargetID:      strconv.FormatInt(id, 10),
+				RequestID:     c.GetString("request_id"),
+				RemoteIP:      c.ClientIP(),
+				UserAgent:     c.Request.UserAgent(),
+				Result:        "success",
+			})
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "\u5df2\u6807\u8bb0\u4e3a\u5df2\u5904\u7406"})
 }

@@ -21,7 +21,7 @@ func InitAdminRoomService(svc *adminservice.RoomService) {
 // GET /api/v1/admin/rooms
 func AdminRoomList(c *gin.Context) {
 	if adminRoomService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "房间服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -78,7 +78,7 @@ func AdminRoomDetail(c *gin.Context) {
 		return
 	}
 	if adminRoomService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "房间服务未初始化"})
 		return
 	}
 	detail, err := adminRoomService.GetRoomDetail(c.Request.Context(), roomID)
@@ -106,7 +106,15 @@ func AdminRoomAction(c *gin.Context) {
 		return
 	}
 	if adminRoomService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "房间服务未初始化"})
+		return
+	}
+	permission := roomActionPermission(req.Action)
+	if permission == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的群聊操作"})
+		return
+	}
+	if !requireActionPermission(c, permission) {
 		return
 	}
 	adminID := c.GetInt64("user_id")

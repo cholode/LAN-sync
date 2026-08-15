@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -307,7 +308,7 @@ func (s *ModerationService) ApplyAction(ctx context.Context, id int64, action Mo
 	case "confirmed":
 		event.ReviewStatus = "confirmed"
 	default:
-		event.ReviewStatus = "reviewed"
+		return fmt.Errorf("\u4e0d\u652f\u6301\u7684\u5ba1\u6838\u64cd\u4f5c: %s", action.Action)
 	}
 
 	event.ReviewedBy = action.AdminUserID

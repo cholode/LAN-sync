@@ -21,7 +21,7 @@ func InitAdminUserService(svc *adminservice.UserService) {
 // GET /api/v1/admin/users
 func AdminUserList(c *gin.Context) {
 	if adminUserService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "用户服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -72,7 +72,7 @@ func AdminUserDetail(c *gin.Context) {
 		return
 	}
 	if adminUserService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "用户服务未初始化"})
 		return
 	}
 	detail, err := adminUserService.GetUserDetail(c.Request.Context(), userID)
@@ -99,7 +99,15 @@ func AdminUserAction(c *gin.Context) {
 		return
 	}
 	if adminUserService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "用户服务未初始化"})
+		return
+	}
+	permission := userActionPermission(req.Action)
+	if permission == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的用户操作"})
+		return
+	}
+	if !requireActionPermission(c, permission) {
 		return
 	}
 	adminID := c.GetInt64("user_id")

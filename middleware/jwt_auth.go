@@ -14,7 +14,7 @@ func JWTAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var tokenString string
 		// 1. 从标准HTTP请求头中获取Token
-		pkg.Infof("[JWT认证] 收到请求: %s %s", c.Request.Method, c.Request.URL.String())
+		pkg.Infof("[JWT认证] 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" {
 			parts := strings.SplitN(authHeader, " ", 2)

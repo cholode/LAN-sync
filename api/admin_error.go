@@ -70,6 +70,19 @@ func AdminErrorResolve(c *gin.Context) {
 	if err := adminErrorService.Resolve(c.Request.Context(), id, adminID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u6807\u8bb0\u5df2\u5904\u7406\u5931\u8d25"})
 		return
+		if adminAuditServiceVar != nil {
+			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
+				AdminUserID:   adminID,
+				AdminUsername: c.GetString("admin_username"),
+				Action:        "error.resolve",
+				TargetType:    "system_error",
+				TargetID:      strconv.FormatInt(id, 10),
+				RequestID:     c.GetString("request_id"),
+				RemoteIP:      c.ClientIP(),
+				UserAgent:     c.Request.UserAgent(),
+				Result:        "success",
+			})
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "\u5df2\u6807\u8bb0\u4e3a\u5df2\u5904\u7406"})
 }

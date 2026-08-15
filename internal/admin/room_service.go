@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -285,7 +286,7 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 			return s.writeRoomAudit(ctx, before, room, action)
 		}
 	default:
-		return nil
+		return fmt.Errorf("\u4e0d\u652f\u6301\u7684\u7fa4\u804a\u64cd\u4f5c: %s", action.Action)
 	}
 
 	if err := s.db.WithContext(ctx).Save(&room).Error; err != nil {
@@ -301,7 +302,8 @@ func (s *RoomService) updateMemberRole(ctx context.Context, roomID, userID int64
 	if err != nil {
 		return err
 	}
-	return s.writeRoomAudit(ctx, models.Room{}, models.Room{}, action)
+	room := models.Room{ID: roomID}
+	return s.writeRoomAudit(ctx, room, room, action)
 }
 
 func (s *RoomService) writeRoomAudit(ctx context.Context, before, after models.Room, action RoomAction) error {

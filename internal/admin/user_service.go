@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -225,7 +226,7 @@ func (s *UserService) ApplyAction(ctx context.Context, userID int64, action User
 		after := user
 		return s.writeUserAudit(ctx, before, after, action)
 	default:
-		return nil
+		return fmt.Errorf("\u4e0d\u652f\u6301\u7684\u7528\u6237\u64cd\u4f5c: %s", action.Action)
 	}
 
 	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
