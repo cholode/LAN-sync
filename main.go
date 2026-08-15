@@ -16,6 +16,7 @@ import (
 	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/middleware"
+	"lan-im-go/models"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
 	"net/http"
@@ -192,15 +193,23 @@ func main() {
 
 	// 管理员路由
 	admin := r.Group("/api/v1/admin")
-	admin.Use(middleware.JWTAuth(), middleware.SuperAdminOnly())
+	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin())
 	{
-		admin.DELETE("/users/:id", api.AdminDeleteUser(hub))
-		admin.DELETE("/rooms/:id", api.AdminDeleteRoom(hub))
+		admin.DELETE("/users/:id", middleware.RequirePermission(models.PermUserDelete), api.AdminDeleteUser(hub))
+		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 
 	// ================================
 	// 静态文件服务 - 前端 SPA
 	// ================================
+	// ??????????????
+	r.GET("/admin", func(c *gin.Context) {
+		c.File("./frontend/dist/admin.html")
+	})
+	r.GET("/admin/*path", func(c *gin.Context) {
+		c.File("./frontend/dist/admin.html")
+	})
+
 	r.Static("/assets", "./frontend/dist/assets")
 	r.GET("/", func(c *gin.Context) {
 		c.File("./frontend/dist/index.html")

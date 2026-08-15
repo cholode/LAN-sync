@@ -45,6 +45,7 @@ func InitDatabase(dsn string) {
 		&models.RoomMember{},
 		&models.AgentConfig{},
 		&models.RAGChunk{},
+		&models.AdminAuditLog{},
 	}
 	if os.Getenv("MESSAGE_STORE") != "mongo" {
 		migrateModels = append(migrateModels, &models.Message{})

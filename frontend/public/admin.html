@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LAN-IM ???????</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Microsoft YaHei", system-ui, -apple-system, sans-serif; background: #f4f6fb; color: #1f2937; }
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .login-card { width: 360px; background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 12px 30px rgba(15,23,42,.08); }
+    h1 { font-size: 20px; margin: 0 0 18px; }
+    label { display: block; font-size: 13px; margin-bottom: 6px; color: #475569; }
+    input { width: 100%; padding: 10px 12px; margin-bottom: 14px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    button { width: 100%; padding: 10px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .error { color: #dc2626; font-size: 13px; min-height: 20px; margin-top: 8px; }
+    .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+    aside { background: #111827; color: #e5e7eb; padding: 18px 12px; }
+    aside h1 { color: #fff; font-size: 16px; padding: 0 8px 14px; }
+    aside a { display: block; color: #cbd5e1; text-decoration: none; padding: 10px 12px; border-radius: 8px; margin-bottom: 4px; }
+    aside a.active, aside a:hover { background: #1f2937; color: #fff; }
+    main { padding: 24px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .placeholder { background: #fff; border-radius: 12px; padding: 32px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div id="login" class="login-wrap">
+    <form class="login-card" id="loginForm">
+      <h1>???????</h1>
+      <label>?????</label>
+      <input id="username" name="username" autocomplete="username" required />
+      <label>??</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+      <button id="loginBtn" type="submit">??</button>
+      <div class="error" id="loginError"></div>
+    </form>
+  </div>
+
+  <div id="shell" class="shell" style="display:none">
+    <aside>
+      <h1>????</h1>
+      <a href="#dashboard" data-page="dashboard" class="active">Dashboard</a>
+      <a href="#users" data-page="users">????</a>
+      <a href="#rooms" data-page="rooms">????</a>
+      <a href="#connections" data-page="connections">????</a>
+      <a href="#files" data-page="files">????</a>
+      <a href="#audit-logs" data-page="audit-logs">????</a>
+    </aside>
+    <main>
+      <div class="toolbar">
+        <h2 id="pageTitle">Dashboard</h2>
+        <button id="logoutBtn" style="width:auto;background:#475569">??</button>
+      </div>
+      <div id="content" class="placeholder">????????????????? /api/v1/admin/*?</div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = '/api/v1';
+    const tokenKey = 'lan_im_admin_token';
+    const userKey = 'lan_im_admin_user';
+    const pageTitles = {
+      dashboard: 'Dashboard',
+      users: '????',
+      rooms: '????',
+      connections: '????',
+      files: '????',
+      'audit-logs': '????'
+    };
+
+    function getToken() { return localStorage.getItem(tokenKey); }
+    function setSession(token, user) {
+      localStorage.setItem(tokenKey, token);
+      localStorage.setItem(userKey, JSON.stringify(user || null));
+    }
+    function clearSession() {
+      localStorage.removeItem(tokenKey);
+      localStorage.removeItem(userKey);
+    }
+
+    function showLogin() {
+      document.getElementById('login').style.display = 'flex';
+      document.getElementById('shell').style.display = 'none';
+    }
+    function showShell() {
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('shell').style.display = 'grid';
+    }
+
+    async function login(username, password) {
+      const res = await fetch(API_BASE + '/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.msg || '????');
+      const role = Number(data.user && data.user.role);
+      if (role < 1) throw new Error('???????????????');
+      setSession(data.token, data.user);
+      showShell();
+      selectPage('dashboard');
+    }
+
+    function selectPage(page) {
+      document.querySelectorAll('aside a').forEach(a => {
+        a.classList.toggle('active', a.dataset.page === page);
+      });
+      document.getElementById('pageTitle').textContent = pageTitles[page] || page;
+      document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const err = document.getElementById('loginError');
+      err.textContent = '';
+      btn.disabled = true;
+      try {
+        await login(
+          document.getElementById('username').value.trim(),
+          document.getElementById('password').value
+        );
+      } catch (error) {
+        err.textContent = error.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      clearSession();
+      showLogin();
+    });
+
+    document.querySelectorAll('aside a').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        selectPage(a.dataset.page);
+      });
+    });
+
+    if (getToken()) {
+      const user = JSON.parse(localStorage.getItem(userKey) || 'null');
+      const role = Number(user && user.role);
+      if (role >= 1) {
+        showShell();
+        selectPage('dashboard');
+      } else {
+        clearSession();
+        showLogin();
+      }
+    } else {
+      showLogin();
+    }
+  </script>
+</body>
+</html>
