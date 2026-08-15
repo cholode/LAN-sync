@@ -147,6 +147,7 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 				dispatched++
 			default:
 				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
+				metrics.RecordWSSlowClient()
 				h.requestEvict(client)
 			}
 		}
@@ -163,6 +164,7 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 				metrics.ObserveHubDispatch(msg.RoomID, 1)
 			default:
 				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
+				metrics.RecordWSSlowClient()
 				h.requestEvict(c)
 			}
 		})

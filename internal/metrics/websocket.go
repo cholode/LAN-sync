@@ -10,32 +10,32 @@ import (
 var (
 	wsConnectionsActive = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "im_ws_connections_active",
-		Help: "当前活跃的 WebSocket 连接数",
+		Help: "Current active WebSocket connections",
 	})
 	wsConnectionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "im_ws_connections_total",
-		Help: "WebSocket 连接累计数",
+		Help: "Total WebSocket connections",
 	}, []string{"node_id", "status", "close_reason"})
 	wsConnectionDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "im_ws_connection_duration_seconds",
-		Help:    "WebSocket 连接存活时长分布",
+		Help:    "WebSocket connection duration distribution",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"node_id", "close_reason"})
 	wsReadMessagesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "im_ws_read_messages_total",
-		Help: "WebSocket 读取消息累计数",
+		Help: "Total WebSocket read messages",
 	}, []string{"node_id", "message_type"})
 	wsWriteMessagesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "im_ws_write_messages_total",
-		Help: "WebSocket 写出消息累计数",
+		Help: "Total WebSocket written messages",
 	}, []string{"node_id", "message_type"})
 	wsReadErrorsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "im_ws_read_errors_total",
-		Help: "WebSocket 读取错误累计数",
+		Help: "Total WebSocket read errors",
 	}, []string{"node_id", "error_type"})
 	wsWriteErrorsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "im_ws_write_errors_total",
-		Help: "WebSocket 写出错误累计数",
+		Help: "Total WebSocket write errors",
 	}, []string{"node_id", "error_type"})
 )
 
@@ -51,6 +51,7 @@ func init() {
 
 func WSConnected() {
 	wsConnectionsActive.Inc()
+	RecordWSConnected()
 }
 
 func WSDisconnected(duration time.Duration, closeReason string) {
@@ -60,14 +61,17 @@ func WSDisconnected(duration time.Duration, closeReason string) {
 	}
 	wsConnectionsTotal.WithLabelValues(nodeID, "success", closeReason).Inc()
 	wsConnectionDurationSeconds.WithLabelValues(nodeID, closeReason).Observe(duration.Seconds())
+	RecordWSDisconnected(duration, closeReason != "normal")
 }
 
 func ObserveWSReadMessage(messageType int) {
 	wsReadMessagesTotal.WithLabelValues(nodeID, wsMessageType(messageType)).Inc()
+	RecordWSReadMessage()
 }
 
 func ObserveWSWriteMessage(messageType int) {
 	wsWriteMessagesTotal.WithLabelValues(nodeID, wsMessageType(messageType)).Inc()
+	RecordWSWriteMessage()
 }
 
 func ObserveWSReadError(err error) {

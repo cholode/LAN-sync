@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	adminservice "lan-im-go/internal/admin"
+	"lan-im-go/internal/metrics"
 )
 
 var adminDashboardService *adminservice.DashboardService
@@ -30,4 +31,10 @@ func AdminDashboardOverview(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, overview)
+}
+
+// AdminDashboardRuntime ???????????
+// GET /api/v1/admin/dashboard/runtime
+func AdminDashboardRuntime(c *gin.Context) {
+	c.JSON(http.StatusOK, metrics.RuntimeSnapshotNow())
 }

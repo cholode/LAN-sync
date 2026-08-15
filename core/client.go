@@ -189,10 +189,12 @@ func (c *Client) WritePump() {
 
 			// 批量写入优化：合并积压消息，减少系统IO调用
 			n := len(c.Send)
+			metrics.SetWSSendQueueBacklog(n)
 			for i := 0; i < n; i++ {
 				w.Write([]byte{'\n'})
 				w.Write(<-c.Send)
 				metrics.ObserveWSWriteMessage(websocket.TextMessage)
+				metrics.SetWSSendQueueBacklog(0)
 			}
 
 			if err := w.Close(); err != nil {

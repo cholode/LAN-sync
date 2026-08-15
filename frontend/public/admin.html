@@ -163,8 +163,51 @@
           metricCard('????????', m.file_today) +
           metricCard('?? @Agent ????', m.agent_today) +
           '</div>';
+        loadRuntime();
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function loadRuntime() {
+      const content = document.getElementById('content');
+      try {
+        const data = await request('/admin/dashboard/runtime');
+        const ws = data.websocket;
+        const go = data.golang;
+        const api = data.api;
+        const html = '<h3 style="margin:22px 0 12px">??????</h3>' +
+          '<div class="metric-grid">' +
+          metricCard('?????', ws.current_connections) +
+          metricCard('?????', ws.established_total) +
+          metricCard('?????', ws.closed_total) +
+          metricCard('???????', ws.abnormal_closed_total) +
+          metricCard('????????(ms)', Math.round(ws.average_connection_duration_ms)) +
+          metricCard('????????', ws.read_messages_per_minute) +
+          metricCard('????????', ws.write_messages_per_minute) +
+          metricCard('???????', ws.send_queue_backlog) +
+          metricCard('??????', ws.slow_clients) +
+          metricCard('Goroutine ??', go.goroutines) +
+          metricCard('GOMAXPROCS', go.gomaxprocs) +
+          metricCard('Heap Alloc', go.heap_alloc) +
+          metricCard('Heap Sys', go.heap_sys) +
+          metricCard('GC ??', go.gc_count) +
+          metricCard('?? GC ??', go.last_gc_unix ? new Date(go.last_gc_unix * 1000).toLocaleString() : '-') +
+          metricCard('GC Pause(ns)', go.gc_pause_ns) +
+          metricCard('??????(s)', Math.round(go.uptime_seconds)) +
+          metricCard('?? 1 ?? QPS', api.qps_1m.toFixed(2)) +
+          metricCard('?? 5 ?? QPS', api.qps_5m.toFixed(2)) +
+          metricCard('API ??????(ms)', api.average_latency_ms.toFixed(2)) +
+          metricCard('P50 ??(ms)', api.p50_latency_ms.toFixed(2)) +
+          metricCard('P95 ??(ms)', api.p95_latency_ms.toFixed(2)) +
+          metricCard('P99 ??(ms)', api.p99_latency_ms.toFixed(2)) +
+          metricCard('4xx ??', api.status_4xx) +
+          metricCard('5xx ??', api.status_5xx) +
+          metricCard('???', (api.error_rate * 100).toFixed(2) + '%') +
+          '</div>';
+        content.insertAdjacentHTML('beforeend', html);
+      } catch (error) {
+        content.insertAdjacentHTML('beforeend', '<div class="error">?????????' + error.message + '</div>');
       }
     }
 

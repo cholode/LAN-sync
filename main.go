@@ -155,6 +155,11 @@ func main() {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		metrics.ObserveAPIRequest(c.Writer.Status(), time.Since(start))
+	})
 
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
@@ -202,6 +207,7 @@ func main() {
 	admin := r.Group("/api/v1/admin")
 	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin())
 	{
+		admin.GET("/dashboard/runtime", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardRuntime)
 		admin.GET("/dashboard/overview", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardOverview)
 		admin.DELETE("/users/:id", middleware.RequirePermission(models.PermUserDelete), api.AdminDeleteUser(hub))
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
