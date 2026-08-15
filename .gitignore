@@ -12,3 +12,7 @@ lan-im-go-new.exe
 __pycache__/
 *.py[cod]
 agent-service/.venv/
+cmd/migrate-mysql-to-mongo/main.go
+models/message_document_helper.go
+models/message_document.go
+migrate-mysql-to-mongo.exe
