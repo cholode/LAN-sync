@@ -52,6 +52,7 @@
       <h1>????</h1>
       <a href="#dashboard" data-page="dashboard" class="active">Dashboard</a>
       <a href="#message-traffic" data-page="message-traffic">????</a>
+      <a href="#agent" data-page="agent">Agent??</a>
       <a href="#users" data-page="users">????</a>
       <a href="#rooms" data-page="rooms">????</a>
       <a href="#connections" data-page="connections">????</a>
@@ -74,6 +75,7 @@
     const pageTitles = {
       dashboard: 'Dashboard',
       'message-traffic': '????',
+      agent: 'Agent??',
       users: '????',
       rooms: '????',
       connections: '????',
@@ -124,6 +126,8 @@
         loadDashboard();
       } else if (page === 'message-traffic') {
         loadMessageTraffic();
+      } else if (page === 'agent') {
+        loadAgentDashboard();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -171,6 +175,38 @@
           metricCard('?? @Agent ????', m.agent_today) +
           '</div>';
         loadRuntime();
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function loadAgentDashboard() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">???? Agent ??...</div>';
+      try {
+        const data = await request('/admin/dashboard/agent');
+        const failRows = (data.recent_failures || []).map(item => '<tr><td>' + new Date(item.time).toLocaleString() + '</td><td>' + item.model + '</td><td>' + item.request_id + '</td><td>' + item.error_type + '</td><td>' + item.http_status + '</td><td>' + item.latency_ms.toFixed(1) + '</td><td>' + item.retries + '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">Agent ????</h3>' +
+          '<div class="metric-grid">' +
+          metricCard('?? Agent ????', data.calls_today) +
+          metricCard('?? Agent ???', data.current_requests) +
+          metricCard('?????', (data.success_rate * 100).toFixed(2) + '%') +
+          metricCard('?????', (data.failure_rate * 100).toFixed(2) + '%') +
+          metricCard('??????(ms)', data.average_response_ms.toFixed(2)) +
+          metricCard('P95 ????(ms)', data.p95_response_ms.toFixed(2)) +
+          metricCard('?? Token ???', data.total_tokens) +
+          metricCard('?? Token', data.input_tokens) +
+          metricCard('?? Token', data.output_tokens) +
+          metricCard('?????? Token', data.average_tokens_per_call.toFixed(2)) +
+          metricCard('Tool Calling ??', data.tool_calls) +
+          metricCard('Tool Calling ???', (data.tool_success_rate * 100).toFixed(2) + '%') +
+          metricCard('RAG ????', data.rag_calls) +
+          metricCard('???? Tool ????', data.time_tool_calls) +
+          metricCard('??????????', data.moderation_calls) +
+          metricCard('Embedding ????', data.embedding_calls) +
+          metricCard('Embedding ????', data.embedding_failures) +
+          '</div>' +
+          '<h3>???? Top Failure</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th><th>Request ID</th><th>????</th><th>HTTP Status</th><th>??(ms)</th><th>????</th></tr></thead><tbody>' + failRows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }

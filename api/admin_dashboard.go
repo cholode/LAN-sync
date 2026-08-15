@@ -53,3 +53,9 @@ func AdminDashboardMessageTraffic(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, traffic)
 }
+
+// AdminAgentDashboard ?? Agent ???????
+// GET /api/v1/admin/dashboard/agent
+func AdminAgentDashboard(c *gin.Context) {
+	c.JSON(http.StatusOK, metrics.AgentRuntimeSnapshotNow())
+}
