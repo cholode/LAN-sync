@@ -131,7 +131,9 @@ func main() {
 	adminErrorService := adminservice.NewErrorCenterService(infrastructure.DB)
 	api.InitAdminErrorService(adminErrorService)
 	api.InitAdminAuditService(adminAuditService)
-	api.InitAdminHealthService(adminservice.NewHealthService(infrastructure.DB, config.RedisClient, api.Storage, hub))
+	adminHealthService := adminservice.NewHealthService(infrastructure.DB, config.RedisClient, api.Storage, hub)
+	api.InitAdminHealthService(adminHealthService)
+	api.InitAdminAlertService(adminservice.NewAlertService(infrastructure.DB, adminHealthService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -257,6 +259,10 @@ func main() {
 		admin.POST("/errors/:id/resolve", middleware.RequirePermission(models.PermSystemRead), api.AdminErrorResolve)
 		admin.GET("/audit-logs", middleware.RequirePermission(models.PermAuditRead), api.AdminAuditList)
 		admin.GET("/health", middleware.RequirePermission(models.PermSystemRead), api.AdminHealthCheck)
+		admin.GET("/alerts", middleware.RequirePermission(models.PermSystemRead), api.AdminAlertList)
+		admin.GET("/alerts/unresolved-count", middleware.RequireAnyPermission(models.PermDashboardRead, models.PermSystemRead), api.AdminAlertUnresolvedCount)
+		admin.POST("/alerts/evaluate", middleware.RequirePermission(models.PermSystemRead), api.AdminAlertEvaluate)
+		admin.POST("/alerts/:id/resolve", middleware.RequirePermission(models.PermSystemRead), api.AdminAlertResolve)
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 
