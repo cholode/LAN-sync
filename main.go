@@ -128,6 +128,8 @@ func main() {
 	api.InitAdminFileService(adminservice.NewFileService(infrastructure.DB, api.Storage, adminAuditService))
 	api.InitAdminAgentConfigService(adminservice.NewAgentConfigService(infrastructure.DB, adminAuditService))
 	api.InitAdminToolCallService(adminservice.NewToolCallService(infrastructure.DB))
+	adminErrorService := adminservice.NewErrorCenterService(infrastructure.DB)
+	api.InitAdminErrorService(adminErrorService)
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -164,7 +166,7 @@ func main() {
 	gin.SetMode(gin.DebugMode)
 
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(middleware.RecoveryWithErrorRecorder(adminErrorService))
 	r.Use(func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
@@ -249,6 +251,8 @@ func main() {
 		admin.PUT("/agent-config", middleware.RequirePermission(models.PermAgentConfig), api.AdminAgentConfigUpdate)
 		admin.POST("/agent-config/rollback", middleware.RequirePermission(models.PermAgentConfig), api.AdminAgentConfigRollback)
 		admin.GET("/tool-calls", middleware.RequirePermission(models.PermAgentRead), api.AdminToolCallList)
+		admin.GET("/errors", middleware.RequirePermission(models.PermSystemRead), api.AdminErrorList)
+		admin.POST("/errors/:id/resolve", middleware.RequirePermission(models.PermSystemRead), api.AdminErrorResolve)
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 

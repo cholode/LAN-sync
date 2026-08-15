@@ -55,6 +55,7 @@
       <a href="#agent" data-page="agent">Agent监控</a>
       <a href="#agent-config" data-page="agent-config">Agent配置</a>
       <a href="#tool-calls" data-page="tool-calls">Tool Calls</a>
+      <a href="#errors" data-page="errors">系统错误</a>
       <a href="#rag" data-page="rag">RAG/Qdrant</a>
       <a href="#moderation" data-page="moderation">????</a>
       <a href="#users" data-page="users">????</a>
@@ -82,6 +83,7 @@
       agent: 'Agent监控',
       'agent-config': 'Agent配置',
       'tool-calls': 'Tool Calling 运行记录',
+      errors: '系统错误中心',
       rag: 'RAG/Qdrant',
       moderation: '????',
       users: '????',
@@ -152,6 +154,8 @@
         loadAgentConfigPage();
       } else if (page === 'tool-calls') {
         loadToolCalls();
+      } else if (page === 'errors') {
+        loadErrors();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -248,6 +252,39 @@
     }
     window.connectionClose = connectionClose;
     window.connectionForceOffline = connectionForceOffline;
+
+    async function loadErrors() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d\u7cfb\u7edf\u9519\u8bef...</div>';
+      try {
+        const module = document.getElementById('errorModule') ? document.getElementById('errorModule').value : '';
+        const errorType = document.getElementById('errorType') ? document.getElementById('errorType').value : '';
+        const resolved = document.getElementById('errorResolved') ? document.getElementById('errorResolved').value : '';
+        const params = new URLSearchParams({ page: 1, page_size: 50 });
+        if (module) params.set('module', module);
+        if (errorType) params.set('error_type', errorType);
+        if (resolved) params.set('resolved', resolved);
+        const data = await request('/admin/errors?' + params.toString());
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + new Date(item.timestamp).toLocaleString() + '</td><td>' + item.module + '</td><td>' + item.error_type + '</td><td>' + item.error_message + '</td><td>' + item.request_id + '</td><td>' + item.user_id + '</td><td>' + item.room_id + '</td><td>' + (item.resolved ? '\u5df2\u5904\u7406' : '\u672a\u5904\u7406') + '</td><td><button onclick="resolveError(' + item.id + ')">\u6807\u8bb0\u5df2\u5904\u7406</button></td></tr>').join('');
+        content.innerHTML = '<div class="toolbar"><input id="errorModule" placeholder="\u6a21\u5757"><input id="errorType" placeholder="\u9519\u8bef\u7c7b\u578b"><select id="errorResolved"><option value="">\u5168\u90e8</option><option value="false">\u672a\u5904\u7406</option><option value="true">\u5df2\u5904\u7406</option></select><button onclick="loadErrors()">\u67e5\u8be2</button></div>' +
+          '<h3 style="margin-top:14px">\u7cfb\u7edf\u9519\u8bef\u4e2d\u5fc3</h3><table class="admin-table"><thead><tr><th>ID</th><th>\u65f6\u95f4</th><th>\u6a21\u5757</th><th>\u9519\u8bef\u7c7b\u578b</th><th>\u9519\u8bef\u4fe1\u606f</th><th>Request ID</th><th>\u7528\u6237ID</th><th>\u7fa4\u804aID</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function resolveError(id) {
+      try {
+        await request('/admin/errors/' + id + '/resolve', { method: 'POST' });
+        alert('\u5df2\u6807\u8bb0\u4e3a\u5df2\u5904\u7406');
+        loadErrors();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    window.loadErrors = loadErrors;
+    window.resolveError = resolveError;
 
     async function loadToolCalls() {
       const content = document.getElementById('content');
