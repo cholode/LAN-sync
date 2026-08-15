@@ -151,6 +151,7 @@ func main() {
 	}()
 
 	agentMgr := agent.NewAgentManager(infrastructure.DB, agentClient, hub)
+	api.InitAdminRoomService(adminservice.NewRoomService(infrastructure.DB, adminMessageStore, hub, agentMgr, adminAuditService))
 	go agentMgr.Start(ctx)
 
 	// ================================
@@ -226,6 +227,9 @@ func main() {
 		admin.GET("/users/:id", middleware.RequirePermission(models.PermUserRead), api.AdminUserDetail)
 		admin.POST("/users/:id/action", middleware.RequireAnyPermission(models.PermUserBan, models.PermUserKick, models.PermUserRoleUpdate), api.AdminUserAction)
 		admin.DELETE("/users/:id", middleware.RequirePermission(models.PermUserDelete), api.AdminDeleteUser(hub))
+		admin.GET("/rooms", middleware.RequirePermission(models.PermRoomRead), api.AdminRoomList)
+		admin.GET("/rooms/:id", middleware.RequirePermission(models.PermRoomRead), api.AdminRoomDetail)
+		admin.POST("/rooms/:id/action", middleware.RequireAnyPermission(models.PermRoomFreeze, models.PermRoomDelete, models.PermAgentConfig), api.AdminRoomAction)
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 

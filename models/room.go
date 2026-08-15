@@ -8,15 +8,18 @@ import (
 
 // Room 统一房间表
 type Room struct {
-	ID           int64  `gorm:"primaryKey;autoIncrement;comment:'房间唯一ID'"`
-	Type         int8   `gorm:"type:tinyint;not null;comment:'1:双人私聊 2:多人普通群'"`
-	Name         string `gorm:"type:varchar(128);default:'';comment:'群名称，私聊可为空'"`
-	CreatorID    int64  `gorm:"type:bigint unsigned;not null;index:idx_creator_id;comment:'创建者ID'"`
-	AgentEnabled bool   `gorm:"type:tinyint(1);default:0;comment:'是否启用群Agent助手'"`
-	BotUserID    int64  `gorm:"type:bigint unsigned;default:0;comment:'群Agent对应的Bot用户ID'"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    soft_delete.DeletedAt `gorm:"type:bigint unsigned;index:idx_deleted_at;softDelete:milli"`
+	ID                int64     `gorm:"primaryKey;autoIncrement;comment:'房间唯一ID'"`
+	Type              int8      `gorm:"type:tinyint;not null;comment:'1:双人私聊 2:多人普通群'"`
+	Name              string    `gorm:"type:varchar(128);default:'';comment:'群名称，私聊可为空'"`
+	CreatorID         int64     `gorm:"type:bigint unsigned;not null;index:idx_creator_id;comment:'创建者ID'"`
+	AgentEnabled      bool      `gorm:"type:tinyint(1);default:0;comment:'是否启用群Agent助手'"`
+	ModerationEnabled bool      `gorm:"type:tinyint(1);default:1;comment:'????????'"`
+	Status            int8      `gorm:"type:tinyint;not null;default:0;comment:'0:?? 1:??'"`
+	LastActiveAt      time.Time `gorm:"type:datetime(3);comment:'??????'"`
+	BotUserID         int64     `gorm:"type:bigint unsigned;default:0;comment:'群Agent对应的Bot用户ID'"`
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DeletedAt         soft_delete.DeletedAt `gorm:"type:bigint unsigned;index:idx_deleted_at;softDelete:milli"`
 }
 
 // RoomMember 房间成员关系表，替代传统的好友关系表和群成员表

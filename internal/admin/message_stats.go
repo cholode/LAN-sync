@@ -23,6 +23,8 @@ type MessageStatsStore interface {
 	TopRooms(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error)
 	TopSenders(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error)
 	CountBySender(ctx context.Context, senderID int64) (int64, error)
+	CountByRoom(ctx context.Context, roomID int64, start, end time.Time) (int64, error)
+	CountByRoomTotal(ctx context.Context, roomID int64) (int64, error)
 }
 
 // TimeCount ?????????
@@ -226,6 +228,22 @@ func (s *mysqlMessageStats) CountBySender(ctx context.Context, senderID int64) (
 	return count, err
 }
 
+func (s *mysqlMessageStats) CountByRoom(ctx context.Context, roomID int64, start, end time.Time) (int64, error) {
+	var count int64
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Where("room_id = ? AND created_at >= ? AND created_at < ?", roomID, start, end).
+		Count(&count).Error
+	return count, err
+}
+
+func (s *mysqlMessageStats) CountByRoomTotal(ctx context.Context, roomID int64) (int64, error) {
+	var count int64
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Where("room_id = ?", roomID).
+		Count(&count).Error
+	return count, err
+}
+
 type mongoMessageStats struct {
 	coll *mongo.Collection
 	db   *gorm.DB
@@ -341,6 +359,18 @@ func (s *mongoMessageStats) ActiveSenders(ctx context.Context, since time.Time) 
 func (s *mongoMessageStats) CountBySender(ctx context.Context, senderID int64) (int64, error) {
 	f := notDeletedFilter()
 	f["sender_id"] = senderID
+	return s.coll.CountDocuments(ctx, f)
+}
+
+func (s *mongoMessageStats) CountByRoom(ctx context.Context, roomID int64, start, end time.Time) (int64, error) {
+	f := s.baseFilter(start, end)
+	f["room_id"] = roomID
+	return s.coll.CountDocuments(ctx, f)
+}
+
+func (s *mongoMessageStats) CountByRoomTotal(ctx context.Context, roomID int64) (int64, error) {
+	f := notDeletedFilter()
+	f["room_id"] = roomID
 	return s.coll.CountDocuments(ctx, f)
 }
 

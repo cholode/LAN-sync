@@ -138,6 +138,8 @@
         loadModerationDashboard();
       } else if (page === 'users') {
         loadUsers();
+      } else if (page === 'rooms') {
+        loadRooms();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -190,6 +192,38 @@
       }
     }
 
+    async function loadRooms() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">????????...</div>';
+      try {
+        const data = await request('/admin/rooms?page=1&page_size=50');
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.name + '</td><td>' + item.owner_id + '</td><td>' + item.member_count + '</td><td>' + item.online_member_count + '</td><td>' + item.today_message_count + '</td><td>' + item.total_message_count + '</td><td>' + (item.agent_enabled ? '??' : '??') + '</td><td>' + (item.status === 1 ? '???' : '??') + '</td><td>' + item.violation_count + '</td><td>' +
+          '<button onclick="roomAction(' + item.id + ',\'freeze\')">??</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'unfreeze\')">??</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'disband\')">??</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'agent_enable\')">??Agent</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'agent_disable\')">??Agent</button>' +
+          '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">????</h3><table class="admin-table"><thead><tr><th>ID</th><th>???</th><th>??</th><th>???</th><th>????</th><th>????</th><th>???</th><th>Agent</th><th>??</th><th>????</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function roomAction(id, action) {
+      if (!confirm('????? ' + id + ' ???' + action + '?????')) return;
+      try {
+        await request('/admin/rooms/' + id + '/action', {
+          method: 'POST',
+          body: JSON.stringify({ action })
+        });
+        alert('????');
+        loadRooms();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+    window.roomAction = roomAction;
     async function loadUsers() {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">????????...</div>';
