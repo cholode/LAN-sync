@@ -9,24 +9,23 @@ import (
 	"gorm.io/gorm"
 
 	"lan-im-go/cache"
-	"lan-im-go/core"
 	"lan-im-go/models"
 )
 
-// UserService ?????????
+// UserService 提供用户管理查询与操作。
 type UserService struct {
 	db           *gorm.DB
 	messageStore MessageStatsStore
-	hub          *core.Hub
+	runtime      RuntimeController
 	audit        *AuditService
 }
 
-// NewUserService ?????????
-func NewUserService(db *gorm.DB, messageStore MessageStatsStore, hub *core.Hub, audit *AuditService) *UserService {
-	return &UserService{db: db, messageStore: messageStore, hub: hub, audit: audit}
+// NewUserService 创建用户管理服务。
+func NewUserService(db *gorm.DB, messageStore MessageStatsStore, runtime RuntimeController, audit *AuditService) *UserService {
+	return &UserService{db: db, messageStore: messageStore, runtime: runtime, audit: audit}
 }
 
-// UserListQuery ?????????
+// UserListQuery 定义用户列表查询条件。
 type UserListQuery struct {
 	Page     int
 	PageSize int
@@ -38,7 +37,7 @@ type UserListQuery struct {
 	End      time.Time
 }
 
-// UserListItem ??????
+// UserListItem 表示用户列表项。
 type UserListItem struct {
 	ID             int64     `json:"id"`
 	Username       string    `json:"username"`
@@ -54,7 +53,7 @@ type UserListItem struct {
 	ViolationCount int64     `json:"violation_count"`
 }
 
-// ListUsers ???????
+// ListUsers 分页查询用户列表。
 // ListUsers 分页查询用户，并用批量查询避免列表页 N+1。
 func (s *UserService) ListUsers(ctx context.Context, q UserListQuery) ([]UserListItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.User{})
@@ -123,7 +122,7 @@ func (s *UserService) ListUsers(ctx context.Context, q UserListQuery) ([]UserLis
 	return items, total, nil
 }
 
-// UserDetail ?????
+// UserDetail 表示用户详情。
 type UserDetail struct {
 	ID             int64                 `json:"id"`
 	Username       string                `json:"username"`
@@ -150,7 +149,7 @@ type UserRoomItem struct {
 	Role     int8   `json:"role"`
 }
 
-// GetUserDetail ???????
+// GetUserDetail 获取用户详情。
 func (s *UserService) GetUserDetail(ctx context.Context, userID int64) (*UserDetail, error) {
 	var user models.User
 	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
@@ -185,7 +184,7 @@ func (s *UserService) GetUserDetail(ctx context.Context, userID int64) (*UserDet
 	return detail, nil
 }
 
-// UserAction ???????
+// UserAction 表示用户管理操作。
 type UserAction struct {
 	Action      string
 	AdminUserID int64
@@ -195,7 +194,7 @@ type UserAction struct {
 	UserAgent   string
 }
 
-// ApplyAction ???????/??/???/????????????
+// ApplyAction 执行封禁、解封、角色调整、强制下线等用户管理动作。
 func (s *UserService) ApplyAction(ctx context.Context, userID int64, action UserAction) error {
 	var user models.User
 	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
@@ -216,26 +215,24 @@ func (s *UserService) ApplyAction(ctx context.Context, userID int64, action User
 	case "role_user":
 		user.Role = models.RoleUser
 	case "force_offline":
-		if s.hub != nil {
-			select {
-			case s.hub.Kick <- userID:
-			default:
+		if s.runtime != nil {
+			if err := s.runtime.KickUser(ctx, userID); err != nil {
+				return err
 			}
 		}
 		_ = cache.SetUserOffline(ctx, userID)
 		after := user
 		return s.writeUserAudit(ctx, before, after, action)
 	default:
-		return fmt.Errorf("\u4e0d\u652f\u6301\u7684\u7528\u6237\u64cd\u4f5c: %s", action.Action)
+		return fmt.Errorf("不支持的用户操作: %s", action.Action)
 	}
 
 	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
 		return err
 	}
-	if action.Action == "ban" && s.hub != nil {
-		select {
-		case s.hub.Kick <- userID:
-		default:
+	if action.Action == "ban" && s.runtime != nil {
+		if err := s.runtime.KickUser(ctx, userID); err != nil {
+			return err
 		}
 		_ = cache.SetUserOffline(ctx, userID)
 	}

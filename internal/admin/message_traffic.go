@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// MessageTraffic ?????????
+// MessageTraffic 汇总消息流量统计结果。
 type MessageTraffic struct {
 	Hourly           []TimeCount          `json:"hourly"`
 	Daily            []TimeCount          `json:"daily"`
@@ -22,7 +22,7 @@ type RoomTypeDistribution struct {
 	Group   int64 `json:"group"`
 }
 
-// MessageTraffic ???? 24 ????? 7 ??????
+// buildMessageTraffic 构建最近 24 小时与最近 7 天的消息流量统计。
 func (s *DashboardService) buildMessageTraffic(ctx context.Context) (*MessageTraffic, error) {
 	now := time.Now()
 	last24h := now.Add(-24 * time.Hour)

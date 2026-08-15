@@ -12,12 +12,12 @@ import (
 
 var adminRoomService *adminservice.RoomService
 
-// InitAdminRoomService ?????????
+// InitAdminRoomService 初始化房间管理服务。
 func InitAdminRoomService(svc *adminservice.RoomService) {
 	adminRoomService = svc
 }
 
-// AdminRoomList ???????
+// AdminRoomList 分页查询群聊。
 // GET /api/v1/admin/rooms
 func AdminRoomList(c *gin.Context) {
 	if adminRoomService == nil {
@@ -63,18 +63,18 @@ func AdminRoomList(c *gin.Context) {
 		End:          end,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "????????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询房间失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})
 }
 
-// AdminRoomDetail ???????
+// AdminRoomDetail 查询房间详情。
 // GET /api/v1/admin/rooms/:id
 func AdminRoomDetail(c *gin.Context) {
 	roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "???? ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的房间 ID"})
 		return
 	}
 	if adminRoomService == nil {
@@ -83,18 +83,18 @@ func AdminRoomDetail(c *gin.Context) {
 	}
 	detail, err := adminRoomService.GetRoomDetail(c.Request.Context(), roomID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "?????"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "房间不存在"})
 		return
 	}
 	c.JSON(http.StatusOK, detail)
 }
 
-// AdminRoomAction ??????????
+// AdminRoomAction 执行房间管理动作。
 // POST /api/v1/admin/rooms/:id/action
 func AdminRoomAction(c *gin.Context) {
 	roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "???? ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的房间 ID"})
 		return
 	}
 	var req struct {
@@ -102,7 +102,7 @@ func AdminRoomAction(c *gin.Context) {
 		TargetUserID int64  `json:"target_user_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "???????"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少操作参数"})
 		return
 	}
 	if adminRoomService == nil {
@@ -132,8 +132,8 @@ func AdminRoomAction(c *gin.Context) {
 		TargetUserID: req.TargetUserID,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "??????????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "房间操作失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "????"})
+	c.JSON(http.StatusOK, gin.H{"message": "操作成功"})
 }

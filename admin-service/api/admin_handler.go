@@ -7,14 +7,13 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"lan-im-go/cache"
-	"lan-im-go/core"
 	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/repository"
 )
 
-// AdminDeleteUser 管理员删除用户（下线+数据库软删除）
+// AdminDeleteUser 管理员删除用户（强制下线 + 数据库软删除）。
 // 路由: DELETE /api/v1/admin/users/:id
-func AdminDeleteUser(hub *core.Hub) gin.HandlerFunc {
+func AdminDeleteUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		targetUserIDStr := c.Param("id")
 		targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
@@ -27,16 +26,15 @@ func AdminDeleteUser(hub *core.Hub) gin.HandlerFunc {
 			return
 		}
 
-		// 1. 数据库软删除用户
+		// 1. 数据库软删除用户。
 		if err := repository.User.SoftDeleteUser(targetUserID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "用户删除失败，请查看日志"})
 			return
 		}
 
-		// 2. 非阻塞地断开在线连接，并清理 Redis 在线状态
-		select {
-		case hub.Kick <- targetUserID:
-		default:
+		// 2. 非阻塞地断开在线连接，并清理 Redis 在线状态。
+		if adminRuntime != nil {
+			_ = adminRuntime.KickUser(c.Request.Context(), targetUserID)
 		}
 		_ = cache.SetUserOffline(c.Request.Context(), targetUserID)
 
@@ -60,9 +58,9 @@ func AdminDeleteUser(hub *core.Hub) gin.HandlerFunc {
 	}
 }
 
-// AdminDeleteRoom 管理员解散群聊
+// AdminDeleteRoom 管理员解散群聊。
 // 路由: DELETE /api/v1/admin/rooms/:id
-func AdminDeleteRoom(hub *core.Hub) gin.HandlerFunc {
+func AdminDeleteRoom() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		targetRoomIDStr := c.Param("id")
 		targetRoomID, err := strconv.ParseInt(targetRoomIDStr, 10, 64)

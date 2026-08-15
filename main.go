@@ -10,6 +10,7 @@ import (
 	"lan-im-go/core"
 	"lan-im-go/infrastructure"
 	adminservice "lan-im-go/internal/admin"
+	"lan-im-go/internal/admincontrol"
 	"lan-im-go/internal/agentclient"
 	"lan-im-go/internal/archiver"
 	"lan-im-go/internal/imservice"
@@ -17,7 +18,6 @@ import (
 	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/middleware"
-	"lan-im-go/models"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
 	"net/http"
@@ -114,32 +114,8 @@ func main() {
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
 	adminAuditService := adminservice.NewAuditService(infrastructure.DB)
-	adminMessageStore := adminservice.NewMessageStatsStore(infrastructure.DB, infrastructure.MessageCollection, os.Getenv("MESSAGE_STORE"))
-	ragService := adminservice.NewRAGService(infrastructure.DB)
-	moderationService := adminservice.NewModerationService(infrastructure.DB, adminAuditService)
-	adminHealthService := adminservice.NewHealthService(infrastructure.DB, config.RedisClient, api.Storage, hub)
-	dashboardService := adminservice.NewDashboardService(
-		infrastructure.DB,
-		infrastructure.MessageCollection,
-		os.Getenv("MESSAGE_STORE"),
-		hub,
-		moderationService,
-		ragService,
-		adminHealthService,
-	)
-	api.InitAdminDashboardService(dashboardService)
-	api.InitAdminRAGService(ragService)
-	api.InitAdminModerationService(moderationService)
-	api.InitAdminHealthService(adminHealthService)
-	api.InitAdminUserService(adminservice.NewUserService(infrastructure.DB, adminMessageStore, hub, adminAuditService))
-	api.InitAdminConnectionService(adminservice.NewConnectionService(hub, adminAuditService))
-	api.InitAdminFileService(adminservice.NewFileService(infrastructure.DB, api.Storage, adminAuditService))
-	api.InitAdminAgentConfigService(adminservice.NewAgentConfigService(infrastructure.DB, adminAuditService))
-	api.InitAdminToolCallService(adminservice.NewToolCallService(infrastructure.DB))
 	adminErrorService := adminservice.NewErrorCenterService(infrastructure.DB)
-	api.InitAdminErrorService(adminErrorService)
-	api.InitAdminAuditService(adminAuditService)
-	api.InitAdminAlertService(adminservice.NewAlertService(infrastructure.DB, adminHealthService))
+	api.InitAdminFileService(adminservice.NewFileService(infrastructure.DB, api.Storage, adminAuditService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -167,8 +143,12 @@ func main() {
 	}()
 
 	agentMgr := agent.NewAgentManager(infrastructure.DB, agentClient, hub)
-	api.InitAdminRoomService(adminservice.NewRoomService(infrastructure.DB, adminMessageStore, hub, agentMgr, adminAuditService))
 	go agentMgr.Start(ctx)
+
+	localAdminRuntime := &admincontrol.LocalRuntimeController{
+		Hub:          hub,
+		AgentManager: agentMgr,
+	}
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
@@ -227,64 +207,13 @@ func main() {
 		api.RegisterAgentRoutes(authorized, agentMgr, infrastructure.DB)
 	}
 
-	// 管理员路由
-	admin := r.Group("/api/v1/admin")
-	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin(), middleware.AdminRateLimit(10, 30))
-	{
-		admin.GET("/dashboard/runtime", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardRuntime)
-		admin.GET("/dashboard/message-traffic", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardMessageTraffic)
-		admin.GET("/dashboard/timeseries", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardTimeSeries)
-		admin.GET("/dashboard/agent", middleware.RequirePermission(models.PermAgentRead), api.AdminAgentDashboard)
-		admin.GET("/dashboard/rag", middleware.RequireAnyPermission(models.PermDashboardRead, models.PermAgentRead), api.AdminRAGDashboard)
-		admin.GET("/rag/queries", middleware.RequirePermission(models.PermAgentRead), api.AdminRAGQueries)
-		admin.GET("/dashboard/moderation", middleware.RequirePermission(models.PermModerationRead), api.AdminModerationDashboard)
-		admin.GET("/moderation", middleware.RequirePermission(models.PermModerationRead), api.AdminModerationList)
-		admin.GET("/moderation/:id", middleware.RequirePermission(models.PermModerationRead), api.AdminModerationDetail)
-		admin.POST("/moderation/:id/action", middleware.RequirePermission(models.PermModerationReview), api.AdminModerationAction)
-		admin.GET("/dashboard/overview", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardOverview)
-		admin.GET("/users", middleware.RequirePermission(models.PermUserRead), api.AdminUserList)
-		admin.GET("/users/:id", middleware.RequirePermission(models.PermUserRead), api.AdminUserDetail)
-		admin.POST("/users/:id/action", middleware.RequireAnyPermission(models.PermUserBan, models.PermUserKick, models.PermUserRoleUpdate), api.AdminUserAction)
-		admin.DELETE("/users/:id", middleware.RequirePermission(models.PermUserDelete), api.AdminDeleteUser(hub))
-		admin.GET("/rooms", middleware.RequirePermission(models.PermRoomRead), api.AdminRoomList)
-		admin.GET("/rooms/:id", middleware.RequirePermission(models.PermRoomRead), api.AdminRoomDetail)
-		admin.POST("/rooms/:id/action", middleware.RequireAnyPermission(models.PermRoomFreeze, models.PermRoomDelete, models.PermAgentConfig), api.AdminRoomAction)
-		admin.GET("/connections", middleware.RequirePermission(models.PermConnectionRead), api.AdminConnectionList)
-		admin.POST("/connections/close", middleware.RequirePermission(models.PermConnectionClose), api.AdminConnectionClose)
-		admin.POST("/connections/force-offline", middleware.RequirePermission(models.PermConnectionClose), api.AdminUserForceOffline)
-		admin.GET("/files", middleware.RequirePermission(models.PermFileRead), api.AdminFileList)
-		admin.GET("/files/scan", middleware.RequirePermission(models.PermFileRead), api.AdminFileScan)
-		admin.POST("/files/cleanup", middleware.RequirePermission(models.PermFileDelete), api.AdminFileCleanup)
-		admin.GET("/files/:id", middleware.RequirePermission(models.PermFileRead), api.AdminFileDetail)
-		admin.GET("/files/:id/download", middleware.RequirePermission(models.PermFileRead), api.AdminFileDownload)
-		admin.DELETE("/files/:id", middleware.RequirePermission(models.PermFileDelete), api.AdminFileDelete)
-		admin.GET("/agent-config", middleware.RequirePermission(models.PermAgentRead), api.AdminAgentConfigGet)
-		admin.GET("/agent-config/history", middleware.RequirePermission(models.PermAgentRead), api.AdminAgentConfigHistory)
-		admin.PUT("/agent-config", middleware.RequirePermission(models.PermAgentConfig), api.AdminAgentConfigUpdate)
-		admin.POST("/agent-config/rollback", middleware.RequirePermission(models.PermAgentConfig), api.AdminAgentConfigRollback)
-		admin.GET("/tool-calls", middleware.RequirePermission(models.PermAgentRead), api.AdminToolCallList)
-		admin.GET("/errors", middleware.RequirePermission(models.PermSystemRead), api.AdminErrorList)
-		admin.POST("/errors/:id/resolve", middleware.RequirePermission(models.PermSystemRead), api.AdminErrorResolve)
-		admin.GET("/audit-logs", middleware.RequirePermission(models.PermAuditRead), api.AdminAuditList)
-		admin.GET("/health", middleware.RequirePermission(models.PermSystemRead), api.AdminHealthCheck)
-		admin.GET("/alerts", middleware.RequirePermission(models.PermSystemRead), api.AdminAlertList)
-		admin.GET("/alerts/unresolved-count", middleware.RequireAnyPermission(models.PermDashboardRead, models.PermSystemRead), api.AdminAlertUnresolvedCount)
-		admin.POST("/alerts/evaluate", middleware.RequirePermission(models.PermSystemRead), api.AdminAlertEvaluate)
-		admin.POST("/alerts/:id/resolve", middleware.RequirePermission(models.PermSystemRead), api.AdminAlertResolve)
-		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
-	}
+	// 管理端控制面（供独立 admin 服务调用）
+	internalAdmin := r.Group("/internal/admin")
+	admincontrol.RegisterInternalRoutes(internalAdmin, os.Getenv("ADMIN_CONTROL_TOKEN"), localAdminRuntime)
 
 	// ================================
 	// 静态文件服务 - 前端 SPA
 	// ================================
-	// ??????????????
-	r.GET("/admin", func(c *gin.Context) {
-		c.File("./frontend/dist/admin.html")
-	})
-	r.GET("/admin/*path", func(c *gin.Context) {
-		c.File("./frontend/dist/admin.html")
-	})
-
 	r.Static("/assets", "./frontend/dist/assets")
 	r.GET("/", func(c *gin.Context) {
 		c.File("./frontend/dist/index.html")

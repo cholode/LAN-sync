@@ -12,15 +12,15 @@ import (
 
 var adminAuditServiceVar *adminservice.AuditService
 
-// InitAdminAuditService \u521d\u59cb\u5316\u5ba1\u8ba1\u65e5\u5fd7\u670d\u52a1\u3002
+// InitAdminAuditService 初始化审计日志服务。
 func InitAdminAuditService(svc *adminservice.AuditService) {
 	adminAuditServiceVar = svc
 }
 
-// AdminAuditList \u5206\u9875\u67e5\u8be2\u5ba1\u8ba1\u65e5\u5fd7\u3002\n// GET /api/v1/admin/audit-logs
+// AdminAuditList 分页查询审计日志。\n// GET /api/v1/admin/audit-logs
 func AdminAuditList(c *gin.Context) {
 	if adminAuditServiceVar == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u5ba1\u8ba1\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "审计服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -48,7 +48,7 @@ func AdminAuditList(c *gin.Context) {
 		End:         end,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u67e5\u8be2\u5ba1\u8ba1\u65e5\u5fd7\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询审计日志失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})

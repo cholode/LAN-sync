@@ -10,17 +10,17 @@ import (
 	"lan-im-go/models"
 )
 
-// AuditService ??????????
+// AuditService 负责记录管理员操作审计日志。
 type AuditService struct {
 	db *gorm.DB
 }
 
-// NewAuditService ?????????
+// NewAuditService 创建审计服务实例。
 func NewAuditService(db *gorm.DB) *AuditService {
 	return &AuditService{db: db}
 }
 
-// AuditEntry ?????????
+// AuditEntry 表示单条审计记录。
 type AuditEntry struct {
 	AdminUserID   int64
 	AdminUsername string
@@ -36,8 +36,8 @@ type AuditEntry struct {
 	ErrorMessage  string
 }
 
-// Log ????????????????????
-// AuditListQuery \u5ba1\u8ba1\u65e5\u5fd7\u67e5\u8be2\u6761\u4ef6\u3002
+// Log 将审计事件写入数据库。
+// AuditListQuery 审计日志查询条件。
 type AuditListQuery struct {
 	Page        int
 	PageSize    int
@@ -51,7 +51,7 @@ type AuditListQuery struct {
 	End         time.Time
 }
 
-// List \u5206\u9875\u67e5\u8be2\u5ba1\u8ba1\u65e5\u5fd7\u3002
+// List 分页查询审计日志。
 func (s *AuditService) List(ctx context.Context, q AuditListQuery) ([]models.AdminAuditLog, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.AdminAuditLog{})
 	if q.Keyword != "" {

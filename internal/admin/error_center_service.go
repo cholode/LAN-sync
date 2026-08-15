@@ -17,7 +17,7 @@ var sensitivePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(authorization)(\s*[:=]\s*)[^\s,;]+`),
 }
 
-// ErrorCenterService \u7ba1\u7406\u7cfb\u7edf\u9519\u8bef\u4e2d\u5fc3\u3002
+// ErrorCenterService 管理系统错误中心。
 type ErrorCenterService struct {
 	db *gorm.DB
 }
@@ -26,7 +26,7 @@ func NewErrorCenterService(db *gorm.DB) *ErrorCenterService {
 	return &ErrorCenterService{db: db}
 }
 
-// ErrorListQuery \u7cfb\u7edf\u9519\u8bef\u67e5\u8be2\u6761\u4ef6\u3002
+// ErrorListQuery 系统错误查询条件。
 type ErrorListQuery struct {
 	Page      int
 	PageSize  int
@@ -37,7 +37,7 @@ type ErrorListQuery struct {
 	End       time.Time
 }
 
-// RecordErrorInput \u5199\u5165\u9519\u8bef\u65e5\u5fd7\u7684\u5165\u53c2\u3002
+// RecordErrorInput 写入错误日志的入参。
 type RecordErrorInput struct {
 	Module       string
 	ErrorType    string
@@ -48,7 +48,7 @@ type RecordErrorInput struct {
 	StackTrace   string
 }
 
-// List \u5206\u9875\u67e5\u8be2\u7cfb\u7edf\u9519\u8bef\u3002
+// List 分页查询系统错误。
 func (s *ErrorCenterService) List(ctx context.Context, q ErrorListQuery) ([]models.SystemErrorLog, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.SystemErrorLog{})
 	if q.Module != "" {
@@ -79,7 +79,7 @@ func (s *ErrorCenterService) List(ctx context.Context, q ErrorListQuery) ([]mode
 	return rows, total, nil
 }
 
-// Record \u5199\u5165\u4e00\u6761\u5df2\u8131\u654f\u7684\u7cfb\u7edf\u9519\u8bef\u3002
+// Record 写入一条已脱敏的系统错误。
 func (s *ErrorCenterService) Record(ctx context.Context, input RecordErrorInput) error {
 	record := &models.SystemErrorLog{
 		Timestamp:    time.Now(),
@@ -95,7 +95,7 @@ func (s *ErrorCenterService) Record(ctx context.Context, input RecordErrorInput)
 	return s.db.WithContext(ctx).Create(record).Error
 }
 
-// Resolve \u6807\u8bb0\u9519\u8bef\u5df2\u5904\u7406\u3002
+// Resolve 标记错误已处理。
 func (s *ErrorCenterService) Resolve(ctx context.Context, id, adminUserID int64) error {
 	now := time.Now()
 	return s.db.WithContext(ctx).Model(&models.SystemErrorLog{}).
@@ -107,7 +107,7 @@ func (s *ErrorCenterService) Resolve(ctx context.Context, id, adminUserID int64)
 		}).Error
 }
 
-// Summary \u7edf\u8ba1\u672a\u5904\u7406\u9519\u8bef\u6570\u91cf\u3002
+// Summary 统计未处理错误数量。
 func (s *ErrorCenterService) Summary(ctx context.Context) (int64, error) {
 	var count int64
 	err := s.db.WithContext(ctx).Model(&models.SystemErrorLog{}).Where("resolved = ?", false).Count(&count).Error

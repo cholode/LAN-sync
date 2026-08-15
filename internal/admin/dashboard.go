@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm"
 
 	"lan-im-go/config"
-	"lan-im-go/core"
 	"lan-im-go/internal/metrics"
 	"lan-im-go/models"
 )
@@ -22,7 +21,7 @@ const dashboardCacheTTL = 30 * time.Second
 type DashboardService struct {
 	db           *gorm.DB
 	messageStore MessageStatsStore
-	hub          *core.Hub
+	runtime      RuntimeController
 	moderation   *ModerationService
 	rag          *RAGService
 	health       *HealthService
@@ -48,7 +47,7 @@ func NewDashboardService(
 	db *gorm.DB,
 	messageCollection *mongo.Collection,
 	messageStore string,
-	hub *core.Hub,
+	runtime RuntimeController,
 	moderation *ModerationService,
 	rag *RAGService,
 	health *HealthService,
@@ -62,7 +61,7 @@ func NewDashboardService(
 	return &DashboardService{
 		db:           db,
 		messageStore: store,
-		hub:          hub,
+		runtime:      runtime,
 		moderation:   moderation,
 		rag:          rag,
 		health:       health,
@@ -173,9 +172,16 @@ func (s *DashboardService) buildCoreOverview(ctx context.Context) (*DashboardOve
 	}
 
 	ws := metrics.RuntimeSnapshotNow().WebSocket
-	if s.hub != nil {
-		stats := s.hub.Stats()
-		ws.CurrentConnections = int64(stats.ClientCount)
+	agentSnapshot := metrics.AgentRuntimeSnapshotNow()
+	if s.runtime != nil {
+		runtimeSnapshot, remoteAgentSnapshot, err := s.runtime.RuntimeSnapshots(ctx)
+		if err == nil {
+			ws = runtimeSnapshot.WebSocket
+			agentSnapshot = remoteAgentSnapshot
+			if stats, statsErr := s.runtime.HubStats(ctx); statsErr == nil {
+				ws.CurrentConnections = int64(stats.ClientCount)
+			}
+		}
 	}
 
 	moderation := ModerationOverview{}
@@ -209,7 +215,7 @@ func (s *DashboardService) buildCoreOverview(ctx context.Context) (*DashboardOve
 		},
 		Websocket:  ws,
 		Moderation: moderation,
-		Agent:      metrics.AgentRuntimeSnapshotNow(),
+		Agent:      agentSnapshot,
 		RAG:        rag,
 		System:     system,
 	}, nil

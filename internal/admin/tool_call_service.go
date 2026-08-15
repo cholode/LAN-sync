@@ -9,7 +9,7 @@ import (
 	"lan-im-go/models"
 )
 
-// ToolCallService \u7ba1\u7406 Agent Tool Calling \u8fd0\u884c\u8bb0\u5f55\u3002
+// ToolCallService 管理 Agent Tool Calling 运行记录。
 type ToolCallService struct {
 	db *gorm.DB
 }
@@ -18,7 +18,7 @@ func NewToolCallService(db *gorm.DB) *ToolCallService {
 	return &ToolCallService{db: db}
 }
 
-// ToolCallListQuery \u5de5\u5177\u8c03\u7528\u8bb0\u5f55\u67e5\u8be2\u6761\u4ef6\u3002
+// ToolCallListQuery 工具调用记录查询条件。
 type ToolCallListQuery struct {
 	Page     int
 	PageSize int
@@ -30,14 +30,14 @@ type ToolCallListQuery struct {
 	End      time.Time
 }
 
-// ToolCallListItem \u5e26\u7528\u6237\u540d\u548c\u7fa4\u540d\u7684\u5c55\u793a\u9879\u3002
+// ToolCallListItem 带用户名和群名的展示项。
 type ToolCallListItem struct {
 	models.ToolCallLog
 	Username string `json:"username"`
 	RoomName string `json:"room_name"`
 }
 
-// List \u5206\u9875\u67e5\u8be2 Tool Call \u8bb0\u5f55\u3002
+// List 分页查询 Tool Call 记录。
 func (s *ToolCallService) List(ctx context.Context, q ToolCallListQuery) ([]ToolCallListItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.ToolCallLog{})
 	if q.ToolName != "" {
@@ -79,7 +79,7 @@ func (s *ToolCallService) List(ctx context.Context, q ToolCallListQuery) ([]Tool
 	return items, total, nil
 }
 
-// RecordInput \u7528\u4e8e\u5728 Go \u4fa7\u8bb0\u5f55\u5de5\u5177\u8c03\u7528\u7ed3\u679c\u3002
+// RecordInput 用于在 Go 侧记录工具调用结果。
 type RecordInput struct {
 	ToolCallID     string
 	UserID         int64
@@ -93,7 +93,7 @@ type RecordInput struct {
 	Error          string
 }
 
-// Record \u5199\u5165\u4e00\u6761 Tool Call \u8fd0\u884c\u8bb0\u5f55\u3002
+// Record 写入一条 Tool Call 运行记录。
 func (s *ToolCallService) Record(ctx context.Context, input RecordInput) error {
 	if input.StartedAt.IsZero() {
 		input.StartedAt = time.Now()

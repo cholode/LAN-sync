@@ -36,6 +36,13 @@ func AdminDashboardOverview(c *gin.Context) {
 // AdminDashboardRuntime 返回 Go 运行时运行状态。
 // GET /api/v1/admin/dashboard/runtime
 func AdminDashboardRuntime(c *gin.Context) {
+	if adminRuntime != nil {
+		runtimeSnap, _, err := adminRuntime.RuntimeSnapshots(c.Request.Context())
+		if err == nil {
+			c.JSON(http.StatusOK, runtimeSnap)
+			return
+		}
+	}
 	c.JSON(http.StatusOK, metrics.RuntimeSnapshotNow())
 }
 
@@ -57,6 +64,13 @@ func AdminDashboardMessageTraffic(c *gin.Context) {
 // AdminAgentDashboard 返回 Agent 运行概览。
 // GET /api/v1/admin/dashboard/agent
 func AdminAgentDashboard(c *gin.Context) {
+	if adminRuntime != nil {
+		_, agentSnap, err := adminRuntime.RuntimeSnapshots(c.Request.Context())
+		if err == nil {
+			c.JSON(http.StatusOK, agentSnap)
+			return
+		}
+	}
 	c.JSON(http.StatusOK, metrics.AgentRuntimeSnapshotNow())
 }
 

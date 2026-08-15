@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LAN-IM ???????</title>
+  <title>LAN-IM 超级管理员后台</title>
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
@@ -38,40 +38,40 @@
 <body>
   <div id="login" class="login-wrap">
     <form class="login-card" id="loginForm">
-      <h1>???????</h1>
-      <label>?????</label>
+      <h1>超级管理员后台</h1>
+      <label>管理员账号</label>
       <input id="username" name="username" autocomplete="username" required />
-      <label>??</label>
+      <label>密码</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required />
-      <button id="loginBtn" type="submit">??</button>
+      <button id="loginBtn" type="submit">登录</button>
       <div class="error" id="loginError"></div>
     </form>
   </div>
 
   <div id="shell" class="shell" style="display:none">
     <aside>
-      <h1>????</h1>
+      <h1>管理后台</h1>
       <a href="#dashboard" data-page="dashboard" class="active">Dashboard</a>
-      <a href="#message-traffic" data-page="message-traffic">????</a>
+      <a href="#message-traffic" data-page="message-traffic">消息流量</a>
       <a href="#agent" data-page="agent">Agent监控</a>
       <a href="#agent-config" data-page="agent-config">Agent配置</a>
       <a href="#tool-calls" data-page="tool-calls">Tool Calls</a>
       <a href="#errors" data-page="errors">系统错误</a>
       <a href="#alerts" data-page="alerts">告警中心</a>
       <a href="#rag" data-page="rag">RAG/Qdrant</a>
-      <a href="#moderation" data-page="moderation">????</a>
-      <a href="#users" data-page="users">????</a>
-      <a href="#rooms" data-page="rooms">????</a>
-      <a href="#connections" data-page="connections">????</a>
-      <a href="#files" data-page="files">????</a>
-      <a href="#audit-logs" data-page="audit-logs">????</a>
+      <a href="#moderation" data-page="moderation">内容审核</a>
+      <a href="#users" data-page="users">用户管理</a>
+      <a href="#rooms" data-page="rooms">房间管理</a>
+      <a href="#connections" data-page="connections">连接管理</a>
+      <a href="#files" data-page="files">文件管理</a>
+      <a href="#audit-logs" data-page="audit-logs">审计日志</a>
     </aside>
     <main>
       <div class="toolbar">
         <h2 id="pageTitle">Dashboard</h2>
-        <button id="logoutBtn" style="width:auto;background:#475569">??</button>
+        <button id="logoutBtn" style="width:auto;background:#475569">退出</button>
       </div>
-      <div id="content" class="placeholder">????????????????? /api/v1/admin/*?</div>
+      <div id="content" class="placeholder">请选择左侧菜单进入超级管理员后台 /api/v1/admin/*</div>
     </main>
   </div>
 
@@ -81,7 +81,7 @@
     const userKey = 'lan_im_admin_user';
     const pageTitles = {
       dashboard: 'Dashboard',
-      'message-traffic': '????',
+      'message-traffic': '消息流量',
       agent: 'Agent监控',
       'agent-config': 'Agent配置',
       'tool-calls': 'Tool Calling 运行记录',
@@ -89,12 +89,12 @@
       alerts: '告警中心',
       'audit-logs': '审计日志',
       rag: 'RAG/Qdrant',
-      moderation: '????',
-      users: '????',
-      rooms: '????',
-      connections: '????',
-      files: '????',
-      'audit-logs': '????'
+      moderation: '内容审核',
+      users: '用户管理',
+      rooms: '房间管理',
+      connections: '连接管理',
+      files: '文件管理',
+      'audit-logs': '审计日志'
     };
 
     function getToken() { return localStorage.getItem(tokenKey); }
@@ -123,9 +123,9 @@
         body: JSON.stringify({ username, password })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || data.msg || '????');
+      if (!res.ok) throw new Error(data.error || data.msg || '登录失败');
       const role = Number(data.user && data.user.role);
-      if (role < 1) throw new Error('???????????????');
+      if (role < 1) throw new Error('当前账号没有管理员权限');
       setSession(data.token, data.user);
       showShell();
       selectPage('dashboard');
@@ -165,7 +165,7 @@
       } else if (page === 'alerts') {
         loadAlerts();
       } else {
-        document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
+        document.getElementById('content').textContent = '功能尚未实现：' + (pageTitles[page] || page) + '，请访问 /api/v1/admin/*';
       }
     }
 
@@ -267,27 +267,27 @@
 
     async function loadConnections() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">????????...</div>';
+      content.innerHTML = '<div class="loading">正在加载连接列表...</div>';
       try {
         const data = await request('/admin/connections');
         const rows = (data.items || []).map(item => '<tr><td>' + item.user_id + '</td><td>' + item.username + '</td><td>' + item.connection_id + '</td><td>' + item.remote_ip + '</td><td>' + new Date(item.connected_at).toLocaleString() + '</td><td>' + Math.round((Date.now() - new Date(item.connected_at).getTime()) / 1000) + 's</td><td>' + new Date(item.last_read_at).toLocaleString() + '</td><td>' + new Date(item.last_write_at).toLocaleString() + '</td><td>' + item.send_queue_len + '</td><td>' + (item.room_ids || []).join(',') + '</td><td>' +
-          '<button onclick="connectionClose(\'' + item.connection_id + '\')">????</button> ' +
-          '<button onclick="connectionForceOffline(' + item.user_id + ')">????</button>' +
+          '<button onclick="connectionClose(\'' + item.connection_id + '\')">关闭连接</button> ' +
+          '<button onclick="connectionForceOffline(' + item.user_id + ')">强制下线</button>' +
           '</td></tr>').join('');
-        content.innerHTML = '<h3 style="margin-top:0">??????</h3><table class="admin-table"><thead><tr><th>??ID</th><th>???</th><th>Connection ID</th><th>Remote IP</th><th>????</th><th>????</th><th>?????</th><th>?????</th><th>Send Queue</th><th>????</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        content.innerHTML = '<h3 style="margin-top:0">连接列表</h3><table class="admin-table"><thead><tr><th>用户ID</th><th>用户名</th><th>Connection ID</th><th>Remote IP</th><th>连接时间</th><th>在线时长</th><th>最后读取</th><th>最后写入</th><th>Send Queue</th><th>房间</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
     }
 
     async function connectionClose(connectionId) {
-      if (!confirm('?????? ' + connectionId + ' ??')) return;
+      if (!confirm('确定关闭连接 ' + connectionId + ' 吗？')) return;
       try {
         await request('/admin/connections/close', {
           method: 'POST',
           body: JSON.stringify({ connection_id: connectionId })
         });
-        alert('?????');
+        alert('连接已关闭');
         loadConnections();
       } catch (error) {
         alert(error.message);
@@ -295,13 +295,13 @@
     }
 
     async function connectionForceOffline(userId) {
-      if (!confirm('???????? ' + userId + ' ??')) return;
+      if (!confirm('确定强制该用户下线 ' + userId + ' 吗？')) return;
       try {
         await request('/admin/connections/force-offline', {
           method: 'POST',
           body: JSON.stringify({ user_id: userId })
         });
-        alert('???????');
+        alert('用户已强制下线');
         loadConnections();
       } catch (error) {
         alert(error.message);
@@ -312,7 +312,7 @@
 
     async function loadAuditLogs() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d\u5ba1\u8ba1\u65e5\u5fd7...</div>';
+      content.innerHTML = '<div class="loading">正在加载审计日志...</div>';
       try {
         const keyword = document.getElementById('auditKeyword') ? document.getElementById('auditKeyword').value : '';
         const action = document.getElementById('auditAction') ? document.getElementById('auditAction').value : '';
@@ -323,8 +323,8 @@
         if (targetType) params.set('target_type', targetType);
         const data = await request('/admin/audit-logs?' + params.toString());
         const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.admin_user_id + ' (' + item.admin_username + ')</td><td>' + item.action + '</td><td>' + item.target_type + '</td><td>' + item.target_id + '</td><td>' + item.request_id + '</td><td>' + item.remote_ip + '</td><td>' + item.result + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + (item.error_message || '') + '</td></tr>').join('');
-        content.innerHTML = '<div class="toolbar"><input id="auditKeyword" placeholder="\u5173\u952e\u5b57"><input id="auditAction" placeholder="\u52a8\u4f5c"><input id="auditTargetType" placeholder="\u76ee\u6807\u7c7b\u578b"><button onclick="loadAuditLogs()">\u67e5\u8be2</button></div>' +
-          '<h3 style="margin-top:14px">\u5ba1\u8ba1\u65e5\u5fd7</h3><table class="admin-table"><thead><tr><th>ID</th><th>\u7ba1\u7406\u5458</th><th>\u52a8\u4f5c</th><th>\u76ee\u6807\u7c7b\u578b</th><th>\u76ee\u6807ID</th><th>Request ID</th><th>IP</th><th>\u7ed3\u679c</th><th>\u65f6\u95f4</th><th>\u9519\u8bef\u4fe1\u606f</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        content.innerHTML = '<div class="toolbar"><input id="auditKeyword" placeholder="关键字"><input id="auditAction" placeholder="动作"><input id="auditTargetType" placeholder="目标类型"><button onclick="loadAuditLogs()">查询</button></div>' +
+          '<h3 style="margin-top:14px">审计日志</h3><table class="admin-table"><thead><tr><th>ID</th><th>管理员</th><th>动作</th><th>目标类型</th><th>目标ID</th><th>Request ID</th><th>IP</th><th>结果</th><th>时间</th><th>错误信息</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -334,7 +334,7 @@
 
     async function loadErrors() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d\u7cfb\u7edf\u9519\u8bef...</div>';
+      content.innerHTML = '<div class="loading">正在加载系统错误...</div>';
       try {
         const module = document.getElementById('errorModule') ? document.getElementById('errorModule').value : '';
         const errorType = document.getElementById('errorType') ? document.getElementById('errorType').value : '';
@@ -344,9 +344,9 @@
         if (errorType) params.set('error_type', errorType);
         if (resolved) params.set('resolved', resolved);
         const data = await request('/admin/errors?' + params.toString());
-        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + new Date(item.timestamp).toLocaleString() + '</td><td>' + item.module + '</td><td>' + item.error_type + '</td><td>' + item.error_message + '</td><td>' + item.request_id + '</td><td>' + item.user_id + '</td><td>' + item.room_id + '</td><td>' + (item.resolved ? '\u5df2\u5904\u7406' : '\u672a\u5904\u7406') + '</td><td><button onclick="resolveError(' + item.id + ')">\u6807\u8bb0\u5df2\u5904\u7406</button></td></tr>').join('');
-        content.innerHTML = '<div class="toolbar"><input id="errorModule" placeholder="\u6a21\u5757"><input id="errorType" placeholder="\u9519\u8bef\u7c7b\u578b"><select id="errorResolved"><option value="">\u5168\u90e8</option><option value="false">\u672a\u5904\u7406</option><option value="true">\u5df2\u5904\u7406</option></select><button onclick="loadErrors()">\u67e5\u8be2</button></div>' +
-          '<h3 style="margin-top:14px">\u7cfb\u7edf\u9519\u8bef\u4e2d\u5fc3</h3><table class="admin-table"><thead><tr><th>ID</th><th>\u65f6\u95f4</th><th>\u6a21\u5757</th><th>\u9519\u8bef\u7c7b\u578b</th><th>\u9519\u8bef\u4fe1\u606f</th><th>Request ID</th><th>\u7528\u6237ID</th><th>\u7fa4\u804aID</th><th>\u72b6\u6001</th><th>\u64cd\u4f5c</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + new Date(item.timestamp).toLocaleString() + '</td><td>' + item.module + '</td><td>' + item.error_type + '</td><td>' + item.error_message + '</td><td>' + item.request_id + '</td><td>' + item.user_id + '</td><td>' + item.room_id + '</td><td>' + (item.resolved ? '已处理' : '未处理') + '</td><td><button onclick="resolveError(' + item.id + ')">标记已处理</button></td></tr>').join('');
+        content.innerHTML = '<div class="toolbar"><input id="errorModule" placeholder="模块"><input id="errorType" placeholder="错误类型"><select id="errorResolved"><option value="">全部</option><option value="false">未处理</option><option value="true">已处理</option></select><button onclick="loadErrors()">查询</button></div>' +
+          '<h3 style="margin-top:14px">系统错误中心</h3><table class="admin-table"><thead><tr><th>ID</th><th>时间</th><th>模块</th><th>错误类型</th><th>错误信息</th><th>Request ID</th><th>用户ID</th><th>群聊ID</th><th>状态</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -355,7 +355,7 @@
     async function resolveError(id) {
       try {
         await request('/admin/errors/' + id + '/resolve', { method: 'POST' });
-        alert('\u5df2\u6807\u8bb0\u4e3a\u5df2\u5904\u7406');
+        alert('已标记为已处理');
         loadErrors();
       } catch (error) {
         alert(error.message);
@@ -367,7 +367,7 @@
 
     async function loadToolCalls() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d Tool Calling \u8bb0\u5f55...</div>';
+      content.innerHTML = '<div class="loading">正在加载 Tool Calling 记录...</div>';
       try {
         const toolName = document.getElementById('toolCallToolName') ? document.getElementById('toolCallToolName').value : '';
         const userId = document.getElementById('toolCallUserId') ? document.getElementById('toolCallUserId').value : '';
@@ -379,9 +379,9 @@
         if (roomId) params.set('room_id', roomId);
         if (success) params.set('success', success);
         const data = await request('/admin/tool-calls?' + params.toString());
-        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.tool_call_id + '</td><td>' + item.agent_request_id + '</td><td>' + item.user_id + ' (' + item.username + ')</td><td>' + item.room_id + ' (' + item.room_name + ')</td><td>' + item.tool_name + '</td><td>' + item.arguments + '</td><td>' + new Date(item.started_at).toLocaleString() + '</td><td>' + new Date(item.finished_at).toLocaleString() + '</td><td>' + item.latency_ms.toFixed(2) + '</td><td>' + (item.success ? '\u6210\u529f' : '\u5931\u8d25') + '</td><td>' + (item.error || '') + '</td></tr>').join('');
-        content.innerHTML = '<div class="toolbar"><input id="toolCallToolName" placeholder="Tool\u540d\u79f0"><input id="toolCallUserId" placeholder="\u7528\u6237ID"><input id="toolCallRoomId" placeholder="\u7fa4\u804aID"><select id="toolCallSuccess"><option value="">\u5168\u90e8</option><option value="true">\u6210\u529f</option><option value="false">\u5931\u8d25</option></select><button onclick="loadToolCalls()">\u67e5\u8be2</button></div>' +
-          '<h3 style="margin-top:14px">Tool Calling \u8fd0\u884c\u8bb0\u5f55</h3><table class="admin-table"><thead><tr><th>ID</th><th>Tool Call ID</th><th>Agent Request ID</th><th>\u7528\u6237</th><th>\u7fa4\u804a</th><th>\u5de5\u5177\u540d\u79f0</th><th>\u53c2\u6570</th><th>\u5f00\u59cb\u65f6\u95f4</th><th>\u7ed3\u675f\u65f6\u95f4</th><th>\u8017\u65f6(ms)</th><th>\u7ed3\u679c</th><th>\u9519\u8bef</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.tool_call_id + '</td><td>' + item.agent_request_id + '</td><td>' + item.user_id + ' (' + item.username + ')</td><td>' + item.room_id + ' (' + item.room_name + ')</td><td>' + item.tool_name + '</td><td>' + item.arguments + '</td><td>' + new Date(item.started_at).toLocaleString() + '</td><td>' + new Date(item.finished_at).toLocaleString() + '</td><td>' + item.latency_ms.toFixed(2) + '</td><td>' + (item.success ? '成功' : '失败') + '</td><td>' + (item.error || '') + '</td></tr>').join('');
+        content.innerHTML = '<div class="toolbar"><input id="toolCallToolName" placeholder="Tool名称"><input id="toolCallUserId" placeholder="用户ID"><input id="toolCallRoomId" placeholder="群聊ID"><select id="toolCallSuccess"><option value="">全部</option><option value="true">成功</option><option value="false">失败</option></select><button onclick="loadToolCalls()">查询</button></div>' +
+          '<h3 style="margin-top:14px">Tool Calling 运行记录</h3><table class="admin-table"><thead><tr><th>ID</th><th>Tool Call ID</th><th>Agent Request ID</th><th>用户</th><th>群聊</th><th>工具名称</th><th>参数</th><th>开始时间</th><th>结束时间</th><th>耗时(ms)</th><th>结果</th><th>错误</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -391,27 +391,27 @@
 
     async function loadAgentConfigPage() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d Agent \u914d\u7f6e...</div>';
+      content.innerHTML = '<div class="loading">正在加载 Agent 配置...</div>';
       try {
         const cfg = await request('/admin/agent-config');
-        content.innerHTML = '<h3 style="margin-top:0">\u5168\u5c40 Agent \u914d\u7f6e</h3>' +
-          '<div class="toolbar"><button onclick="agentConfigSave()">\u4fdd\u5b58\u914d\u7f6e</button> <button onclick="agentConfigRollback()">\u56de\u6eda\u4e0a\u4e00\u7248\u672c</button> <button onclick="agentConfigHistory()">\u5386\u53f2\u8bb0\u5f55</button></div>' +
+        content.innerHTML = '<h3 style="margin-top:0">全局 Agent 配置</h3>' +
+          '<div class="toolbar"><button onclick="agentConfigSave()">保存配置</button> <button onclick="agentConfigRollback()">回滚上一版本</button> <button onclick="agentConfigHistory()">历史记录</button></div>' +
           '<div class="form-grid">' +
-          agentField('global_enabled', '\u5168\u5c40\u542f\u7528', 'checkbox', cfg.global_enabled) +
-          agentField('default_model', '\u9ed8\u8ba4\u6a21\u578b', 'text', cfg.default_model) +
-          agentField('embedding_model', 'Embedding \u6a21\u578b', 'text', cfg.embedding_model) +
+          agentField('global_enabled', '全局启用', 'checkbox', cfg.global_enabled) +
+          agentField('default_model', '默认模型', 'text', cfg.default_model) +
+          agentField('embedding_model', 'Embedding 模型', 'text', cfg.embedding_model) +
           agentField('temperature', 'Temperature', 'number', cfg.temperature) +
           agentField('max_tokens', 'Max Tokens', 'number', cfg.max_tokens) +
           agentField('rag_top_k', 'RAG Top-K', 'number', cfg.rag_top_k) +
-          agentField('rag_similarity_threshold', 'RAG \u76f8\u4f3c\u5ea6\u9608\u503c', 'number', cfg.rag_similarity_threshold) +
+          agentField('rag_similarity_threshold', 'RAG 相似度阈值', 'number', cfg.rag_similarity_threshold) +
           agentField('chunk_size', 'Chunk Size', 'number', cfg.chunk_size) +
           agentField('chunk_overlap', 'Chunk Overlap', 'number', cfg.chunk_overlap) +
-          agentField('moderation_enabled', '\u5185\u5bb9\u5ba1\u6838\u542f\u7528', 'checkbox', cfg.moderation_enabled) +
-          agentField('moderation_model', '\u5ba1\u6838\u6a21\u578b', 'text', cfg.moderation_model) +
-          agentField('moderation_threshold', '\u5ba1\u6838\u9608\u503c', 'number', cfg.moderation_threshold) +
-          agentField('tool_calling_enabled', 'Tool Calling \u542f\u7528', 'checkbox', cfg.tool_calling_enabled) +
-          agentField('auto_kick_enabled', '\u81ea\u52a8\u8e22\u4eba\u542f\u7528', 'checkbox', cfg.auto_kick_enabled) +
-          agentField('auto_ban_enabled', '\u81ea\u52a8\u5c01\u7981\u542f\u7528', 'checkbox', cfg.auto_ban_enabled) +
+          agentField('moderation_enabled', '内容审核启用', 'checkbox', cfg.moderation_enabled) +
+          agentField('moderation_model', '审核模型', 'text', cfg.moderation_model) +
+          agentField('moderation_threshold', '审核阈值', 'number', cfg.moderation_threshold) +
+          agentField('tool_calling_enabled', 'Tool Calling 启用', 'checkbox', cfg.tool_calling_enabled) +
+          agentField('auto_kick_enabled', '自动踢人启用', 'checkbox', cfg.auto_kick_enabled) +
+          agentField('auto_ban_enabled', '自动封禁启用', 'checkbox', cfg.auto_ban_enabled) +
           agentArea('system_prompt', 'System Prompt', cfg.system_prompt) +
           agentArea('moderation_prompt', 'Moderation Prompt', cfg.moderation_prompt) +
           agentArea('rag_prompt', 'RAG Prompt', cfg.rag_prompt) +
@@ -461,7 +461,7 @@
     async function agentConfigSave() {
       try {
         await request('/admin/agent-config', { method: 'PUT', body: JSON.stringify(readAgentConfigInputs()) });
-        alert('\u914d\u7f6e\u5df2\u4fdd\u5b58');
+        alert('配置已保存');
         loadAgentConfigPage();
       } catch (error) {
         alert(error.message);
@@ -469,10 +469,10 @@
     }
 
     async function agentConfigRollback() {
-      if (!confirm('\u786e\u8ba4\u56de\u6eda\u5230\u4e0a\u4e00\u7248\u672c\u5417\uff1f')) return;
+      if (!confirm('确认回滚到上一版本吗？')) return;
       try {
         await request('/admin/agent-config/rollback', { method: 'POST' });
-        alert('\u56de\u6eda\u6210\u529f');
+        alert('回滚成功');
         loadAgentConfigPage();
       } catch (error) {
         alert(error.message);
@@ -482,8 +482,8 @@
     async function agentConfigHistory() {
       try {
         const data = await request('/admin/agent-config/history?page=1&page_size=20');
-        const rows = (data.items || []).map(item => '<tr><td>' + item.version + '</td><td>' + item.admin_username + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td><button onclick="agentConfigHistoryDetail(\'' + item.before_data + '\',\'' + item.after_data + '\')">\u67e5\u770b</button></td></tr>').join('');
-        const html = '<h3>\u914d\u7f6e\u5386\u53f2</h3><table class="admin-table"><thead><tr><th>\u7248\u672c</th><th>\u7ba1\u7406\u5458</th><th>\u65f6\u95f4</th><th>\u64cd\u4f5c</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        const rows = (data.items || []).map(item => '<tr><td>' + item.version + '</td><td>' + item.admin_username + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td><button onclick="agentConfigHistoryDetail(\'' + item.before_data + '\',\'' + item.after_data + '\')">查看</button></td></tr>').join('');
+        const html = '<h3>配置历史</h3><table class="admin-table"><thead><tr><th>版本</th><th>管理员</th><th>时间</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
         const content = document.getElementById('content');
         content.innerHTML = html;
       } catch (error) {
@@ -492,7 +492,7 @@
     }
 
     function agentConfigHistoryDetail(before, after) {
-      alert('\u4fee\u6539\u524d\uff1a' + before + '\n\n\u4fee\u6539\u540e\uff1a' + after);
+      alert('修改前：' + before + '\n\n修改后：' + after);
     }
 
     window.agentConfigSave = agentConfigSave;
@@ -517,16 +517,16 @@
 
     async function loadFiles() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d\u6587\u4ef6\u5217\u8868...</div>';
+      content.innerHTML = '<div class="loading">正在加载文件列表...</div>';
       try {
         const endpoint = buildFileQuery();
         const data = await request(endpoint);
-        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.object_key + '</td><td>' + item.original_name + '</td><td>' + (item.sha256 || '-') + '</td><td>' + item.size + '</td><td>' + item.uploader_id + ' (' + item.username + ')</td><td>' + item.room_id + ' (' + item.room_name + ')</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + item.backend + '</td><td>' + item.status + '</td><td>' + (item.exists ? '\u5b58\u5728' : '\u7f3a\u5931') + '</td><td>' + (item.has_message ? '\u6709' : '\u65e0') + '</td><td>' +
-          '<button onclick="fileDownload(' + item.id + ')">\u4e0b\u8f7d</button> ' +
-          '<button onclick="fileDelete(' + item.id + ')">\u5220\u9664</button>' +
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.object_key + '</td><td>' + item.original_name + '</td><td>' + (item.sha256 || '-') + '</td><td>' + item.size + '</td><td>' + item.uploader_id + ' (' + item.username + ')</td><td>' + item.room_id + ' (' + item.room_name + ')</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + item.backend + '</td><td>' + item.status + '</td><td>' + (item.exists ? '存在' : '缺失') + '</td><td>' + (item.has_message ? '有' : '无') + '</td><td>' +
+          '<button onclick="fileDownload(' + item.id + ')">下载</button> ' +
+          '<button onclick="fileDelete(' + item.id + ')">删除</button>' +
           '</td></tr>').join('');
-        content.innerHTML = '<div class="toolbar"><input id="fileKeyword" placeholder="\u5173\u952e\u5b57"><input id="fileType" placeholder="\u6587\u4ef6\u7c7b\u578b\u5982 png"><input id="fileStatus" placeholder="\u72b6\u6001"><input id="fileUploaderId" placeholder="\u4e0a\u4f20\u7528\u6237ID"><input id="fileRoomId" placeholder="\u7fa4\u804aID"><button onclick="loadFiles()">\u67e5\u8be2</button> <button onclick="fileScan()">\u5f02\u5e38\u68c0\u67e5</button> <button onclick="fileCleanup()">\u6e05\u7406\u5b64\u7acb\u5bf9\u8c61</button></div>' +
-          '<h3 style="margin-top:14px">\u6587\u4ef6\u7ba1\u7406</h3><table class="admin-table"><thead><tr><th>ID</th><th>Object Key</th><th>\u539f\u59cb\u6587\u4ef6\u540d</th><th>SHA-256</th><th>\u5927\u5c0f</th><th>\u4e0a\u4f20\u7528\u6237</th><th>\u6240\u5c5e\u7fa4\u804a</th><th>\u4e0a\u4f20\u65f6\u95f4</th><th>\u5b58\u50a8\u7c7b\u578b</th><th>\u72b6\u6001</th><th>\u5b9e\u9645\u5b58\u5728</th><th>\u6d88\u606f\u5f15\u7528</th><th>\u64cd\u4f5c</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        content.innerHTML = '<div class="toolbar"><input id="fileKeyword" placeholder="关键字"><input id="fileType" placeholder="文件类型如 png"><input id="fileStatus" placeholder="状态"><input id="fileUploaderId" placeholder="上传用户ID"><input id="fileRoomId" placeholder="群聊ID"><button onclick="loadFiles()">查询</button> <button onclick="fileScan()">异常检查</button> <button onclick="fileCleanup()">清理孤立对象</button></div>' +
+          '<h3 style="margin-top:14px">文件管理</h3><table class="admin-table"><thead><tr><th>ID</th><th>Object Key</th><th>原始文件名</th><th>SHA-256</th><th>大小</th><th>上传用户</th><th>所属群聊</th><th>上传时间</th><th>存储类型</th><th>状态</th><th>实际存在</th><th>消息引用</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -542,10 +542,10 @@
     }
 
     async function fileDelete(id) {
-      if (!confirm('\u786e\u8ba4\u5220\u9664\u6587\u4ef6 ' + id + ' \u5417\uff1f\u8be5\u64cd\u4f5c\u540c\u65f6\u5220\u9664\u5bf9\u8c61\u5b58\u50a8\u4e2d\u7684\u5b9e\u9645\u6587\u4ef6\u3002')) return;
+      if (!confirm('确认删除文件 ' + id + ' 吗？该操作同时删除对象存储中的实际文件。')) return;
       try {
         await request('/admin/files/' + id, { method: 'DELETE' });
-        alert('\u5220\u9664\u6210\u529f');
+        alert('删除成功');
         loadFiles();
       } catch (error) {
         alert(error.message);
@@ -558,17 +558,17 @@
         const missing = (data.missing_records || []).length;
         const orphan = (data.orphan_objects || []).length;
         const stale = (data.stale_records || []).length;
-        alert('\u5f02\u5e38\u68c0\u67e5\u5b8c\u6210\uff1a\u7f3a\u5931 ' + missing + '\uff0c\u5b64\u7acb\u5bf9\u8c61 ' + orphan + '\uff0c\u8d85\u65f6\u672a\u5f15\u7528 ' + stale);
+        alert('异常检查完成：缺失 ' + missing + '，孤立对象 ' + orphan + '，超时未引用 ' + stale);
       } catch (error) {
         alert(error.message);
       }
     }
 
     async function fileCleanup() {
-      if (!confirm('\u786e\u8ba4\u6e05\u7406\u5b64\u7acb\u5bf9\u8c61\u5417\uff1f\u4ec5\u4f1a\u5220\u9664\u65e0\u6570\u636e\u5e93\u8bb0\u5f55\u7684\u5bf9\u8c61\u3002')) return;
+      if (!confirm('确认清理孤立对象吗？仅会删除无数据库记录的对象。')) return;
       try {
         const data = await request('/admin/files/cleanup', { method: 'POST' });
-        alert('\u5df2\u6e05\u7406 ' + data.cleaned + ' \u4e2a\u5b64\u7acb\u5bf9\u8c61');
+        alert('已清理 ' + data.cleaned + ' 个孤立对象');
         loadFiles();
       } catch (error) {
         alert(error.message);
@@ -583,31 +583,31 @@
 
     async function loadRooms(keyword) {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">????????...</div>';
+      content.innerHTML = '<div class="loading">正在加载连接列表...</div>';
       try {
         const roomQuery = keyword ? '&keyword=' + encodeURIComponent(keyword) : '';
         const data = await request('/admin/rooms?page=1&page_size=50' + roomQuery);
-        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.name + '</td><td>' + item.owner_id + '</td><td>' + item.member_count + '</td><td>' + item.online_member_count + '</td><td>' + item.today_message_count + '</td><td>' + item.total_message_count + '</td><td>' + (item.agent_enabled ? '??' : '??') + '</td><td>' + (item.status === 1 ? '???' : '??') + '</td><td>' + item.violation_count + '</td><td>' +
-          '<button onclick="roomAction(' + item.id + ',\'freeze\')">??</button> ' +
-          '<button onclick="roomAction(' + item.id + ',\'unfreeze\')">??</button> ' +
-          '<button onclick="roomAction(' + item.id + ',\'disband\')">??</button> ' +
-          '<button onclick="roomAction(' + item.id + ',\'agent_enable\')">??Agent</button> ' +
-          '<button onclick="roomAction(' + item.id + ',\'agent_disable\')">??Agent</button>' +
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.name + '</td><td>' + item.owner_id + '</td><td>' + item.member_count + '</td><td>' + item.online_member_count + '</td><td>' + item.today_message_count + '</td><td>' + item.total_message_count + '</td><td>' + (item.agent_enabled ? '已启用' : '未启用') + '</td><td>' + (item.status === 1 ? '已冻结' : '正常') + '</td><td>' + item.violation_count + '</td><td>' +
+          '<button onclick="roomAction(' + item.id + ',\'freeze\')">冻结</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'unfreeze\')">解冻</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'disband\')">解散</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'agent_enable\')">启用Agent</button> ' +
+          '<button onclick="roomAction(' + item.id + ',\'agent_disable\')">停用Agent</button>' +
           '</td></tr>').join('');
-        content.innerHTML = '<h3 style="margin-top:0">????</h3><table class="admin-table"><thead><tr><th>ID</th><th>???</th><th>??</th><th>???</th><th>????</th><th>????</th><th>???</th><th>Agent</th><th>??</th><th>????</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        content.innerHTML = '<h3 style="margin-top:0">房间列表</h3><table class="admin-table"><thead><tr><th>ID</th><th>房间名</th><th>类型</th><th>成员数</th><th>在线成员</th><th>今日消息</th><th>总消息</th><th>Agent</th><th>状态</th><th>违规数</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
     }
 
     async function roomAction(id, action) {
-      if (!confirm('????? ' + id + ' ???' + action + '?????')) return;
+      if (!confirm('确定对房间 ' + id + ' 执行 ' + action + ' 操作吗？')) return;
       try {
         await request('/admin/rooms/' + id + '/action', {
           method: 'POST',
           body: JSON.stringify({ action })
         });
-        alert('????');
+        alert('操作成功');
         loadRooms();
       } catch (error) {
         alert(error.message);
@@ -616,32 +616,32 @@
     window.roomAction = roomAction;
     async function loadUsers(keyword) {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">????????...</div>';
+      content.innerHTML = '<div class="loading">正在加载连接列表...</div>';
       try {
         const userQuery = keyword ? '&keyword=' + encodeURIComponent(keyword) : '';
         const data = await request('/admin/users?page=1&page_size=50' + userQuery);
-        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.username + '</td><td>' + item.role_name + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + (item.last_login_at ? new Date(item.last_login_at).toLocaleString() : '-') + '</td><td>' + (item.online ? '??' : '??') + '</td><td>' + (item.status === 1 ? '???' : '??') + '</td><td>' + item.room_count + '</td><td>' + item.message_count + '</td><td>' + item.violation_count + '</td><td>' +
-          '<button onclick="userAction(' + item.id + ',\'force_offline\')">????</button> ' +
-          '<button onclick="userAction(' + item.id + ',\'ban\')">??</button> ' +
-          '<button onclick="userAction(' + item.id + ',\'unban\')">??</button> ' +
-          '<button onclick="userAction(' + item.id + ',\'role_moderator\')">?????</button> ' +
-          '<button onclick="userAction(' + item.id + ',\'role_operator\')">????</button> ' +
-          '<button onclick="userAction(' + item.id + ',\'role_super_admin\')">????</button>' +
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.username + '</td><td>' + item.role_name + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + (item.last_login_at ? new Date(item.last_login_at).toLocaleString() : '-') + '</td><td>' + (item.online ? '在线' : '离线') + '</td><td>' + (item.status === 1 ? '已冻结' : '正常') + '</td><td>' + item.room_count + '</td><td>' + item.message_count + '</td><td>' + item.violation_count + '</td><td>' +
+          '<button onclick="userAction(' + item.id + ',\'force_offline\')">强制下线</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'ban\')">封禁</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'unban\')">解封</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'role_moderator\')">设为审核员</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'role_operator\')">设为运营</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'role_super_admin\')">设为超管</button>' +
           '</td></tr>').join('');
-        content.innerHTML = '<h3 style="margin-top:0">????</h3><table class="admin-table"><thead><tr><th>ID</th><th>???</th><th>??</th><th>????</th><th>????</th><th>??</th><th>??</th><th>???</th><th>???</th><th>???</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        content.innerHTML = '<h3 style="margin-top:0">用户列表</h3><table class="admin-table"><thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>注册时间</th><th>最后登录</th><th>在线</th><th>状态</th><th>房间数</th><th>消息数</th><th>违规数</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
     }
 
     async function userAction(id, action) {
-      if (!confirm('????? ' + id + ' ???' + action + '?????')) return;
+      if (!confirm('确定对房间 ' + id + ' 执行 ' + action + ' 操作吗？')) return;
       try {
         await request('/admin/users/' + id + '/action', {
           method: 'POST',
           body: JSON.stringify({ action })
         });
-        alert('????');
+        alert('操作成功');
         loadUsers();
       } catch (error) {
         alert(error.message);
@@ -650,24 +650,24 @@
     window.userAction = userAction;
     async function loadModerationDashboard() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">??????????...</div>';
+      content.innerHTML = '<div class="loading">正在加载审核看板...</div>';
       try {
         const data = await request('/admin/dashboard/moderation');
         const catRows = (data.category_stats || []).map(item => '<tr><td>' + item.category + '</td><td>' + item.count + '</td></tr>').join('');
         const recentRows = (data.recent_violations || []).map(item => '<tr><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + item.username + '</td><td>' + item.room_name + '</td><td>' + item.original_msg + '</td><td>' + item.risk_level + '</td><td>' + item.category + '</td><td>' + item.penalty_status + '</td><td>' + item.review_status + '</td></tr>').join('');
-        content.innerHTML = '<h3 style="margin-top:0">AI ??????</h3>' +
+        content.innerHTML = '<h3 style="margin-top:0">AI 内容审核看板</h3>' +
           '<div class="metric-grid">' +
-          metricCard('???????', data.today_reviewed) +
-          metricCard('???????', data.today_violations) +
-          metricCard('???', (data.violation_rate * 100).toFixed(2) + '%') +
-          metricCard('????????', data.auto_kick_count) +
-          metricCard('????????', data.auto_ban_count) +
-          metricCard('??????', data.manual_review_count) +
-          metricCard('??????', data.revoked_count) +
-          metricCard('Tool Calling ??????', data.tool_failure_count) +
+          metricCard('今日已审核', data.today_reviewed) +
+          metricCard('今日违规', data.today_violations) +
+          metricCard('违规率', (data.violation_rate * 100).toFixed(2) + '%') +
+          metricCard('自动踢出', data.auto_kick_count) +
+          metricCard('自动封禁', data.auto_ban_count) +
+          metricCard('人工复核', data.manual_review_count) +
+          metricCard('已撤销', data.revoked_count) +
+          metricCard('Tool Calling 失败次数', data.tool_failure_count) +
           '</div>' +
-          '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th></tr></thead><tbody>' + catRows + '</tbody></table>' +
-          '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th><th>??</th><th>????</th><th>????</th><th>??</th><th>????</th><th>????</th></tr></thead><tbody>' + recentRows + '</tbody></table>';
+          '<h3>分类统计</h3><table class="admin-table"><thead><tr><th>分类</th><th>数量</th></tr></thead><tbody>' + catRows + '</tbody></table>' +
+          '<h3>最近违规</h3><table class="admin-table"><thead><tr><th>时间</th><th>用户</th><th>房间</th><th>原始消息</th><th>风险等级</th><th>分类</th><th>处罚状态</th><th>审核状态</th></tr></thead><tbody>' + recentRows + '</tbody></table>';
         loadModerationEvents();
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
@@ -679,28 +679,28 @@
       try {
         const data = await request('/admin/moderation?page=1&page_size=50');
         const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.username + '</td><td>' + item.user_id + '</td><td>' + item.room_name + '</td><td>' + item.original_msg + '</td><td>' + item.category + '</td><td>' + item.risk_level + '</td><td>' + item.penalty_status + '</td><td>' + item.review_status + '</td><td>' +
-          '<button onclick="moderationAction(' + item.id + ',\'warn\')">??</button> ' +
-          '<button onclick="moderationAction(' + item.id + ',\'mute\')">??</button> ' +
-          '<button onclick="moderationAction(' + item.id + ',\'kick\')">??</button> ' +
-          '<button onclick="moderationAction(' + item.id + ',\'ban\')">??</button> ' +
-          '<button onclick="moderationAction(' + item.id + ',\'revoke\')">??</button> ' +
-          '<button onclick="moderationAction(' + item.id + ',\'false_positive\')">??</button> ' +
-          '<button onclick="moderationAction(' + item.id + ',\'confirmed\')">????</button>' +
+          '<button onclick="moderationAction(' + item.id + ',\'warn\')">警告</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'mute\')">禁言</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'kick\')">踢出</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'ban\')">封禁</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'revoke\')">撤销</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'false_positive\')">误判</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'confirmed\')">确认违规</button>' +
           '</td></tr>').join('');
-        content.insertAdjacentHTML('beforeend', '<h3>??????</h3><table class="admin-table"><thead><tr><th>ID</th><th>??</th><th>UserID</th><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>');
+        content.insertAdjacentHTML('beforeend', '<h3>审核事件列表</h3><table class="admin-table"><thead><tr><th>ID</th><th>用户</th><th>UserID</th><th>房间</th><th>消息</th><th>分类</th><th>风险</th><th>处罚</th><th>审核</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>');
       } catch (error) {
-        content.insertAdjacentHTML('beforeend', '<div class="error">?????????' + error.message + '</div>');
+        content.insertAdjacentHTML('beforeend', '<div class="error">加载审核事件失败：' + error.message + '</div>');
       }
     }
 
     async function moderationAction(id, action) {
-      if (!confirm('????? ' + id + ' ???' + action + '?????')) return;
+      if (!confirm('确定对房间 ' + id + ' 执行 ' + action + ' 操作吗？')) return;
       try {
         await request('/admin/moderation/' + id + '/action', {
           method: 'POST',
           body: JSON.stringify({ action })
         });
-        alert('????');
+        alert('操作成功');
         loadModerationDashboard();
       } catch (error) {
         alert(error.message);
@@ -710,26 +710,26 @@
 
     async function loadRAGDashboard() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">???? RAG/Qdrant ??...</div>';
+      content.innerHTML = '<div class="loading">正在加载 RAG/Qdrant 看板...</div>';
       try {
         const data = await request('/admin/dashboard/rag');
         const queryData = await request('/admin/rag/queries?page=1&page_size=20');
-        const queryRows = (queryData.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.room_id + '</td><td>' + item.user_id + '</td><td>' + item.question + '</td><td>' + new Date(item.query_time).toLocaleString() + '</td><td>' + item.retrieved_count + '</td><td>' + item.similarity_scores + '</td><td>' + item.query_latency_ms + '</td><td>' + (item.used_time_tool ? '?' : '?') + '</td></tr>').join('');
-        content.innerHTML = '<h3 style="margin-top:0">RAG / Qdrant ??</h3>' +
+        const queryRows = (queryData.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.room_id + '</td><td>' + item.user_id + '</td><td>' + item.question + '</td><td>' + new Date(item.query_time).toLocaleString() + '</td><td>' + item.retrieved_count + '</td><td>' + item.similarity_scores + '</td><td>' + item.query_latency_ms + '</td><td>' + (item.used_time_tool ? '是' : '否') + '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">RAG / Qdrant 概览</h3>' +
           '<div class="metric-grid">' +
-          metricCard('Qdrant ????', data.qdrant_online ? '??' : '??') +
-          metricCard('Collection ??', data.collection_count) +
-          metricCard('??????????', data.vector_count) +
-          metricCard('????????', data.today_new_vectors) +
-          metricCard('Embedding Queue ?????', data.embedding_queue) +
-          metricCard('Embedding ????(ms)', data.embedding_avg_ms.toFixed(2)) +
-          metricCard('Qdrant ??????(ms)', data.qdrant_query_avg_ms.toFixed(2)) +
-          metricCard('RAG ??????', data.rag_avg_recall.toFixed(2)) +
-          metricCard('RAG Top-K ????', data.top_k) +
-          metricCard('????', data.vector_dimension) +
-          metricCard('????????', data.last_write_time ? new Date(data.last_write_time).toLocaleString() : '-') +
+          metricCard('Qdrant 在线', data.qdrant_online ? '在线' : '离线') +
+          metricCard('Collection 数', data.collection_count) +
+          metricCard('向量总数', data.vector_count) +
+          metricCard('今日新增向量', data.today_new_vectors) +
+          metricCard('Embedding Queue 长度', data.embedding_queue) +
+          metricCard('Embedding 平均耗时(ms)', data.embedding_avg_ms.toFixed(2)) +
+          metricCard('Qdrant 查询平均耗时(ms)', data.qdrant_query_avg_ms.toFixed(2)) +
+          metricCard('RAG 平均召回率', data.rag_avg_recall.toFixed(2)) +
+          metricCard('RAG Top-K 大小', data.top_k) +
+          metricCard('向量维度', data.vector_dimension) +
+          metricCard('最后写入时间', data.last_write_time ? new Date(data.last_write_time).toLocaleString() : '-') +
           '</div>' +
-          '<h3>RAG ????</h3><table class="admin-table"><thead><tr><th>ID</th><th>??</th><th>??</th><th>??</th><th>????</th><th>???</th><th>???</th><th>??(ms)</th><th>??Tool</th></tr></thead><tbody>' + queryRows + '</tbody></table>';
+          '<h3>RAG 查询记录</h3><table class="admin-table"><thead><tr><th>ID</th><th>房间ID</th><th>用户ID</th><th>问题</th><th>查询时间</th><th>召回数</th><th>相似度</th><th>耗时(ms)</th><th>使用时间工具</th></tr></thead><tbody>' + queryRows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -737,31 +737,31 @@
 
     async function loadAgentDashboard() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">???? Agent ??...</div>';
+      content.innerHTML = '<div class="loading">正在加载 Agent 监控...</div>';
       try {
         const data = await request('/admin/dashboard/agent');
         const failRows = (data.recent_failures || []).map(item => '<tr><td>' + new Date(item.time).toLocaleString() + '</td><td>' + item.model + '</td><td>' + item.request_id + '</td><td>' + item.error_type + '</td><td>' + item.http_status + '</td><td>' + item.latency_ms.toFixed(1) + '</td><td>' + item.retries + '</td></tr>').join('');
-        content.innerHTML = '<h3 style="margin-top:0">Agent ????</h3>' +
+        content.innerHTML = '<h3 style="margin-top:0">Agent 运行概览</h3>' +
           '<div class="metric-grid">' +
-          metricCard('?? Agent ????', data.calls_today) +
-          metricCard('?? Agent ???', data.current_requests) +
-          metricCard('?????', (data.success_rate * 100).toFixed(2) + '%') +
-          metricCard('?????', (data.failure_rate * 100).toFixed(2) + '%') +
-          metricCard('??????(ms)', data.average_response_ms.toFixed(2)) +
-          metricCard('P95 ????(ms)', data.p95_response_ms.toFixed(2)) +
-          metricCard('?? Token ???', data.total_tokens) +
-          metricCard('?? Token', data.input_tokens) +
-          metricCard('?? Token', data.output_tokens) +
-          metricCard('?????? Token', data.average_tokens_per_call.toFixed(2)) +
-          metricCard('Tool Calling ??', data.tool_calls) +
-          metricCard('Tool Calling ???', (data.tool_success_rate * 100).toFixed(2) + '%') +
-          metricCard('RAG ????', data.rag_calls) +
-          metricCard('???? Tool ????', data.time_tool_calls) +
-          metricCard('??????????', data.moderation_calls) +
-          metricCard('Embedding ????', data.embedding_calls) +
-          metricCard('Embedding ????', data.embedding_failures) +
+          metricCard('今日 Agent 调用', data.calls_today) +
+          metricCard('当前 Agent 请求', data.current_requests) +
+          metricCard('成功率', (data.success_rate * 100).toFixed(2) + '%') +
+          metricCard('失败率', (data.failure_rate * 100).toFixed(2) + '%') +
+          metricCard('平均响应(ms)', data.average_response_ms.toFixed(2)) +
+          metricCard('P95 响应(ms)', data.p95_response_ms.toFixed(2)) +
+          metricCard('Token 总数', data.total_tokens) +
+          metricCard('输入 Token', data.input_tokens) +
+          metricCard('输出 Token', data.output_tokens) +
+          metricCard('平均每次 Token', data.average_tokens_per_call.toFixed(2)) +
+          metricCard('Tool Calling 次数', data.tool_calls) +
+          metricCard('Tool Calling 成功率', (data.tool_success_rate * 100).toFixed(2) + '%') +
+          metricCard('RAG 调用次数', data.rag_calls) +
+          metricCard('时间工具调用次数', data.time_tool_calls) +
+          metricCard('内容审核调用次数', data.moderation_calls) +
+          metricCard('Embedding 调用次数', data.embedding_calls) +
+          metricCard('Embedding 失败次数', data.embedding_failures) +
           '</div>' +
-          '<h3>???? Top Failure</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th><th>Request ID</th><th>????</th><th>HTTP Status</th><th>??(ms)</th><th>????</th></tr></thead><tbody>' + failRows + '</tbody></table>';
+          '<h3>最近 Top Failure</h3><table class="admin-table"><thead><tr><th>时间</th><th>模型</th><th>Request ID</th><th>错误类型</th><th>HTTP Status</th><th>延迟(ms)</th><th>重试次数</th></tr></thead><tbody>' + failRows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -771,28 +771,28 @@
       const content = document.getElementById('content');
       const html = '<h3 style="margin-top:22px">Quick Actions</h3>' +
         '<div class="toolbar">' +
-        '<input id="quickUserKeyword" placeholder="\u7528\u6237\u540d/\u7528\u6237ID"><button onclick="quickUserSearch()">\u641c\u7d22\u7528\u6237</button>' +
-        '<input id="quickRoomKeyword" placeholder="\u7fa4\u540d/\u7fa4ID"><button onclick="quickRoomSearch()">\u641c\u7d22\u7fa4\u804a</button>' +
-        '<button onclick="selectPage(\'message-traffic\')">\u6d88\u606f\u6d41\u91cf</button>' +
-        '<button onclick="selectPage(\'connections\')">\u5728\u7ebf\u7528\u6237</button>' +
-        '<button onclick="selectPage(\'moderation\')">\u6700\u65b0\u8fdd\u89c4</button>' +
-        '<button onclick="selectPage(\'tool-calls\')">Agent \u9519\u8bef</button>' +
-        '<button onclick="selectPage(\'alerts\')">\u7cfb\u7edf\u544a\u8b66</button>' +
-        '<button onclick="fileCleanup()">\u6e05\u7406\u4e34\u65f6\u5206\u7247</button>' +
+        '<input id="quickUserKeyword" placeholder="用户名/用户ID"><button onclick="quickUserSearch()">搜索用户</button>' +
+        '<input id="quickRoomKeyword" placeholder="群名/群ID"><button onclick="quickRoomSearch()">搜索群聊</button>' +
+        '<button onclick="selectPage(\'message-traffic\')">消息流量</button>' +
+        '<button onclick="selectPage(\'connections\')">在线用户</button>' +
+        '<button onclick="selectPage(\'moderation\')">最新违规</button>' +
+        '<button onclick="selectPage(\'tool-calls\')">Agent 错误</button>' +
+        '<button onclick="selectPage(\'alerts\')">系统告警</button>' +
+        '<button onclick="fileCleanup()">清理临时分片</button>' +
         '</div>';
       content.insertAdjacentHTML('beforeend', html);
     }
 
     async function quickUserSearch() {
       const keyword = document.getElementById('quickUserKeyword').value.trim();
-      if (!keyword) return alert('\u8bf7\u8f93\u5165\u7528\u6237\u641c\u7d22\u5173\u952e\u5b57');
+      if (!keyword) return alert('请输入用户搜索关键字');
       selectPage('users');
       loadUsers(keyword);
     }
 
     async function quickRoomSearch() {
       const keyword = document.getElementById('quickRoomKeyword').value.trim();
-      if (!keyword) return alert('\u8bf7\u8f93\u5165\u7fa4\u804a\u641c\u7d22\u5173\u952e\u5b57');
+      if (!keyword) return alert('请输入群聊搜索关键字');
       selectPage('rooms');
       loadRooms(keyword);
     }
@@ -804,15 +804,15 @@
       const content = document.getElementById('content');
       try {
         const data = await request('/admin/alerts/unresolved-count');
-        content.insertAdjacentHTML('afterbegin', '<div class="alerts-badge">\u672a\u5904\u7406\u544a\u8b66\uff1a' + data.count + '</div>');
+        content.insertAdjacentHTML('afterbegin', '<div class="alerts-badge">未处理告警：' + data.count + '</div>');
       } catch (error) {
-        // Dashboard \u4e3b\u8981\u6570\u636e\u4e0d\u53d7\u544a\u8b66\u8ba1\u6570\u5931\u8d25\u5f71\u54cd\u3002
+        // Dashboard 主要数据不受告警计数失败影响。
       }
     }
 
     async function loadAlerts() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d\u544a\u8b66\u4e2d\u5fc3...</div>';
+      content.innerHTML = '<div class="loading">正在加载告警中心...</div>';
       try {
         const level = document.getElementById('alertLevel') ? document.getElementById('alertLevel').value : '';
         const status = document.getElementById('alertStatus') ? document.getElementById('alertStatus').value : '';
@@ -820,9 +820,9 @@
         if (level) params.set('level', level);
         if (status) params.set('status', status);
         const data = await request('/admin/alerts?' + params.toString());
-        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.name + '</td><td>' + item.level + '</td><td>' + item.source + '</td><td>' + item.message + '</td><td>' + item.status + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td><button onclick="resolveAlert(' + item.id + ')">\u5904\u7406</button></td></tr>').join('');
-        content.innerHTML = '<div class="toolbar"><select id="alertLevel"><option value="">\u5168\u90e8\u7ea7\u522b</option><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option></select><select id="alertStatus"><option value="">\u5168\u90e8\u72b6\u6001</option><option value="unresolved">\u672a\u5904\u7406</option><option value="resolved">\u5df2\u5904\u7406</option></select><button onclick="loadAlerts()">\u67e5\u8be2</button> <button onclick="evaluateAlerts()">\u7acb\u5373\u8bc4\u4f30</button></div>' +
-          '<h3 style="margin-top:14px">\u544a\u8b66\u4e2d\u5fc3</h3><table class="admin-table"><thead><tr><th>ID</th><th>\u540d\u79f0</th><th>\u7ea7\u522b</th><th>\u6765\u6e90</th><th>\u4fe1\u606f</th><th>\u72b6\u6001</th><th>\u65f6\u95f4</th><th>\u64cd\u4f5c</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.name + '</td><td>' + item.level + '</td><td>' + item.source + '</td><td>' + item.message + '</td><td>' + item.status + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td><button onclick="resolveAlert(' + item.id + ')">处理</button></td></tr>').join('');
+        content.innerHTML = '<div class="toolbar"><select id="alertLevel"><option value="">全部级别</option><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option></select><select id="alertStatus"><option value="">全部状态</option><option value="unresolved">未处理</option><option value="resolved">已处理</option></select><button onclick="loadAlerts()">查询</button> <button onclick="evaluateAlerts()">立即评估</button></div>' +
+          '<h3 style="margin-top:14px">告警中心</h3><table class="admin-table"><thead><tr><th>ID</th><th>名称</th><th>级别</th><th>来源</th><th>信息</th><th>状态</th><th>时间</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -831,7 +831,7 @@
     async function resolveAlert(id) {
       try {
         await request('/admin/alerts/' + id + '/resolve', { method: 'POST' });
-        alert('\u5df2\u5904\u7406');
+        alert('已处理');
         loadAlerts();
       } catch (error) {
         alert(error.message);
@@ -841,7 +841,7 @@
     async function evaluateAlerts() {
       try {
         await request('/admin/alerts/evaluate', { method: 'POST' });
-        alert('\u544a\u8b66\u8bc4\u4f30\u5b8c\u6210');
+        alert('告警评估完成');
         loadAlerts();
       } catch (error) {
         alert(error.message);
@@ -859,13 +859,13 @@
         const rows = (data.items || []).map(item => '<div class="metric-card"><div class="metric-value">' + item.status + '</div><div class="metric-label">' + item.name + ' (' + item.latency_ms.toFixed(2) + 'ms)</div>' + (item.error ? '<div class="error">' + item.error + '</div>' : '') + '</div>').join('');
         content.insertAdjacentHTML('beforeend', '<h3 style="margin-top:22px">System Health</h3><div class="metric-grid">' + rows + '</div>');
       } catch (error) {
-        content.insertAdjacentHTML('beforeend', '<div class="error">\u5065\u5eb7\u68c0\u67e5\u5931\u8d25\uff1a' + error.message + '</div>');
+        content.insertAdjacentHTML('beforeend', '<div class="error">健康检查失败：' + error.message + '</div>');
       }
     }
 
     async function loadMessageTraffic() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">??????????...</div>';
+      content.innerHTML = '<div class="loading">正在加载审核看板...</div>';
       try {
         const data = await request('/admin/dashboard/message-traffic');
         const hourRows = (data.hourly || []).map(item => '<tr><td>' + item.time + '</td><td>' + item.count + '</td></tr>').join('');
@@ -873,17 +873,17 @@
         const roomRows = (data.top_rooms || []).map(item => '<tr><td>' + item.key + '</td><td>' + item.count + '</td></tr>').join('');
         const userRows = (data.top_users || []).map(item => '<tr><td>' + item.key + '</td><td>' + item.count + '</td></tr>').join('');
         const typeRows = Object.entries(data.type_distribution || {}).map(([k, v]) => '<tr><td>' + k + '</td><td>' + v + '</td></tr>').join('');
-        content.innerHTML = '<h3 style="margin-top:0">??????</h3>' +
+        content.innerHTML = '<h3 style="margin-top:0">消息流量概览</h3>' +
           '<div class="metric-grid">' +
-          metricCard('??????', data.private_group.private) +
-          metricCard('??????', data.private_group.group) +
-          metricCard('??????', data.peak_hour || '-') +
+          metricCard('私聊消息', data.private_group.private) +
+          metricCard('群聊消息', data.private_group.group) +
+          metricCard('高峰时段', data.peak_hour || '-') +
           '</div>' +
-          '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>????</th></tr></thead><tbody>' + typeRows + '</tbody></table>' +
-          '<h3>?? 24 ????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th></tr></thead><tbody>' + hourRows + '</tbody></table>' +
-          '<h3>?? 7 ???</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th></tr></thead><tbody>' + dayRows + '</tbody></table>' +
-          '<h3>???????? Top 10</h3><table class="admin-table"><thead><tr><th>Room ID</th><th>???</th></tr></thead><tbody>' + roomRows + '</tbody></table>' +
-          '<h3>???? Top 10</h3><table class="admin-table"><thead><tr><th>User ID</th><th>???</th></tr></thead><tbody>' + userRows + '</tbody></table>';
+          '<h3>消息类型分布</h3><table class="admin-table"><thead><tr><th>类型</th><th>消息数</th></tr></thead><tbody>' + typeRows + '</tbody></table>' +
+          '<h3>近 24 小时趋势</h3><table class="admin-table"><thead><tr><th>时间</th><th>消息数</th></tr></thead><tbody>' + hourRows + '</tbody></table>' +
+          '<h3>近 7 天趋势</h3><table class="admin-table"><thead><tr><th>日期</th><th>消息数</th></tr></thead><tbody>' + dayRows + '</tbody></table>' +
+          '<h3>活跃房间 Top 10</h3><table class="admin-table"><thead><tr><th>Room ID</th><th>消息数</th></tr></thead><tbody>' + roomRows + '</tbody></table>' +
+          '<h3>活跃用户 Top 10</h3><table class="admin-table"><thead><tr><th>User ID</th><th>消息数</th></tr></thead><tbody>' + userRows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
@@ -896,38 +896,38 @@
         const ws = data.websocket;
         const go = data.golang;
         const api = data.api;
-        const html = '<h3 style="margin:22px 0 12px">??????</h3>' +
+        const html = '<h3 style="margin:22px 0 12px">运行时指标</h3>' +
           '<div class="metric-grid">' +
-          metricCard('?????', ws.current_connections) +
-          metricCard('?????', ws.established_total) +
-          metricCard('?????', ws.closed_total) +
-          metricCard('???????', ws.abnormal_closed_total) +
-          metricCard('????????(ms)', Math.round(ws.average_connection_duration_ms)) +
-          metricCard('????????', ws.read_messages_per_minute) +
-          metricCard('????????', ws.write_messages_per_minute) +
-          metricCard('???????', ws.send_queue_backlog) +
-          metricCard('??????', ws.slow_clients) +
-          metricCard('Goroutine ??', go.goroutines) +
+          metricCard('当前连接数', ws.current_connections) +
+          metricCard('累计连接数', ws.established_total) +
+          metricCard('累计关闭数', ws.closed_total) +
+          metricCard('异常关闭数', ws.abnormal_closed_total) +
+          metricCard('平均连接时长(ms)', Math.round(ws.average_connection_duration_ms)) +
+          metricCard('每分钟读消息', ws.read_messages_per_minute) +
+          metricCard('每分钟写消息', ws.write_messages_per_minute) +
+          metricCard('发送队列积压', ws.send_queue_backlog) +
+          metricCard('慢客户端数', ws.slow_clients) +
+          metricCard('Goroutine 数', go.goroutines) +
           metricCard('GOMAXPROCS', go.gomaxprocs) +
           metricCard('Heap Alloc', go.heap_alloc) +
           metricCard('Heap Sys', go.heap_sys) +
-          metricCard('GC ??', go.gc_count) +
-          metricCard('?? GC ??', go.last_gc_unix ? new Date(go.last_gc_unix * 1000).toLocaleString() : '-') +
+          metricCard('GC 次数', go.gc_count) +
+          metricCard('上次 GC 时间', go.last_gc_unix ? new Date(go.last_gc_unix * 1000).toLocaleString() : '-') +
           metricCard('GC Pause(ns)', go.gc_pause_ns) +
-          metricCard('??????(s)', Math.round(go.uptime_seconds)) +
-          metricCard('?? 1 ?? QPS', api.qps_1m.toFixed(2)) +
-          metricCard('?? 5 ?? QPS', api.qps_5m.toFixed(2)) +
-          metricCard('API ??????(ms)', api.average_latency_ms.toFixed(2)) +
-          metricCard('P50 ??(ms)', api.p50_latency_ms.toFixed(2)) +
-          metricCard('P95 ??(ms)', api.p95_latency_ms.toFixed(2)) +
-          metricCard('P99 ??(ms)', api.p99_latency_ms.toFixed(2)) +
-          metricCard('4xx ??', api.status_4xx) +
-          metricCard('5xx ??', api.status_5xx) +
-          metricCard('???', (api.error_rate * 100).toFixed(2) + '%') +
+          metricCard('运行时长(s)', Math.round(go.uptime_seconds)) +
+          metricCard('近 1 分钟 QPS', api.qps_1m.toFixed(2)) +
+          metricCard('近 5 分钟 QPS', api.qps_5m.toFixed(2)) +
+          metricCard('API 平均耗时(ms)', api.average_latency_ms.toFixed(2)) +
+          metricCard('P50 延迟(ms)', api.p50_latency_ms.toFixed(2)) +
+          metricCard('P95 延迟(ms)', api.p95_latency_ms.toFixed(2)) +
+          metricCard('P99 延迟(ms)', api.p99_latency_ms.toFixed(2)) +
+          metricCard('4xx 数量', api.status_4xx) +
+          metricCard('5xx 数量', api.status_5xx) +
+          metricCard('错误率', (api.error_rate * 100).toFixed(2) + '%') +
           '</div>';
         content.insertAdjacentHTML('beforeend', html);
       } catch (error) {
-        content.insertAdjacentHTML('beforeend', '<div class="error">?????????' + error.message + '</div>');
+        content.insertAdjacentHTML('beforeend', '<div class="error">加载审核事件失败：' + error.message + '</div>');
       }
     }
 

@@ -11,23 +11,22 @@ import (
 	"github.com/qdrant/go-client/qdrant"
 	"gorm.io/gorm"
 
-	"lan-im-go/core"
 	"lan-im-go/internal/storage"
 )
 
-// HealthService \u63d0\u4f9b\u5e26\u8d85\u65f6\u7684\u4e0b\u6e38\u670d\u52a1\u5065\u5eb7\u68c0\u6d4b\uff0c\u907f\u514d Dashboard \u88ab\u5355\u4e2a\u670d\u52a1\u62d6\u6b7b\u3002
+// HealthService 提供带超时的下游服务健康检测，避免 Dashboard 被单个服务拖死。
 type HealthService struct {
 	db      *gorm.DB
 	redis   *redis.Client
 	storage storage.Provider
-	hub     *core.Hub
+	runtime RuntimeController
 }
 
-func NewHealthService(db *gorm.DB, redisClient *redis.Client, provider storage.Provider, hub *core.Hub) *HealthService {
-	return &HealthService{db: db, redis: redisClient, storage: provider, hub: hub}
+func NewHealthService(db *gorm.DB, redisClient *redis.Client, provider storage.Provider, runtime RuntimeController) *HealthService {
+	return &HealthService{db: db, redis: redisClient, storage: provider, runtime: runtime}
 }
 
-// HealthItem \u5355\u4e2a\u4e0b\u6e38\u670d\u52a1\u7684\u5065\u5eb7\u7ed3\u679c\u3002
+// HealthItem 单个下游服务的健康结果。
 type HealthItem struct {
 	Name      string    `json:"name"`
 	Status    string    `json:"status"`
@@ -42,7 +41,7 @@ const (
 	HealthDown     = "down"
 )
 
-// CheckAll \u5e76\u884c\u68c0\u67e5\u6240\u6709\u4e0b\u6e38\u670d\u52a1\u3002
+// CheckAll 并行检查所有下游服务。
 func (s *HealthService) CheckAll(ctx context.Context) []HealthItem {
 	items := make([]HealthItem, 0, 7)
 	ch := make(chan HealthItem, 7)
@@ -72,7 +71,7 @@ func (s *HealthService) checkMySQL(ctx context.Context) HealthItem {
 	start := time.Now()
 	item := HealthItem{Name: "mysql", CheckedAt: time.Now(), Status: HealthDown}
 	if s.db == nil {
-		item.Error = "???????"
+		item.Error = "MySQL 未配置"
 		return item
 	}
 	sqlDB, err := s.db.DB()
@@ -93,7 +92,7 @@ func (s *HealthService) checkRedis(ctx context.Context) HealthItem {
 	start := time.Now()
 	item := HealthItem{Name: "redis", CheckedAt: time.Now(), Status: HealthDown}
 	if s.redis == nil {
-		item.Error = "Redis ????"
+		item.Error = "Redis 未配置"
 		return item
 	}
 	if err := s.redis.Ping(ctx).Err(); err != nil {
@@ -136,7 +135,7 @@ func (s *HealthService) checkMinIO(ctx context.Context) HealthItem {
 	start := time.Now()
 	item := HealthItem{Name: "minio", CheckedAt: time.Now(), Status: HealthDown}
 	if s.storage == nil {
-		item.Error = "????????"
+		item.Error = "对象存储未配置"
 		return item
 	}
 	if _, err := s.storage.ListObjects(ctx, "", 1); err != nil {
@@ -158,11 +157,15 @@ func (s *HealthService) checkEmbedding(ctx context.Context) HealthItem {
 
 func (s *HealthService) checkWebSocketHub(ctx context.Context) HealthItem {
 	item := HealthItem{Name: "websocket_hub", CheckedAt: time.Now(), Status: HealthDown}
-	if s.hub == nil {
-		item.Error = "WebSocket Hub ????"
+	if s.runtime == nil {
+		item.Error = "WebSocket Hub 未配置"
 		return item
 	}
-	stats := s.hub.Stats()
+	stats, err := s.runtime.HubStats(ctx)
+	if err != nil {
+		item.Error = err.Error()
+		return item
+	}
 	_ = stats
 	item.Status = HealthHealthy
 	return item
@@ -172,7 +175,7 @@ func checkHTTPProvider(ctx context.Context, name, baseURL, apiKey string) Health
 	start := time.Now()
 	item := HealthItem{Name: name, CheckedAt: time.Now(), Status: HealthDown}
 	if baseURL == "" {
-		item.Error = "Provider URL ???"
+		item.Error = "Provider URL 未配置"
 		return item
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)

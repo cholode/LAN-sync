@@ -8,27 +8,24 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/agent"
 	"lan-im-go/cache"
-	"lan-im-go/core"
 	"lan-im-go/models"
 )
 
-// RoomService ?????????
+// RoomService 提供房间管理查询与操作。
 type RoomService struct {
 	db           *gorm.DB
 	messageStore MessageStatsStore
-	hub          *core.Hub
-	agentMgr     *agent.AgentManager
+	runtime      RuntimeController
 	audit        *AuditService
 }
 
-// NewRoomService ?????????
-func NewRoomService(db *gorm.DB, messageStore MessageStatsStore, hub *core.Hub, agentMgr *agent.AgentManager, audit *AuditService) *RoomService {
-	return &RoomService{db: db, messageStore: messageStore, hub: hub, agentMgr: agentMgr, audit: audit}
+// NewRoomService 创建房间管理服务。
+func NewRoomService(db *gorm.DB, messageStore MessageStatsStore, runtime RuntimeController, audit *AuditService) *RoomService {
+	return &RoomService{db: db, messageStore: messageStore, runtime: runtime, audit: audit}
 }
 
-// RoomListQuery ?????????
+// RoomListQuery 定义房间列表查询条件。
 type RoomListQuery struct {
 	Page         int
 	PageSize     int
@@ -40,7 +37,7 @@ type RoomListQuery struct {
 	End          time.Time
 }
 
-// RoomListItem ??????
+// RoomListItem 表示房间列表项。
 type RoomListItem struct {
 	ID                int64     `json:"id"`
 	Name              string    `json:"name"`
@@ -58,7 +55,7 @@ type RoomListItem struct {
 	ViolationCount    int64     `json:"violation_count"`
 }
 
-// ListRooms ???????
+// ListRooms 分页查询房间列表。
 // ListRooms 分页查询群聊，并用批量查询避免列表页 N+1。
 func (s *RoomService) ListRooms(ctx context.Context, q RoomListQuery) ([]RoomListItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.Room{})
@@ -134,7 +131,7 @@ func (s *RoomService) ListRooms(ctx context.Context, q RoomListQuery) ([]RoomLis
 	return items, total, nil
 }
 
-// RoomDetail ?????
+// RoomDetail 表示房间详情。
 type RoomDetail struct {
 	ID                int64                 `json:"id"`
 	Name              string                `json:"name"`
@@ -156,7 +153,7 @@ type RoomDetail struct {
 	Violations        []ModerationEventItem `json:"violations"`
 }
 
-// RoomMemberItem ??????
+// RoomMemberItem 表示房间成员项。
 type RoomMemberItem struct {
 	UserID   int64  `json:"user_id"`
 	Username string `json:"username"`
@@ -164,7 +161,7 @@ type RoomMemberItem struct {
 	Online   bool   `json:"online"`
 }
 
-// GetRoomDetail ???????
+// GetRoomDetail 获取房间详情。
 func (s *RoomService) GetRoomDetail(ctx context.Context, roomID int64) (*RoomDetail, error) {
 	var room models.Room
 	if err := s.db.WithContext(ctx).First(&room, roomID).Error; err != nil {
@@ -206,7 +203,7 @@ func (s *RoomService) GetRoomDetail(ctx context.Context, roomID int64) (*RoomDet
 	return detail, nil
 }
 
-// RoomAction ???????
+// RoomAction 表示房间管理操作。
 type RoomAction struct {
 	Action       string
 	AdminUserID  int64
@@ -217,7 +214,7 @@ type RoomAction struct {
 	TargetUserID int64
 }
 
-// ApplyAction ?????????????????
+// ApplyAction 执行冻结、解散、成员管理等房间管理动作。
 func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action RoomAction) error {
 	var room models.Room
 	if err := s.db.WithContext(ctx).First(&room, roomID).Error; err != nil {
@@ -234,23 +231,22 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 		if err := s.db.WithContext(ctx).Delete(&models.Room{}, roomID).Error; err != nil {
 			return err
 		}
-		if s.hub != nil {
-			select {
-			case s.hub.RoomActionChan <- &core.RoomAction{RoomID: roomID, Action: "disband"}:
-			default:
+		if s.runtime != nil {
+			if err := s.runtime.DisbandRoom(ctx, roomID); err != nil {
+				return err
 			}
 		}
 		return s.writeRoomAudit(ctx, before, room, action)
 	case "agent_enable":
-		if s.agentMgr != nil {
-			if err := s.agentMgr.AddAgent(ctx, roomID); err != nil {
+		if s.runtime != nil {
+			if err := s.runtime.AddAgent(ctx, roomID); err != nil {
 				return err
 			}
 		}
 		room.AgentEnabled = true
 	case "agent_disable":
-		if s.agentMgr != nil {
-			if err := s.agentMgr.PauseAgent(ctx, roomID); err != nil {
+		if s.runtime != nil {
+			if err := s.runtime.PauseAgent(ctx, roomID); err != nil {
 				return err
 			}
 		}
@@ -264,10 +260,9 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 			if err := s.db.WithContext(ctx).Where("room_id = ? AND user_id = ?", roomID, action.TargetUserID).Delete(&models.RoomMember{}).Error; err != nil {
 				return err
 			}
-			if s.hub != nil {
-				select {
-				case s.hub.RoomActionChan <- &core.RoomAction{UserID: action.TargetUserID, RoomID: roomID, Action: "leave"}:
-				default:
+			if s.runtime != nil {
+				if err := s.runtime.RemoveRoomMember(ctx, roomID, action.TargetUserID); err != nil {
+					return err
 				}
 			}
 			return s.writeRoomAudit(ctx, before, room, action)
@@ -286,7 +281,7 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 			return s.writeRoomAudit(ctx, before, room, action)
 		}
 	default:
-		return fmt.Errorf("\u4e0d\u652f\u6301\u7684\u7fa4\u804a\u64cd\u4f5c: %s", action.Action)
+		return fmt.Errorf("不支持的群聊操作: %s", action.Action)
 	}
 
 	if err := s.db.WithContext(ctx).Save(&room).Error; err != nil {

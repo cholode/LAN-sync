@@ -11,15 +11,15 @@ import (
 
 var adminAlertService *adminservice.AlertService
 
-// InitAdminAlertService \u521d\u59cb\u5316\u544a\u8b66\u670d\u52a1\u3002
+// InitAdminAlertService 初始化告警服务。
 func InitAdminAlertService(svc *adminservice.AlertService) {
 	adminAlertService = svc
 }
 
-// AdminAlertList \u67e5\u8be2\u544a\u8b66\u5217\u8868\u3002\n// GET /api/v1/admin/alerts
+// AdminAlertList 查询告警列表。\n// GET /api/v1/admin/alerts
 func AdminAlertList(c *gin.Context) {
 	if adminAlertService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u544a\u8b66\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "告警服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -37,21 +37,21 @@ func AdminAlertList(c *gin.Context) {
 		Status:   c.Query("status"),
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u67e5\u8be2\u544a\u8b66\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询告警失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})
 }
 
-// AdminAlertEvaluate \u624b\u52a8\u89e6\u53d1\u544a\u8b66\u8bc4\u4f30\u3002\n// POST /api/v1/admin/alerts/evaluate
+// AdminAlertEvaluate 手动触发告警评估。\n// POST /api/v1/admin/alerts/evaluate
 func AdminAlertEvaluate(c *gin.Context) {
 	if adminAlertService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u544a\u8b66\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "告警服务未初始化"})
 		return
 	}
 	items, err := adminAlertService.Evaluate(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u544a\u8b66\u8bc4\u4f30\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "告警评估失败"})
 		if adminAuditServiceVar != nil {
 			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
 				AdminUserID:   c.GetInt64("user_id"),
@@ -70,19 +70,19 @@ func AdminAlertEvaluate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-// AdminAlertResolve \u6807\u8bb0\u544a\u8b66\u5df2\u5904\u7406\u3002\n// POST /api/v1/admin/alerts/:id/resolve
+// AdminAlertResolve 标记告警已处理。\n// POST /api/v1/admin/alerts/:id/resolve
 func AdminAlertResolve(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "\u975e\u6cd5\u544a\u8b66 ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法告警 ID"})
 		return
 	}
 	if adminAlertService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u544a\u8b66\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "告警服务未初始化"})
 		return
 	}
 	if err := adminAlertService.Resolve(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u5904\u7406\u544a\u8b66\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "处理告警失败"})
 		return
 		if adminAuditServiceVar != nil {
 			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
@@ -98,18 +98,18 @@ func AdminAlertResolve(c *gin.Context) {
 			})
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "\u5df2\u6807\u8bb0\u4e3a\u5df2\u5904\u7406"})
+	c.JSON(http.StatusOK, gin.H{"message": "已标记为已处理"})
 }
 
-// AdminAlertUnresolvedCount \u8fd4\u56de\u672a\u5904\u7406\u544a\u8b66\u6570\u91cf\u3002\n// GET /api/v1/admin/alerts/unresolved-count
+// AdminAlertUnresolvedCount 返回未处理告警数量。\n// GET /api/v1/admin/alerts/unresolved-count
 func AdminAlertUnresolvedCount(c *gin.Context) {
 	if adminAlertService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u544a\u8b66\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "告警服务未初始化"})
 		return
 	}
 	count, err := adminAlertService.UnresolvedCount(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u7edf\u8ba1\u544a\u8b66\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "统计告警失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"count": count})

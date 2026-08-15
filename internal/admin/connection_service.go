@@ -7,23 +7,26 @@ import (
 	"lan-im-go/core"
 )
 
-// ConnectionService ?????????
+// ConnectionService 管理当前节点的 WebSocket 连接。
 type ConnectionService struct {
-	hub   *core.Hub
-	audit *AuditService
+	runtime RuntimeController
+	audit   *AuditService
 }
 
-// NewConnectionService ???????????
-func NewConnectionService(hub *core.Hub, audit *AuditService) *ConnectionService {
-	return &ConnectionService{hub: hub, audit: audit}
+// NewConnectionService 创建连接管理服务。
+func NewConnectionService(runtime RuntimeController, audit *AuditService) *ConnectionService {
+	return &ConnectionService{runtime: runtime, audit: audit}
 }
 
-// ListConnections ???????????????????/??ID???
+// ListConnections 返回连接快照，并支持按用户 ID 或用户名过滤。
 func (s *ConnectionService) ListConnections(ctx context.Context, keyword string) []core.ConnectionSnapshot {
-	if s.hub == nil {
+	if s.runtime == nil {
 		return []core.ConnectionSnapshot{}
 	}
-	snapshots := s.hub.Connections()
+	snapshots, err := s.runtime.ListConnections(ctx)
+	if err != nil {
+		return []core.ConnectionSnapshot{}
+	}
 	if keyword == "" {
 		return snapshots
 	}
@@ -36,10 +39,12 @@ func (s *ConnectionService) ListConnections(ctx context.Context, keyword string)
 	return out
 }
 
-// CloseConnection ?????????
+// CloseConnection 关闭指定 WebSocket 连接。
 func (s *ConnectionService) CloseConnection(ctx context.Context, connectionID string, action ConnectionAction) error {
-	if s.hub != nil {
-		s.hub.CloseConnection(connectionID)
+	if s.runtime != nil {
+		if err := s.runtime.CloseConnection(ctx, connectionID); err != nil {
+			return err
+		}
 	}
 	if s.audit != nil {
 		return s.audit.Log(ctx, AuditEntry{
@@ -57,12 +62,11 @@ func (s *ConnectionService) CloseConnection(ctx context.Context, connectionID st
 	return nil
 }
 
-// ForceOffline ?????????
+// ForceOffline 强制指定用户下线。
 func (s *ConnectionService) ForceOffline(ctx context.Context, userID int64, action ConnectionAction) error {
-	if s.hub != nil {
-		select {
-		case s.hub.Kick <- userID:
-		default:
+	if s.runtime != nil {
+		if err := s.runtime.KickUser(ctx, userID); err != nil {
+			return err
 		}
 	}
 	if s.audit != nil {
@@ -81,7 +85,7 @@ func (s *ConnectionService) ForceOffline(ctx context.Context, userID int64, acti
 	return nil
 }
 
-// ConnectionAction ??????????
+// ConnectionAction 连接操作的审计上下文。
 type ConnectionAction struct {
 	AdminUserID int64
 	AdminName   string

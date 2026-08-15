@@ -12,14 +12,14 @@ import (
 	"lan-im-go/models"
 )
 
-// RAGService ?? RAG/Qdrant ?????
+// RAGService 提供 RAG/Qdrant 运行看板数据。
 type RAGService struct {
 	db         *gorm.DB
 	qdrantHost string
 	qdrantPort int
 }
 
-// NewRAGService ?? RAG ?????
+// NewRAGService 创建 RAG 看板服务。
 func NewRAGService(db *gorm.DB) *RAGService {
 	port := 6334
 	if raw := os.Getenv("QDRANT_PORT"); raw != "" {
@@ -34,7 +34,7 @@ func NewRAGService(db *gorm.DB) *RAGService {
 	return &RAGService{db: db, qdrantHost: host, qdrantPort: port}
 }
 
-// RAGDashboard RAG/Qdrant ?????
+// RAGDashboard 表示 RAG/Qdrant 看板数据。
 type RAGDashboard struct {
 	QdrantOnline     bool      `json:"qdrant_online"`
 	CollectionCount  int       `json:"collection_count"`
@@ -50,7 +50,7 @@ type RAGDashboard struct {
 	GeneratedAt      time.Time `json:"generated_at"`
 }
 
-// RAGQueryRecord ?? RAG ?????
+// RAGQueryRecord 表示单条 RAG 查询记录。
 type RAGQueryRecord struct {
 	ID               int64     `json:"id"`
 	RoomID           int64     `json:"room_id"`
@@ -64,7 +64,7 @@ type RAGQueryRecord struct {
 	ContextSummary   string    `json:"context_summary"`
 }
 
-// Dashboard ?? RAG ? Qdrant ???
+// Dashboard 汇总 RAG 与 Qdrant 运行指标。
 func (s *RAGService) Dashboard(ctx context.Context) (*RAGDashboard, error) {
 	out := &RAGDashboard{
 		QdrantOnline:    false,
@@ -118,7 +118,7 @@ func (s *RAGService) Dashboard(ctx context.Context) (*RAGDashboard, error) {
 	return out, nil
 }
 
-// ListQueries ?? RAG ?????
+// ListQueries 分页查询 RAG 查询记录。
 func (s *RAGService) ListQueries(ctx context.Context, page, pageSize int, roomID int64) ([]RAGQueryRecord, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.RAGQueryLog{})
 	if roomID > 0 {

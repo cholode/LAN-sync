@@ -12,15 +12,15 @@ import (
 
 var adminToolCallService *adminservice.ToolCallService
 
-// InitAdminToolCallService \u521d\u59cb\u5316 Tool Call \u670d\u52a1\u3002
+// InitAdminToolCallService 初始化 Tool Call 服务。
 func InitAdminToolCallService(svc *adminservice.ToolCallService) {
 	adminToolCallService = svc
 }
 
-// AdminToolCallList \u67e5\u8be2 Tool Calling \u8fd0\u884c\u8bb0\u5f55\u3002\n// GET /api/v1/admin/tool-calls
+// AdminToolCallList 查询 Tool Calling 运行记录。\n// GET /api/v1/admin/tool-calls
 func AdminToolCallList(c *gin.Context) {
 	if adminToolCallService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -52,7 +52,7 @@ func AdminToolCallList(c *gin.Context) {
 		End:      end,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u67e5\u8be2 Tool Call \u8bb0\u5f55\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询 Tool Call 记录失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})

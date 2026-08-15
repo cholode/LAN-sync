@@ -11,31 +11,31 @@ import (
 
 var adminRAGService *adminservice.RAGService
 
-// InitAdminRAGService ?? RAG ?????
+// InitAdminRAGService 初始化 RAG 服务。
 func InitAdminRAGService(svc *adminservice.RAGService) {
 	adminRAGService = svc
 }
 
-// AdminRAGDashboard ?? RAG/Qdrant ?????
+// AdminRAGDashboard 获取 RAG/Qdrant 看板数据。
 // GET /api/v1/admin/dashboard/rag
 func AdminRAGDashboard(c *gin.Context) {
 	if adminRAGService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "RAG ?????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "RAG 服务未初始化"})
 		return
 	}
 	data, err := adminRAGService.Dashboard(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "?? RAG ??????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取 RAG 看板失败"})
 		return
 	}
 	c.JSON(http.StatusOK, data)
 }
 
-// AdminRAGQueries ???? RAG ?????
+// AdminRAGQueries 查询 RAG 查询记录。
 // GET /api/v1/admin/rag/queries
 func AdminRAGQueries(c *gin.Context) {
 	if adminRAGService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "RAG ?????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "RAG 服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -50,7 +50,7 @@ func AdminRAGQueries(c *gin.Context) {
 
 	items, total, err := adminRAGService.ListQueries(c.Request.Context(), page, pageSize, roomID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "?? RAG ??????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取 RAG 查询记录失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

@@ -13,7 +13,7 @@ import (
 	"lan-im-go/models"
 )
 
-// FileService \u8d1f\u8d23\u8d85\u7ea7\u7ba1\u7406\u5458\u540e\u53f0\u7684\u6587\u4ef6\u7ba1\u7406\u3001\u5f02\u5e38\u68c0\u6d4b\u548c\u5b89\u5168\u6e05\u7406\u3002
+// FileService 负责超级管理员后台的文件管理、异常检测和安全清理。
 type FileService struct {
 	db      *gorm.DB
 	storage storage.Provider
@@ -24,7 +24,7 @@ func NewFileService(db *gorm.DB, provider storage.Provider, audit *AuditService)
 	return &FileService{db: db, storage: provider, audit: audit}
 }
 
-// FileListQuery \u6587\u4ef6\u5217\u8868\u67e5\u8be2\u6761\u4ef6\u3002
+// FileListQuery 文件列表查询条件。
 type FileListQuery struct {
 	Page       int
 	PageSize   int
@@ -37,7 +37,7 @@ type FileListQuery struct {
 	End        time.Time
 }
 
-// FileListItem \u7ba1\u7406\u540e\u53f0\u5217\u8868\u5c55\u793a\u7684\u6587\u4ef6\u9879\u3002
+// FileListItem 管理后台列表展示的文件项。
 type FileListItem struct {
 	models.FileRecord
 	Username   string `json:"username"`
@@ -46,7 +46,7 @@ type FileListItem struct {
 	HasMessage bool   `json:"has_message"`
 }
 
-// RecordUpload \u4fdd\u5b58\u4e00\u6761\u5df2\u5b8c\u6210\u4e0a\u4f20\u7684\u6587\u4ef6\u8bb0\u5f55\u3002
+// RecordUpload 保存一条已完成上传的文件记录。
 type AuditAction struct {
 	AdminUserID int64
 	AdminName   string
@@ -98,7 +98,7 @@ func (s *FileService) RecordUpload(ctx context.Context, userID int64, req Comple
 	return record, nil
 }
 
-// CompleteUploadRequest \u4e0e\u524d\u7aef\u4e0a\u4f20\u5b8c\u6210\u540e\u56de\u8c03\u7684\u8bf7\u6c42\u4fdd\u6301\u4e00\u81f4\u3002
+// CompleteUploadRequest 与前端上传完成后回调的请求保持一致。
 type CompleteUploadRequest struct {
 	ObjectKey    string
 	OriginalName string
@@ -107,7 +107,7 @@ type CompleteUploadRequest struct {
 	RoomID       int64
 }
 
-// ListFiles \u5206\u9875\u67e5\u8be2\u6587\u4ef6\u8bb0\u5f55\uff0c\u5e76\u8865\u5145\u5b58\u50a8\u5b9e\u9645\u72b6\u6001\u3002
+// ListFiles 分页查询文件记录，并补充存储实际状态。
 func (s *FileService) ListFiles(ctx context.Context, q FileListQuery) ([]FileListItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.FileRecord{})
 	if q.Keyword != "" {
@@ -164,7 +164,7 @@ func (s *FileService) ListFiles(ctx context.Context, q FileListQuery) ([]FileLis
 	return items, total, nil
 }
 
-// GetFile \u83b7\u53d6\u5355\u4e2a\u6587\u4ef6\u8bb0\u5f55\u3002
+// GetFile 获取单个文件记录。
 func (s *FileService) GetFile(ctx context.Context, id int64) (*FileListItem, error) {
 	var record models.FileRecord
 	if err := s.db.WithContext(ctx).First(&record, id).Error; err != nil {
@@ -177,13 +177,13 @@ func (s *FileService) GetFile(ctx context.Context, id int64) (*FileListItem, err
 	return item, nil
 }
 
-// DeleteFile \u540c\u65f6\u5220\u9664\u5bf9\u8c61\u5b58\u50a8\u4e2d\u7684\u5b9e\u9645\u6587\u4ef6\u548c MySQL \u5143\u6570\u636e\u3002
+// DeleteFile 同时删除对象存储中的实际文件和 MySQL 元数据。
 func (s *FileService) DeleteFile(ctx context.Context, id int64, action AuditAction) error {
 	record, err := s.GetFile(ctx, id)
 	if err != nil {
 		return err
 	}
-	// \u5148\u5220\u9664\u6570\u636e\u5e93\u8bb0\u5f55\uff0c\u518d\u5220\u9664\u5bf9\u8c61\u5b58\u50a8\u6587\u4ef6\uff1b\u82e5\u5bf9\u8c61\u5220\u9664\u5931\u8d25\u5219\u56de\u8865\u6570\u636e\u5e93\u8bb0\u5f55\uff0c\u907f\u514d\u4ea7\u751f\u5b64\u513f\u5bf9\u8c61\u6216\u60ac\u7a7a\u8bb0\u5f55\u3002
+	// 先删除数据库记录，再删除对象存储文件；若对象删除失败则回补数据库记录，避免产生孤儿对象或悬空记录。
 	if err := s.db.WithContext(ctx).Delete(&models.FileRecord{}, id).Error; err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func (s *FileService) DeleteFile(ctx context.Context, id int64, action AuditActi
 		defer cancel()
 		if err := s.storage.Delete(delCtx, record.ObjectKey); err != nil {
 			_ = s.db.WithContext(ctx).Create(&record)
-			return fmt.Errorf("\u5bf9\u8c61\u5b58\u50a8\u6587\u4ef6\u5220\u9664\u5931\u8d25: %w", err)
+			return fmt.Errorf("对象存储文件删除失败: %w", err)
 		}
 	}
 	if s.audit != nil {
@@ -211,7 +211,7 @@ func (s *FileService) DeleteFile(ctx context.Context, id int64, action AuditActi
 	return nil
 }
 
-// FileScanResult \u6587\u4ef6\u5f02\u5e38\u68c0\u6d4b\u7ed3\u679c\u3002
+// FileScanResult 文件异常检测结果。
 type FileScanResult struct {
 	TotalRecords   int64                `json:"total_records"`
 	TotalObjects   int                  `json:"total_objects"`
@@ -220,7 +220,7 @@ type FileScanResult struct {
 	StaleRecords   []FileListItem       `json:"stale_records"`
 }
 
-// ScanAnomalies \u68c0\u67e5\u6570\u636e\u5e93\u8bb0\u5f55\u4e0e\u5bf9\u8c61\u5b58\u50a8\u662f\u5426\u4e00\u81f4\u3002
+// ScanAnomalies 检查数据库记录与对象存储是否一致。
 func (s *FileService) ScanAnomalies(ctx context.Context) (*FileScanResult, error) {
 	var records []models.FileRecord
 	if err := s.db.WithContext(ctx).Order("id DESC").Limit(5000).Find(&records).Error; err != nil {
@@ -260,7 +260,7 @@ func (s *FileService) ScanAnomalies(ctx context.Context) (*FileScanResult, error
 	return result, nil
 }
 
-// CleanupOrphans \u6e05\u7406\u65e0\u6d88\u606f\u5f15\u7528\u4e14\u8d85\u8fc7 24 \u5c0f\u65f6\u7684\u5b64\u7acb\u5bf9\u8c61\uff0c\u907f\u514d\u8bef\u5220\u521a\u4e0a\u4f20\u6216\u5df2\u88ab\u5f15\u7528\u7684\u6587\u4ef6\u3002
+// CleanupOrphans 清理无消息引用且超过 24 小时的孤立对象，避免误删刚上传或已被引用的文件。
 func (s *FileService) CleanupOrphans(ctx context.Context, action AuditAction) (int, error) {
 	scan, err := s.ScanAnomalies(ctx)
 	if err != nil {
@@ -345,7 +345,7 @@ func (s *FileService) roomName(ctx context.Context, roomID int64) string {
 	return ""
 }
 
-// SafeObjectKey \u4ece\u7528\u6237\u4f20\u5165\u7684\u5bf9\u8c61\u952e\u4e2d\u63d0\u53d6\u5b89\u5168\u7684\u539f\u59cb\u6587\u4ef6\u540d\u3002
+// SafeObjectKey 从用户传入的对象键中提取安全的原始文件名。
 func SafeObjectKey(key string) string {
 	key = strings.TrimPrefix(path.Clean(strings.ReplaceAll(key, "\\\\", "/")), "/")
 	if key == "." || key == "" {

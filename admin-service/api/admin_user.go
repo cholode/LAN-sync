@@ -12,12 +12,12 @@ import (
 
 var adminUserService *adminservice.UserService
 
-// InitAdminUserService ?????????
+// InitAdminUserService 初始化用户管理服务。
 func InitAdminUserService(svc *adminservice.UserService) {
 	adminUserService = svc
 }
 
-// AdminUserList ???????
+// AdminUserList 分页查询用户。
 // GET /api/v1/admin/users
 func AdminUserList(c *gin.Context) {
 	if adminUserService == nil {
@@ -57,18 +57,18 @@ func AdminUserList(c *gin.Context) {
 		End:      end,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "????????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询用户失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})
 }
 
-// AdminUserDetail ???????
+// AdminUserDetail 查询用户详情。
 // GET /api/v1/admin/users/:id
 func AdminUserDetail(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "???? ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的用户 ID"})
 		return
 	}
 	if adminUserService == nil {
@@ -77,25 +77,25 @@ func AdminUserDetail(c *gin.Context) {
 	}
 	detail, err := adminUserService.GetUserDetail(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "?????"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
 	c.JSON(http.StatusOK, detail)
 }
 
-// AdminUserAction ??????????
+// AdminUserAction 执行用户管理动作。
 // POST /api/v1/admin/users/:id/action
 func AdminUserAction(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "???? ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的用户 ID"})
 		return
 	}
 	var req struct {
 		Action string `json:"action" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "???????"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少操作参数"})
 		return
 	}
 	if adminUserService == nil {
@@ -124,8 +124,8 @@ func AdminUserAction(c *gin.Context) {
 		UserAgent:   c.Request.UserAgent(),
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "??????????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户操作失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "????"})
+	c.JSON(http.StatusOK, gin.H{"message": "操作成功"})
 }

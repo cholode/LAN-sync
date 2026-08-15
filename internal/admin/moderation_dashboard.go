@@ -11,18 +11,18 @@ import (
 	"lan-im-go/models"
 )
 
-// ModerationService ?????? Dashboard ??????????
+// ModerationService 为 Dashboard 提供内容审核统计。
 type ModerationService struct {
 	db    *gorm.DB
 	audit *AuditService
 }
 
-// NewModerationService ?????????
+// NewModerationService 创建内容审核看板服务。
 func NewModerationService(db *gorm.DB, audit *AuditService) *ModerationService {
 	return &ModerationService{db: db, audit: audit}
 }
 
-// ModerationDashboard ???? Dashboard ?????
+// ModerationDashboard 表示 Dashboard 审核统计结果。
 type ModerationDashboard struct {
 	TodayReviewed     int64                 `json:"today_reviewed"`
 	TodayViolations   int64                 `json:"today_violations"`
@@ -37,13 +37,13 @@ type ModerationDashboard struct {
 	GeneratedAt       time.Time             `json:"generated_at"`
 }
 
-// CategoryCount ???????
+// CategoryCount 表示审核分类统计数量。
 type CategoryCount struct {
 	Category string `json:"category"`
 	Count    int64  `json:"count"`
 }
 
-// ModerationEventItem ????????????
+// ModerationEventItem 表示审核事件列表项。
 type ModerationEventItem struct {
 	ID            int64     `json:"id"`
 	MessageID     int64     `json:"message_id"`
@@ -200,7 +200,7 @@ func moderationItem(item models.ModerationEvent) ModerationEventItem {
 	}
 }
 
-// ModerationListQuery ?????????
+// ModerationListQuery 定义审核事件查询条件。
 type ModerationListQuery struct {
 	Page          int
 	PageSize      int
@@ -214,7 +214,7 @@ type ModerationListQuery struct {
 	End           time.Time
 }
 
-// ListEvents ?????????
+// ListEvents 分页查询审核事件。
 func (s *ModerationService) ListEvents(ctx context.Context, q ModerationListQuery) ([]ModerationEventItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.ModerationEvent{})
 	if q.UserID > 0 {
@@ -258,7 +258,7 @@ func (s *ModerationService) ListEvents(ctx context.Context, q ModerationListQuer
 	return moderationItems(events), total, nil
 }
 
-// GetEvent ???????????
+// GetEvent 获取审核事件详情。
 func (s *ModerationService) GetEvent(ctx context.Context, id int64) (*ModerationEventItem, error) {
 	var event models.ModerationEvent
 	if err := s.db.WithContext(ctx).First(&event, id).Error; err != nil {
@@ -268,7 +268,7 @@ func (s *ModerationService) GetEvent(ctx context.Context, id int64) (*Moderation
 	return &item, nil
 }
 
-// ModerationAction ????????
+// ModerationAction 表示审核管理操作。
 type ModerationAction struct {
 	Action      string
 	AdminUserID int64
@@ -278,7 +278,7 @@ type ModerationAction struct {
 	UserAgent   string
 }
 
-// ApplyAction ?????????/????????????
+// ApplyAction 执行警告、禁言、踢出、封禁等审核处理动作。
 func (s *ModerationService) ApplyAction(ctx context.Context, id int64, action ModerationAction) error {
 	var event models.ModerationEvent
 	if err := s.db.WithContext(ctx).First(&event, id).Error; err != nil {
@@ -308,7 +308,7 @@ func (s *ModerationService) ApplyAction(ctx context.Context, id int64, action Mo
 	case "confirmed":
 		event.ReviewStatus = "confirmed"
 	default:
-		return fmt.Errorf("\u4e0d\u652f\u6301\u7684\u5ba1\u6838\u64cd\u4f5c: %s", action.Action)
+		return fmt.Errorf("不支持的审核操作: %s", action.Action)
 	}
 
 	event.ReviewedBy = action.AdminUserID

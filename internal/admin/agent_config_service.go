@@ -12,7 +12,7 @@ import (
 	"lan-im-go/models"
 )
 
-// AgentConfigService \u7ba1\u7406\u5168\u5c40 Agent \u914d\u7f6e\u53ca\u5176\u7248\u672c\u56de\u6eda\u3002
+// AgentConfigService 管理全局 Agent 配置及其版本回滚。
 type AgentConfigService struct {
 	db    *gorm.DB
 	audit *AuditService
@@ -22,7 +22,7 @@ func NewAgentConfigService(db *gorm.DB, audit *AuditService) *AgentConfigService
 	return &AgentConfigService{db: db, audit: audit}
 }
 
-// GlobalAgentConfigInput \u540e\u53f0\u53ef\u4fee\u6539\u7684\u5168\u5c40 Agent \u914d\u7f6e\u5b57\u6bb5\u3002
+// GlobalAgentConfigInput 后台可修改的全局 Agent 配置字段。
 type GlobalAgentConfigInput struct {
 	GlobalEnabled          *bool   `json:"global_enabled"`
 	DefaultModel           string  `json:"default_model"`
@@ -82,12 +82,12 @@ func (s *AgentConfigService) getOrCreate(ctx context.Context) (*models.GlobalAge
 	return defaults, nil
 }
 
-// Get \u83b7\u53d6\u5f53\u524d\u5168\u5c40 Agent \u914d\u7f6e\u3002
+// Get 获取当前全局 Agent 配置。
 func (s *AgentConfigService) Get(ctx context.Context) (*models.GlobalAgentConfig, error) {
 	return s.getOrCreate(ctx)
 }
 
-// Update \u66f4\u65b0\u5168\u5c40 Agent \u914d\u7f6e\uff0c\u5e76\u8bb0\u5f55\u4fee\u6539\u524d\u540e\u7248\u672c\u3002
+// Update 更新全局 Agent 配置，并记录修改前后版本。
 func (s *AgentConfigService) Update(ctx context.Context, input GlobalAgentConfigInput, action AuditAction) (*models.GlobalAgentConfig, error) {
 	cfg, err := s.getOrCreate(ctx)
 	if err != nil {
@@ -181,12 +181,12 @@ func (s *AgentConfigService) Update(ctx context.Context, input GlobalAgentConfig
 	return cfg, nil
 }
 
-// HistoryItem \u914d\u7f6e\u5386\u53f2\u8bb0\u5f55\u3002
+// HistoryItem 配置历史记录。
 type HistoryItem struct {
 	models.AgentConfigHistory
 }
 
-// History \u5206\u9875\u67e5\u8be2\u914d\u7f6e\u5386\u53f2\u3002
+// History 分页查询配置历史。
 func (s *AgentConfigService) History(ctx context.Context, page, pageSize int) ([]HistoryItem, int64, error) {
 	var total int64
 	query := s.db.WithContext(ctx).Model(&models.AgentConfigHistory{}).Where("config_id = ?", 1)
@@ -204,17 +204,17 @@ func (s *AgentConfigService) History(ctx context.Context, page, pageSize int) ([
 	return items, total, nil
 }
 
-// Rollback \u56de\u6eda\u5230\u4e0a\u4e00\u4e2a\u7248\u672c\uff0c\u5e76\u5199\u5165\u65b0\u7684\u5386\u53f2\u8bb0\u5f55\u3002
+// Rollback 回滚到上一个版本，并写入新的历史记录。
 func (s *AgentConfigService) Rollback(ctx context.Context, action AuditAction) (*models.GlobalAgentConfig, error) {
 	var latest models.AgentConfigHistory
 	if err := s.db.WithContext(ctx).Where("config_id = ?", 1).Order("id DESC").First(&latest).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("??????????")
+			return nil, errors.New("没有可回滚的历史版本")
 		}
 		return nil, err
 	}
 	if latest.BeforeData == "" {
-		return nil, errors.New("?????????????")
+		return nil, errors.New("历史版本缺少配置快照")
 	}
 	cfg, err := s.getOrCreate(ctx)
 	if err != nil {
@@ -222,7 +222,7 @@ func (s *AgentConfigService) Rollback(ctx context.Context, action AuditAction) (
 	}
 	before, _ := json.Marshal(cfg)
 	if err := json.Unmarshal([]byte(latest.BeforeData), cfg); err != nil {
-		return nil, fmt.Errorf("????????: %w", err)
+		return nil, fmt.Errorf("回滚配置失败: %w", err)
 	}
 	cfg.ID = 1
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

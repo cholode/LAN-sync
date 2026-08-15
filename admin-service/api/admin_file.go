@@ -10,7 +10,7 @@ import (
 	adminservice "lan-im-go/internal/admin"
 )
 
-// InitAdminFileServiceVar \u521d\u59cb\u5316\u8d85\u7ba1\u6587\u4ef6\u7ba1\u7406\u670d\u52a1\u3002
+// InitAdminFileServiceVar 初始化超管文件管理服务。
 func InitAdminFileServiceVar(svc *adminservice.FileService) {
 	adminFileService = svc
 }
@@ -30,10 +30,10 @@ func adminAuditAction(c *gin.Context) adminservice.AuditAction {
 	}
 }
 
-// AdminFileList \u5206\u9875\u67e5\u8be2\u6587\u4ef6\u8bb0\u5f55\u3002\n// GET /api/v1/admin/files
+// AdminFileList 分页查询文件记录。\n// GET /api/v1/admin/files
 func AdminFileList(c *gin.Context) {
 	if adminFileService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u6587\u4ef6\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -61,100 +61,100 @@ func AdminFileList(c *gin.Context) {
 		End:        end,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u67e5\u8be2\u6587\u4ef6\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询文件失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})
 }
 
-// AdminFileDetail \u67e5\u770b\u5355\u4e2a\u6587\u4ef6\u8bb0\u5f55\u3002\n// GET /api/v1/admin/files/:id
+// AdminFileDetail 查看单个文件记录。\n// GET /api/v1/admin/files/:id
 func AdminFileDetail(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "\u975e\u6cd5\u6587\u4ef6 ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法文件 ID"})
 		return
 	}
 	if adminFileService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u6587\u4ef6\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件服务未初始化"})
 		return
 	}
 	item, err := adminFileService.GetFile(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "\u6587\u4ef6\u4e0d\u5b58\u5728"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
 		return
 	}
 	c.JSON(http.StatusOK, item)
 }
 
-// AdminFileDownload \u8fd4\u56de\u4e00\u4e2a\u53ef\u76f4\u63a5\u4e0b\u8f7d\u7684\u9884\u7b7e\u540d URL\u3002\n// GET /api/v1/admin/files/:id/download
+// AdminFileDownload 返回一个可直接下载的预签名 URL。\n// GET /api/v1/admin/files/:id/download
 func AdminFileDownload(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "\u975e\u6cd5\u6587\u4ef6 ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法文件 ID"})
 		return
 	}
 	if adminFileService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u6587\u4ef6\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件服务未初始化"})
 		return
 	}
 	item, err := adminFileService.GetFile(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "\u6587\u4ef6\u4e0d\u5b58\u5728"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
 		return
 	}
 	if Storage == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u5bf9\u8c61\u5b58\u50a8\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "对象存储未初始化"})
 		return
 	}
 	downloadURL, err := Storage.GetDownloadURL(c.Request.Context(), item.ObjectKey)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "\u5bf9\u8c61\u6587\u4ef6\u4e0d\u5b58\u5728"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "对象文件不存在"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"download_url": downloadURL})
 }
 
-// AdminFileDelete \u5220\u9664\u5bf9\u8c61\u5b58\u50a8\u6587\u4ef6\u53ca\u6570\u636e\u5e93\u8bb0\u5f55\u3002\n// DELETE /api/v1/admin/files/:id
+// AdminFileDelete 删除对象存储文件及数据库记录。\n// DELETE /api/v1/admin/files/:id
 func AdminFileDelete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "\u975e\u6cd5\u6587\u4ef6 ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法文件 ID"})
 		return
 	}
 	if adminFileService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u6587\u4ef6\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件服务未初始化"})
 		return
 	}
 	if err := adminFileService.DeleteFile(c.Request.Context(), id, adminAuditAction(c)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u5220\u9664\u6587\u4ef6\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除文件失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "\u5220\u9664\u6210\u529f"})
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
-// AdminFileScan \u68c0\u67e5\u5f02\u5e38\u6587\u4ef6\u3002\n// GET /api/v1/admin/files/scan
+// AdminFileScan 检查异常文件。\n// GET /api/v1/admin/files/scan
 func AdminFileScan(c *gin.Context) {
 	if adminFileService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u6587\u4ef6\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件服务未初始化"})
 		return
 	}
 	result, err := adminFileService.ScanAnomalies(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u6587\u4ef6\u5f02\u5e38\u68c0\u67e5\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "文件异常检查失败"})
 		return
 	}
 	c.JSON(http.StatusOK, result)
 }
 
-// AdminFileCleanup \u5b89\u5168\u6e05\u7406\u5b64\u7acb\u5bf9\u8c61\u3002\n// POST /api/v1/admin/files/cleanup
+// AdminFileCleanup 安全清理孤立对象。\n// POST /api/v1/admin/files/cleanup
 func AdminFileCleanup(c *gin.Context) {
 	if adminFileService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u6587\u4ef6\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件服务未初始化"})
 		return
 	}
 	cleaned, err := adminFileService.CleanupOrphans(c.Request.Context(), adminAuditAction(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u6e05\u7406\u5b64\u7acb\u6587\u4ef6\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "清理孤立文件失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"cleaned": cleaned})

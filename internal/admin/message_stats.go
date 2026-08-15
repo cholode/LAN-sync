@@ -11,7 +11,7 @@ import (
 	"lan-im-go/models"
 )
 
-// MessageStatsStore ?????????Dashboard ??????? MySQL ?? MongoDB?
+// MessageStatsStore 为 Dashboard 提供消息统计，支持 MySQL 与 MongoDB。
 type MessageStatsStore interface {
 	CountMessages(ctx context.Context, start, end time.Time) (int64, error)
 	CountMessagesByType(ctx context.Context, start, end time.Time) (map[int8]int64, error)
@@ -30,13 +30,13 @@ type MessageStatsStore interface {
 	CountsByRoomTotalIDs(ctx context.Context, roomIDs []int64) (map[int64]int64, error)
 }
 
-// TimeCount ?????????
+// TimeCount 表示按时间分桶后的统计数量。
 type TimeCount struct {
 	Time  string `json:"time"`
 	Count int64  `json:"count"`
 }
 
-// KeyCount ?/????????????
+// KeyCount 表示某个维度及其对应统计数量。
 type KeyCount struct {
 	Key   int64 `json:"key"`
 	Count int64 `json:"count"`
@@ -47,7 +47,7 @@ type keyCountRow struct {
 	Count int64
 }
 
-// NewMessageStatsStore ???????????????
+// NewMessageStatsStore 根据存储类型创建消息统计实现。
 func NewMessageStatsStore(db *gorm.DB, messageCollection *mongo.Collection, messageStore string) MessageStatsStore {
 	if messageStore == "mongo" && messageCollection != nil {
 		return newMongoMessageStats(messageCollection, db)
@@ -127,7 +127,7 @@ func (s *mysqlMessageStats) CountAgentMentions(ctx context.Context, start, end t
 	var count int64
 	err := s.notDeleted(s.db.WithContext(ctx)).
 		Where("created_at >= ? AND created_at < ?", start, end).
-		Where("content LIKE ? OR content LIKE ? OR content LIKE ?", "%@agent%", "%@AI??%", "%@AI??_?%").
+		Where("content LIKE ? OR content LIKE ? OR content LIKE ?", "%@agent%", "%@AI助手%", "%@AI助手_%").
 		Count(&count).Error
 	return count, err
 }
@@ -403,7 +403,7 @@ func (s *mongoMessageStats) CountAgentMentions(ctx context.Context, start, end t
 	f := s.baseFilter(start, end)
 	f["$or"] = bson.A{
 		bson.M{"content": bson.M{"$regex": "@agent", "$options": "i"}},
-		bson.M{"content": bson.M{"$regex": "@AI??", "$options": "i"}},
+		bson.M{"content": bson.M{"$regex": "@AI助手", "$options": "i"}},
 	}
 	return s.coll.CountDocuments(ctx, f)
 }

@@ -12,15 +12,15 @@ import (
 
 var adminErrorService *adminservice.ErrorCenterService
 
-// InitAdminErrorService \u521d\u59cb\u5316\u7cfb\u7edf\u9519\u8bef\u4e2d\u5fc3\u670d\u52a1\u3002
+// InitAdminErrorService 初始化系统错误中心服务。
 func InitAdminErrorService(svc *adminservice.ErrorCenterService) {
 	adminErrorService = svc
 }
 
-// AdminErrorList \u67e5\u8be2\u7cfb\u7edf\u9519\u8bef\u3002\n// GET /api/v1/admin/errors
+// AdminErrorList 查询系统错误。\n// GET /api/v1/admin/errors
 func AdminErrorList(c *gin.Context) {
 	if adminErrorService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u9519\u8bef\u4e2d\u5fc3\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "错误中心服务未初始化"})
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -49,26 +49,26 @@ func AdminErrorList(c *gin.Context) {
 		End:       end,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u67e5\u8be2\u7cfb\u7edf\u9519\u8bef\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询系统错误失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "page_size": pageSize})
 }
 
-// AdminErrorResolve \u6807\u8bb0\u9519\u8bef\u5df2\u5904\u7406\u3002\n// POST /api/v1/admin/errors/:id/resolve
+// AdminErrorResolve 标记错误已处理。\n// POST /api/v1/admin/errors/:id/resolve
 func AdminErrorResolve(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "\u975e\u6cd5\u9519\u8bef ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法错误 ID"})
 		return
 	}
 	if adminErrorService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "\u9519\u8bef\u4e2d\u5fc3\u670d\u52a1\u672a\u521d\u59cb\u5316"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "错误中心服务未初始化"})
 		return
 	}
 	adminID := c.GetInt64("user_id")
 	if err := adminErrorService.Resolve(c.Request.Context(), id, adminID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "\u6807\u8bb0\u5df2\u5904\u7406\u5931\u8d25"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "标记已处理失败"})
 		return
 		if adminAuditServiceVar != nil {
 			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
@@ -84,5 +84,5 @@ func AdminErrorResolve(c *gin.Context) {
 			})
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "\u5df2\u6807\u8bb0\u4e3a\u5df2\u5904\u7406"})
+	c.JSON(http.StatusOK, gin.H{"message": "已标记为已处理"})
 }
