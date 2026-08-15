@@ -54,6 +54,7 @@
       <a href="#message-traffic" data-page="message-traffic">????</a>
       <a href="#agent" data-page="agent">Agent??</a>
       <a href="#rag" data-page="rag">RAG/Qdrant</a>
+      <a href="#moderation" data-page="moderation">????</a>
       <a href="#users" data-page="users">????</a>
       <a href="#rooms" data-page="rooms">????</a>
       <a href="#connections" data-page="connections">????</a>
@@ -78,6 +79,7 @@
       'message-traffic': '????',
       agent: 'Agent??',
       rag: 'RAG/Qdrant',
+      moderation: '????',
       users: '????',
       rooms: '????',
       connections: '????',
@@ -132,6 +134,8 @@
         loadAgentDashboard();
       } else if (page === 'rag') {
         loadRAGDashboard();
+      } else if (page === 'moderation') {
+        loadModerationDashboard();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -179,6 +183,31 @@
           metricCard('?? @Agent ????', m.agent_today) +
           '</div>';
         loadRuntime();
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function loadModerationDashboard() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">??????????...</div>';
+      try {
+        const data = await request('/admin/dashboard/moderation');
+        const catRows = (data.category_stats || []).map(item => '<tr><td>' + item.category + '</td><td>' + item.count + '</td></tr>').join('');
+        const recentRows = (data.recent_violations || []).map(item => '<tr><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + item.username + '</td><td>' + item.room_name + '</td><td>' + item.original_msg + '</td><td>' + item.risk_level + '</td><td>' + item.category + '</td><td>' + item.penalty_status + '</td><td>' + item.review_status + '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">AI ??????</h3>' +
+          '<div class="metric-grid">' +
+          metricCard('???????', data.today_reviewed) +
+          metricCard('???????', data.today_violations) +
+          metricCard('???', (data.violation_rate * 100).toFixed(2) + '%') +
+          metricCard('????????', data.auto_kick_count) +
+          metricCard('????????', data.auto_ban_count) +
+          metricCard('??????', data.manual_review_count) +
+          metricCard('??????', data.revoked_count) +
+          metricCard('Tool Calling ??????', data.tool_failure_count) +
+          '</div>' +
+          '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th></tr></thead><tbody>' + catRows + '</tbody></table>' +
+          '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th><th>??</th><th>????</th><th>????</th><th>??</th><th>????</th><th>????</th></tr></thead><tbody>' + recentRows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
