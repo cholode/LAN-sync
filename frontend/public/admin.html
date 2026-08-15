@@ -84,6 +84,7 @@
       'agent-config': 'Agent配置',
       'tool-calls': 'Tool Calling 运行记录',
       errors: '系统错误中心',
+      'audit-logs': '审计日志',
       rag: 'RAG/Qdrant',
       moderation: '????',
       users: '????',
@@ -156,6 +157,8 @@
         loadToolCalls();
       } else if (page === 'errors') {
         loadErrors();
+      } else if (page === 'audit-logs') {
+        loadAuditLogs();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -252,6 +255,28 @@
     }
     window.connectionClose = connectionClose;
     window.connectionForceOffline = connectionForceOffline;
+
+    async function loadAuditLogs() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d\u5ba1\u8ba1\u65e5\u5fd7...</div>';
+      try {
+        const keyword = document.getElementById('auditKeyword') ? document.getElementById('auditKeyword').value : '';
+        const action = document.getElementById('auditAction') ? document.getElementById('auditAction').value : '';
+        const targetType = document.getElementById('auditTargetType') ? document.getElementById('auditTargetType').value : '';
+        const params = new URLSearchParams({ page: 1, page_size: 50 });
+        if (keyword) params.set('keyword', keyword);
+        if (action) params.set('action', action);
+        if (targetType) params.set('target_type', targetType);
+        const data = await request('/admin/audit-logs?' + params.toString());
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.admin_user_id + ' (' + item.admin_username + ')</td><td>' + item.action + '</td><td>' + item.target_type + '</td><td>' + item.target_id + '</td><td>' + item.request_id + '</td><td>' + item.remote_ip + '</td><td>' + item.result + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + (item.error_message || '') + '</td></tr>').join('');
+        content.innerHTML = '<div class="toolbar"><input id="auditKeyword" placeholder="\u5173\u952e\u5b57"><input id="auditAction" placeholder="\u52a8\u4f5c"><input id="auditTargetType" placeholder="\u76ee\u6807\u7c7b\u578b"><button onclick="loadAuditLogs()">\u67e5\u8be2</button></div>' +
+          '<h3 style="margin-top:14px">\u5ba1\u8ba1\u65e5\u5fd7</h3><table class="admin-table"><thead><tr><th>ID</th><th>\u7ba1\u7406\u5458</th><th>\u52a8\u4f5c</th><th>\u76ee\u6807\u7c7b\u578b</th><th>\u76ee\u6807ID</th><th>Request ID</th><th>IP</th><th>\u7ed3\u679c</th><th>\u65f6\u95f4</th><th>\u9519\u8bef\u4fe1\u606f</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    window.loadAuditLogs = loadAuditLogs;
 
     async function loadErrors() {
       const content = document.getElementById('content');

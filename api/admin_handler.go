@@ -5,8 +5,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
 	"lan-im-go/core"
-	//"lan-im-go/models"
+	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/repository"
 )
 
@@ -31,6 +32,20 @@ func AdminDeleteUser(hub *core.Hub) gin.HandlerFunc {
 		// 2. 强制断开用户的WebSocket长连接
 		// 若用户在线，立即关闭连接并禁止重连
 		hub.Kick <- targetUserID
+
+		if adminAuditServiceVar != nil {
+			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
+				AdminUserID:   c.GetInt64("user_id"),
+				AdminUsername: c.GetString("admin_username"),
+				Action:        "user.delete",
+				TargetType:    "user",
+				TargetID:      strconv.FormatInt(targetUserID, 10),
+				RequestID:     c.GetString("request_id"),
+				RemoteIP:      c.ClientIP(),
+				UserAgent:     c.Request.UserAgent(),
+				Result:        "success",
+			})
+		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"msg": "用户已删除，在线连接已断开",
@@ -65,6 +80,20 @@ func AdminDeleteRoom(hub *core.Hub) gin.HandlerFunc {
 		// }
 		// 通过核心引擎广播消息
 		//hub.Broadcast <- sysMsg
+
+		if adminAuditServiceVar != nil {
+			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
+				AdminUserID:   c.GetInt64("user_id"),
+				AdminUsername: c.GetString("admin_username"),
+				Action:        "room.delete",
+				TargetType:    "room",
+				TargetID:      strconv.FormatInt(targetRoomID, 10),
+				RequestID:     c.GetString("request_id"),
+				RemoteIP:      c.ClientIP(),
+				UserAgent:     c.Request.UserAgent(),
+				Result:        "success",
+			})
+		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"msg": "群聊解散成功，已通知所有在线成员",

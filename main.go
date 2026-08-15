@@ -130,6 +130,7 @@ func main() {
 	api.InitAdminToolCallService(adminservice.NewToolCallService(infrastructure.DB))
 	adminErrorService := adminservice.NewErrorCenterService(infrastructure.DB)
 	api.InitAdminErrorService(adminErrorService)
+	api.InitAdminAuditService(adminAuditService)
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -253,6 +254,7 @@ func main() {
 		admin.GET("/tool-calls", middleware.RequirePermission(models.PermAgentRead), api.AdminToolCallList)
 		admin.GET("/errors", middleware.RequirePermission(models.PermSystemRead), api.AdminErrorList)
 		admin.POST("/errors/:id/resolve", middleware.RequirePermission(models.PermSystemRead), api.AdminErrorResolve)
+		admin.GET("/audit-logs", middleware.RequirePermission(models.PermAuditRead), api.AdminAuditList)
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 
