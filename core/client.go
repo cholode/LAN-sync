@@ -7,6 +7,7 @@ import (
 	"lan-im-go/cache"
 	"lan-im-go/config"
 	"lan-im-go/internal/metrics"
+	"sync/atomic"
 	//"lan-im-go/models"
 	"lan-im-go/pkg"
 	"strconv"
@@ -28,8 +29,45 @@ type Client struct {
 	Hub    *Hub
 	UserID int64
 	Conn   *websocket.Conn
-	// 消息发送缓冲通道，使用字节数组提升性能
+	// ???????????????????
 	Send chan []byte
+
+	// ??????????????
+	Username      string
+	ConnID        string
+	RemoteIP      string
+	UserAgent     string
+	ClientVersion string
+	ConnectedAt   time.Time
+
+	lastReadAt  atomic.Int64
+	lastWriteAt atomic.Int64
+}
+
+// SetLastRead ????????????????
+func (c *Client) SetLastRead(t time.Time) {
+	c.lastReadAt.Store(t.UnixMilli())
+}
+
+// SetLastWrite ????????????????
+func (c *Client) SetLastWrite(t time.Time) {
+	c.lastWriteAt.Store(t.UnixMilli())
+}
+
+// LastReadAt ????????
+func (c *Client) LastReadAt() time.Time {
+	if value := c.lastReadAt.Load(); value > 0 {
+		return time.UnixMilli(value)
+	}
+	return c.ConnectedAt
+}
+
+// LastWriteAt ????????
+func (c *Client) LastWriteAt() time.Time {
+	if value := c.lastWriteAt.Load(); value > 0 {
+		return time.UnixMilli(value)
+	}
+	return c.ConnectedAt
 }
 
 // Subscription 订阅信息
@@ -61,6 +99,7 @@ func (c *Client) ReadPump() {
 			break
 		}
 		metrics.ObserveWSReadMessage(messageType)
+		c.SetLastRead(time.Now())
 
 		// 1. 强制要求前端上报 ClientMsgID
 		var payload struct {
@@ -186,6 +225,7 @@ func (c *Client) WritePump() {
 			}
 			w.Write(message)
 			metrics.ObserveWSWriteMessage(websocket.TextMessage)
+			c.SetLastWrite(time.Now())
 
 			// 批量写入优化：合并积压消息，减少系统IO调用
 			n := len(c.Send)

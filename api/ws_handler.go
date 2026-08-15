@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	//"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -72,11 +73,21 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		}
 
 		// 5. 创建客户端实例
+		username := ""
+		if user, err := repository.User.GetByID(realUserID); err == nil {
+			username = user.Username
+		}
 		client := &core.Client{
-			Hub:    hub,
-			UserID: realUserID,
-			Conn:   conn,
-			Send:   make(chan []byte, 512),
+			Hub:           hub,
+			UserID:        realUserID,
+			Username:      username,
+			Conn:          conn,
+			Send:          make(chan []byte, 512),
+			ConnID:        fmt.Sprintf("%d-%d", realUserID, time.Now().UnixNano()),
+			RemoteIP:      c.ClientIP(),
+			UserAgent:     c.Request.UserAgent(),
+			ClientVersion: c.GetHeader("X-Client-Version"),
+			ConnectedAt:   time.Now(),
 		}
 
 		subscription := &core.Subscription{

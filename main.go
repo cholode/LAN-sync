@@ -123,6 +123,7 @@ func main() {
 	adminAuditService := adminservice.NewAuditService(infrastructure.DB)
 	adminMessageStore := adminservice.NewMessageStatsStore(infrastructure.DB, infrastructure.MessageCollection, os.Getenv("MESSAGE_STORE"))
 	api.InitAdminUserService(adminservice.NewUserService(infrastructure.DB, adminMessageStore, hub, adminAuditService))
+	api.InitAdminConnectionService(adminservice.NewConnectionService(hub, adminAuditService))
 	api.InitAdminModerationService(adminservice.NewModerationService(infrastructure.DB, adminAuditService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
@@ -230,6 +231,9 @@ func main() {
 		admin.GET("/rooms", middleware.RequirePermission(models.PermRoomRead), api.AdminRoomList)
 		admin.GET("/rooms/:id", middleware.RequirePermission(models.PermRoomRead), api.AdminRoomDetail)
 		admin.POST("/rooms/:id/action", middleware.RequireAnyPermission(models.PermRoomFreeze, models.PermRoomDelete, models.PermAgentConfig), api.AdminRoomAction)
+		admin.GET("/connections", middleware.RequirePermission(models.PermConnectionRead), api.AdminConnectionList)
+		admin.POST("/connections/close", middleware.RequirePermission(models.PermConnectionClose), api.AdminConnectionClose)
+		admin.POST("/connections/force-offline", middleware.RequirePermission(models.PermConnectionClose), api.AdminUserForceOffline)
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 

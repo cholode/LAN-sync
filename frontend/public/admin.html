@@ -140,6 +140,8 @@
         loadUsers();
       } else if (page === 'rooms') {
         loadRooms();
+      } else if (page === 'connections') {
+        loadConnections();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -192,6 +194,50 @@
       }
     }
 
+    async function loadConnections() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">????????...</div>';
+      try {
+        const data = await request('/admin/connections');
+        const rows = (data.items || []).map(item => '<tr><td>' + item.user_id + '</td><td>' + item.username + '</td><td>' + item.connection_id + '</td><td>' + item.remote_ip + '</td><td>' + new Date(item.connected_at).toLocaleString() + '</td><td>' + Math.round((Date.now() - new Date(item.connected_at).getTime()) / 1000) + 's</td><td>' + new Date(item.last_read_at).toLocaleString() + '</td><td>' + new Date(item.last_write_at).toLocaleString() + '</td><td>' + item.send_queue_len + '</td><td>' + (item.room_ids || []).join(',') + '</td><td>' +
+          '<button onclick="connectionClose(\'' + item.connection_id + '\')">????</button> ' +
+          '<button onclick="connectionForceOffline(' + item.user_id + ')">????</button>' +
+          '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">??????</h3><table class="admin-table"><thead><tr><th>??ID</th><th>???</th><th>Connection ID</th><th>Remote IP</th><th>????</th><th>????</th><th>?????</th><th>?????</th><th>Send Queue</th><th>????</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function connectionClose(connectionId) {
+      if (!confirm('?????? ' + connectionId + ' ??')) return;
+      try {
+        await request('/admin/connections/close', {
+          method: 'POST',
+          body: JSON.stringify({ connection_id: connectionId })
+        });
+        alert('?????');
+        loadConnections();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function connectionForceOffline(userId) {
+      if (!confirm('???????? ' + userId + ' ??')) return;
+      try {
+        await request('/admin/connections/force-offline', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: userId })
+        });
+        alert('???????');
+        loadConnections();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+    window.connectionClose = connectionClose;
+    window.connectionForceOffline = connectionForceOffline;
     async function loadRooms() {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">????????...</div>';

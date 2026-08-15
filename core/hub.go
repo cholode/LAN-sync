@@ -41,6 +41,7 @@ type Hub struct {
 
 	RoomActionChan chan *RoomAction
 	Kick           chan int64
+	CloseConn      chan string
 
 	// killClient 接收来自协程池中检测到的慢客户端，由 Hub 主循环统一清理
 	killClient chan *Client
@@ -57,7 +58,62 @@ func NewHub() *Hub {
 
 		RoomActionChan: make(chan *RoomAction, 100),
 		Kick:           make(chan int64),
+		CloseConn:      make(chan string, 64),
 		killClient:     make(chan *Client, 64),
+	}
+}
+
+// ConnectionSnapshot ???????????????????? WebSocket ?????
+type ConnectionSnapshot struct {
+	UserID        int64     `json:"user_id"`
+	Username      string    `json:"username"`
+	ConnectionID  string    `json:"connection_id"`
+	RemoteIP      string    `json:"remote_ip"`
+	UserAgent     string    `json:"user_agent"`
+	ClientVersion string    `json:"client_version"`
+	ConnectedAt   time.Time `json:"connected_at"`
+	LastReadAt    time.Time `json:"last_read_at"`
+	LastWriteAt   time.Time `json:"last_write_at"`
+	SendQueueLen  int       `json:"send_queue_len"`
+	RoomIDs       []int64   `json:"room_ids"`
+}
+
+// Connections ???? Hub ?????????????
+func (h *Hub) Connections() []ConnectionSnapshot {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	out := make([]ConnectionSnapshot, 0, len(h.users))
+	for userID, client := range h.users {
+		roomIDs := make([]int64, 0)
+		for roomID, clients := range h.rooms {
+			if clients[client] {
+				roomIDs = append(roomIDs, roomID)
+			}
+		}
+
+		out = append(out, ConnectionSnapshot{
+			UserID:        userID,
+			Username:      client.Username,
+			ConnectionID:  client.ConnID,
+			RemoteIP:      client.RemoteIP,
+			UserAgent:     client.UserAgent,
+			ClientVersion: client.ClientVersion,
+			ConnectedAt:   client.ConnectedAt,
+			LastReadAt:    client.LastReadAt(),
+			LastWriteAt:   client.LastWriteAt(),
+			SendQueueLen:  len(client.Send),
+			RoomIDs:       roomIDs,
+		})
+	}
+	return out
+}
+
+// CloseConnection ?? Hub ????????????????????? WebSocket?
+func (h *Hub) CloseConnection(connectionID string) {
+	select {
+	case h.CloseConn <- connectionID:
+	default:
 	}
 }
 
@@ -281,6 +337,20 @@ func (h *Hub) Run(ctx context.Context) {
 			h.mu.RUnlock()
 			if ok {
 				client.Conn.Close()
+			}
+
+		case connectionID := <-h.CloseConn:
+			h.mu.RLock()
+			var target *Client
+			for _, client := range h.users {
+				if client.ConnID == connectionID {
+					target = client
+					break
+				}
+			}
+			h.mu.RUnlock()
+			if target != nil {
+				target.Conn.Close()
 			}
 
 		case client := <-h.killClient:
