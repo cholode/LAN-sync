@@ -52,7 +52,8 @@
       <h1>????</h1>
       <a href="#dashboard" data-page="dashboard" class="active">Dashboard</a>
       <a href="#message-traffic" data-page="message-traffic">????</a>
-      <a href="#agent" data-page="agent">Agent??</a>
+      <a href="#agent" data-page="agent">Agent监控</a>
+      <a href="#agent-config" data-page="agent-config">Agent配置</a>
       <a href="#rag" data-page="rag">RAG/Qdrant</a>
       <a href="#moderation" data-page="moderation">????</a>
       <a href="#users" data-page="users">????</a>
@@ -77,7 +78,8 @@
     const pageTitles = {
       dashboard: 'Dashboard',
       'message-traffic': '????',
-      agent: 'Agent??',
+      agent: 'Agent监控',
+      'agent-config': 'Agent配置',
       rag: 'RAG/Qdrant',
       moderation: '????',
       users: '????',
@@ -144,6 +146,8 @@
         loadConnections();
       } else if (page === 'files') {
         loadFiles();
+      } else if (page === 'agent-config') {
+        loadAgentConfigPage();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -240,6 +244,117 @@
     }
     window.connectionClose = connectionClose;
     window.connectionForceOffline = connectionForceOffline;
+
+    async function loadAgentConfigPage() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d Agent \u914d\u7f6e...</div>';
+      try {
+        const cfg = await request('/admin/agent-config');
+        content.innerHTML = '<h3 style="margin-top:0">\u5168\u5c40 Agent \u914d\u7f6e</h3>' +
+          '<div class="toolbar"><button onclick="agentConfigSave()">\u4fdd\u5b58\u914d\u7f6e</button> <button onclick="agentConfigRollback()">\u56de\u6eda\u4e0a\u4e00\u7248\u672c</button> <button onclick="agentConfigHistory()">\u5386\u53f2\u8bb0\u5f55</button></div>' +
+          '<div class="form-grid">' +
+          agentField('global_enabled', '\u5168\u5c40\u542f\u7528', 'checkbox', cfg.global_enabled) +
+          agentField('default_model', '\u9ed8\u8ba4\u6a21\u578b', 'text', cfg.default_model) +
+          agentField('embedding_model', 'Embedding \u6a21\u578b', 'text', cfg.embedding_model) +
+          agentField('temperature', 'Temperature', 'number', cfg.temperature) +
+          agentField('max_tokens', 'Max Tokens', 'number', cfg.max_tokens) +
+          agentField('rag_top_k', 'RAG Top-K', 'number', cfg.rag_top_k) +
+          agentField('rag_similarity_threshold', 'RAG \u76f8\u4f3c\u5ea6\u9608\u503c', 'number', cfg.rag_similarity_threshold) +
+          agentField('chunk_size', 'Chunk Size', 'number', cfg.chunk_size) +
+          agentField('chunk_overlap', 'Chunk Overlap', 'number', cfg.chunk_overlap) +
+          agentField('moderation_enabled', '\u5185\u5bb9\u5ba1\u6838\u542f\u7528', 'checkbox', cfg.moderation_enabled) +
+          agentField('moderation_model', '\u5ba1\u6838\u6a21\u578b', 'text', cfg.moderation_model) +
+          agentField('moderation_threshold', '\u5ba1\u6838\u9608\u503c', 'number', cfg.moderation_threshold) +
+          agentField('tool_calling_enabled', 'Tool Calling \u542f\u7528', 'checkbox', cfg.tool_calling_enabled) +
+          agentField('auto_kick_enabled', '\u81ea\u52a8\u8e22\u4eba\u542f\u7528', 'checkbox', cfg.auto_kick_enabled) +
+          agentField('auto_ban_enabled', '\u81ea\u52a8\u5c01\u7981\u542f\u7528', 'checkbox', cfg.auto_ban_enabled) +
+          agentArea('system_prompt', 'System Prompt', cfg.system_prompt) +
+          agentArea('moderation_prompt', 'Moderation Prompt', cfg.moderation_prompt) +
+          agentArea('rag_prompt', 'RAG Prompt', cfg.rag_prompt) +
+          agentArea('tool_calling_prompt', 'Tool Calling Prompt', cfg.tool_calling_prompt) +
+          '</div>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    function agentField(name, label, type, value) {
+      const id = 'cfg_' + name;
+      const checked = value ? 'checked' : '';
+      const input = type === 'checkbox'
+        ? '<input id="' + id + '" type="checkbox" ' + checked + '>'
+        : '<input id="' + id + '" type="' + type + '" value="' + (value || '') + '">';
+      return '<label>' + label + '</label>' + input;
+    }
+
+    function agentArea(name, label, value) {
+      return '<label>' + label + '</label><textarea id="cfg_' + name + '" rows="5">' + (value || '') + '</textarea>';
+    }
+
+    function readAgentConfigInputs() {
+      const names = [
+        'global_enabled', 'default_model', 'embedding_model', 'temperature', 'max_tokens',
+        'rag_top_k', 'rag_similarity_threshold', 'chunk_size', 'chunk_overlap',
+        'moderation_enabled', 'moderation_model', 'moderation_threshold',
+        'tool_calling_enabled', 'auto_kick_enabled', 'auto_ban_enabled',
+        'system_prompt', 'moderation_prompt', 'rag_prompt', 'tool_calling_prompt'
+      ];
+      const body = {};
+      names.forEach(name => {
+        const el = document.getElementById('cfg_' + name);
+        if (!el) return;
+        if (el.type === 'checkbox') {
+          body[name] = el.checked;
+        } else if (el.type === 'number') {
+          body[name] = Number(el.value);
+        } else {
+          body[name] = el.value;
+        }
+      });
+      return body;
+    }
+
+    async function agentConfigSave() {
+      try {
+        await request('/admin/agent-config', { method: 'PUT', body: JSON.stringify(readAgentConfigInputs()) });
+        alert('\u914d\u7f6e\u5df2\u4fdd\u5b58');
+        loadAgentConfigPage();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function agentConfigRollback() {
+      if (!confirm('\u786e\u8ba4\u56de\u6eda\u5230\u4e0a\u4e00\u7248\u672c\u5417\uff1f')) return;
+      try {
+        await request('/admin/agent-config/rollback', { method: 'POST' });
+        alert('\u56de\u6eda\u6210\u529f');
+        loadAgentConfigPage();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function agentConfigHistory() {
+      try {
+        const data = await request('/admin/agent-config/history?page=1&page_size=20');
+        const rows = (data.items || []).map(item => '<tr><td>' + item.version + '</td><td>' + item.admin_username + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td><button onclick="agentConfigHistoryDetail(\'' + item.before_data + '\',\'' + item.after_data + '\')">\u67e5\u770b</button></td></tr>').join('');
+        const html = '<h3>\u914d\u7f6e\u5386\u53f2</h3><table class="admin-table"><thead><tr><th>\u7248\u672c</th><th>\u7ba1\u7406\u5458</th><th>\u65f6\u95f4</th><th>\u64cd\u4f5c</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        const content = document.getElementById('content');
+        content.innerHTML = html;
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    function agentConfigHistoryDetail(before, after) {
+      alert('\u4fee\u6539\u524d\uff1a' + before + '\n\n\u4fee\u6539\u540e\uff1a' + after);
+    }
+
+    window.agentConfigSave = agentConfigSave;
+    window.agentConfigRollback = agentConfigRollback;
+    window.agentConfigHistory = agentConfigHistory;
+    window.agentConfigHistoryDetail = agentConfigHistoryDetail;
 
     function buildFileQuery() {
       const params = new URLSearchParams({ page: 1, page_size: 50 });

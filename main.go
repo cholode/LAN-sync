@@ -126,6 +126,7 @@ func main() {
 	api.InitAdminConnectionService(adminservice.NewConnectionService(hub, adminAuditService))
 	api.InitAdminModerationService(adminservice.NewModerationService(infrastructure.DB, adminAuditService))
 	api.InitAdminFileService(adminservice.NewFileService(infrastructure.DB, api.Storage, adminAuditService))
+	api.InitAdminAgentConfigService(adminservice.NewAgentConfigService(infrastructure.DB, adminAuditService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -242,6 +243,10 @@ func main() {
 		admin.GET("/files/:id", middleware.RequirePermission(models.PermFileRead), api.AdminFileDetail)
 		admin.GET("/files/:id/download", middleware.RequirePermission(models.PermFileRead), api.AdminFileDownload)
 		admin.DELETE("/files/:id", middleware.RequirePermission(models.PermFileDelete), api.AdminFileDelete)
+		admin.GET("/agent-config", middleware.RequirePermission(models.PermAgentRead), api.AdminAgentConfigGet)
+		admin.GET("/agent-config/history", middleware.RequirePermission(models.PermAgentRead), api.AdminAgentConfigHistory)
+		admin.PUT("/agent-config", middleware.RequirePermission(models.PermAgentConfig), api.AdminAgentConfigUpdate)
+		admin.POST("/agent-config/rollback", middleware.RequirePermission(models.PermAgentConfig), api.AdminAgentConfigRollback)
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 
