@@ -22,6 +22,7 @@ type MessageStatsStore interface {
 	DailyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error)
 	TopRooms(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error)
 	TopSenders(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error)
+	CountBySender(ctx context.Context, senderID int64) (int64, error)
 }
 
 // TimeCount ?????????
@@ -39,6 +40,14 @@ type KeyCount struct {
 type keyCountRow struct {
 	Key   int64
 	Count int64
+}
+
+// NewMessageStatsStore ???????????????
+func NewMessageStatsStore(db *gorm.DB, messageCollection *mongo.Collection, messageStore string) MessageStatsStore {
+	if messageStore == "mongo" && messageCollection != nil {
+		return newMongoMessageStats(messageCollection, db)
+	}
+	return newMySQLMessageStats(db)
 }
 
 type mysqlMessageStats struct {
@@ -209,6 +218,14 @@ func keyCountFromRows(rows []keyCountRow) []KeyCount {
 	return out
 }
 
+func (s *mysqlMessageStats) CountBySender(ctx context.Context, senderID int64) (int64, error) {
+	var count int64
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Where("sender_id = ?", senderID).
+		Count(&count).Error
+	return count, err
+}
+
 type mongoMessageStats struct {
 	coll *mongo.Collection
 	db   *gorm.DB
@@ -319,6 +336,12 @@ func (s *mongoMessageStats) ActiveSenders(ctx context.Context, since time.Time) 
 		return 0, err
 	}
 	return int64(len(senders)), nil
+}
+
+func (s *mongoMessageStats) CountBySender(ctx context.Context, senderID int64) (int64, error) {
+	f := notDeletedFilter()
+	f["sender_id"] = senderID
+	return s.coll.CountDocuments(ctx, f)
 }
 
 func (s *mongoMessageStats) HourlyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error) {

@@ -136,6 +136,8 @@
         loadRAGDashboard();
       } else if (page === 'moderation') {
         loadModerationDashboard();
+      } else if (page === 'users') {
+        loadUsers();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -188,6 +190,39 @@
       }
     }
 
+    async function loadUsers() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">????????...</div>';
+      try {
+        const data = await request('/admin/users?page=1&page_size=50');
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.username + '</td><td>' + item.role_name + '</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + (item.last_login_at ? new Date(item.last_login_at).toLocaleString() : '-') + '</td><td>' + (item.online ? '??' : '??') + '</td><td>' + (item.status === 1 ? '???' : '??') + '</td><td>' + item.room_count + '</td><td>' + item.message_count + '</td><td>' + item.violation_count + '</td><td>' +
+          '<button onclick="userAction(' + item.id + ',\'force_offline\')">????</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'ban\')">??</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'unban\')">??</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'role_moderator\')">?????</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'role_operator\')">????</button> ' +
+          '<button onclick="userAction(' + item.id + ',\'role_super_admin\')">????</button>' +
+          '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">????</h3><table class="admin-table"><thead><tr><th>ID</th><th>???</th><th>??</th><th>????</th><th>????</th><th>??</th><th>??</th><th>???</th><th>???</th><th>???</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function userAction(id, action) {
+      if (!confirm('????? ' + id + ' ???' + action + '?????')) return;
+      try {
+        await request('/admin/users/' + id + '/action', {
+          method: 'POST',
+          body: JSON.stringify({ action })
+        });
+        alert('????');
+        loadUsers();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+    window.userAction = userAction;
     async function loadModerationDashboard() {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">??????????...</div>';
