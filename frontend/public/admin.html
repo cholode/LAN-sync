@@ -53,6 +53,7 @@
       <a href="#dashboard" data-page="dashboard" class="active">Dashboard</a>
       <a href="#message-traffic" data-page="message-traffic">????</a>
       <a href="#agent" data-page="agent">Agent??</a>
+      <a href="#rag" data-page="rag">RAG/Qdrant</a>
       <a href="#users" data-page="users">????</a>
       <a href="#rooms" data-page="rooms">????</a>
       <a href="#connections" data-page="connections">????</a>
@@ -76,6 +77,7 @@
       dashboard: 'Dashboard',
       'message-traffic': '????',
       agent: 'Agent??',
+      rag: 'RAG/Qdrant',
       users: '????',
       rooms: '????',
       connections: '????',
@@ -128,6 +130,8 @@
         loadMessageTraffic();
       } else if (page === 'agent') {
         loadAgentDashboard();
+      } else if (page === 'rag') {
+        loadRAGDashboard();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -175,6 +179,33 @@
           metricCard('?? @Agent ????', m.agent_today) +
           '</div>';
         loadRuntime();
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function loadRAGDashboard() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">???? RAG/Qdrant ??...</div>';
+      try {
+        const data = await request('/admin/dashboard/rag');
+        const queryData = await request('/admin/rag/queries?page=1&page_size=20');
+        const queryRows = (queryData.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.room_id + '</td><td>' + item.user_id + '</td><td>' + item.question + '</td><td>' + new Date(item.query_time).toLocaleString() + '</td><td>' + item.retrieved_count + '</td><td>' + item.similarity_scores + '</td><td>' + item.query_latency_ms + '</td><td>' + (item.used_time_tool ? '?' : '?') + '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">RAG / Qdrant ??</h3>' +
+          '<div class="metric-grid">' +
+          metricCard('Qdrant ????', data.qdrant_online ? '??' : '??') +
+          metricCard('Collection ??', data.collection_count) +
+          metricCard('??????????', data.vector_count) +
+          metricCard('????????', data.today_new_vectors) +
+          metricCard('Embedding Queue ?????', data.embedding_queue) +
+          metricCard('Embedding ????(ms)', data.embedding_avg_ms.toFixed(2)) +
+          metricCard('Qdrant ??????(ms)', data.qdrant_query_avg_ms.toFixed(2)) +
+          metricCard('RAG ??????', data.rag_avg_recall.toFixed(2)) +
+          metricCard('RAG Top-K ????', data.top_k) +
+          metricCard('????', data.vector_dimension) +
+          metricCard('????????', data.last_write_time ? new Date(data.last_write_time).toLocaleString() : '-') +
+          '</div>' +
+          '<h3>RAG ????</h3><table class="admin-table"><thead><tr><th>ID</th><th>??</th><th>??</th><th>??</th><th>????</th><th>???</th><th>???</th><th>??(ms)</th><th>??Tool</th></tr></thead><tbody>' + queryRows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }

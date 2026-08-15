@@ -119,6 +119,7 @@ func main() {
 		os.Getenv("MESSAGE_STORE"),
 		hub,
 	))
+	api.InitAdminRAGService(adminservice.NewRAGService(infrastructure.DB))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -210,6 +211,8 @@ func main() {
 		admin.GET("/dashboard/runtime", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardRuntime)
 		admin.GET("/dashboard/message-traffic", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardMessageTraffic)
 		admin.GET("/dashboard/agent", middleware.RequirePermission(models.PermAgentRead), api.AdminAgentDashboard)
+		admin.GET("/dashboard/rag", middleware.RequireAnyPermission(models.PermDashboardRead, models.PermAgentRead), api.AdminRAGDashboard)
+		admin.GET("/rag/queries", middleware.RequirePermission(models.PermAgentRead), api.AdminRAGQueries)
 		admin.GET("/dashboard/overview", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardOverview)
 		admin.DELETE("/users/:id", middleware.RequirePermission(models.PermUserDelete), api.AdminDeleteUser(hub))
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
