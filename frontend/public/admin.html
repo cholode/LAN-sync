@@ -142,18 +142,20 @@
         loadRooms();
       } else if (page === 'connections') {
         loadConnections();
+      } else if (page === 'files') {
+        loadFiles();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
     }
 
-    async function request(endpoint) {
-      const headers = { 'Content-Type': 'application/json' };
+    async function request(endpoint, options = {}) {
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
       const token = getToken();
       if (token) headers['Authorization'] = 'Bearer ' + token;
-      const res = await fetch(API_BASE + endpoint, { headers });
+      const res = await fetch(API_BASE + endpoint, Object.assign({}, options, { headers }));
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || data.msg || '????');
+      if (!res.ok) throw new Error(data.error || data.msg || '请求失败');
       return data;
     }
 
@@ -238,6 +240,88 @@
     }
     window.connectionClose = connectionClose;
     window.connectionForceOffline = connectionForceOffline;
+
+    function buildFileQuery() {
+      const params = new URLSearchParams({ page: 1, page_size: 50 });
+      const keyword = document.getElementById('fileKeyword') ? document.getElementById('fileKeyword').value : '';
+      const fileType = document.getElementById('fileType') ? document.getElementById('fileType').value : '';
+      const status = document.getElementById('fileStatus') ? document.getElementById('fileStatus').value : '';
+      const uploaderId = document.getElementById('fileUploaderId') ? document.getElementById('fileUploaderId').value : '';
+      const roomId = document.getElementById('fileRoomId') ? document.getElementById('fileRoomId').value : '';
+      if (keyword) params.set('keyword', keyword);
+      if (fileType) params.set('file_type', fileType);
+      if (status) params.set('status', status);
+      if (uploaderId) params.set('uploader_id', uploaderId);
+      if (roomId) params.set('room_id', roomId);
+      return '/admin/files?' + params.toString();
+    }
+
+    async function loadFiles() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">\u6b63\u5728\u52a0\u8f7d\u6587\u4ef6\u5217\u8868...</div>';
+      try {
+        const endpoint = buildFileQuery();
+        const data = await request(endpoint);
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.object_key + '</td><td>' + item.original_name + '</td><td>' + (item.sha256 || '-') + '</td><td>' + item.size + '</td><td>' + item.uploader_id + ' (' + item.username + ')</td><td>' + item.room_id + ' (' + item.room_name + ')</td><td>' + new Date(item.created_at).toLocaleString() + '</td><td>' + item.backend + '</td><td>' + item.status + '</td><td>' + (item.exists ? '\u5b58\u5728' : '\u7f3a\u5931') + '</td><td>' + (item.has_message ? '\u6709' : '\u65e0') + '</td><td>' +
+          '<button onclick="fileDownload(' + item.id + ')">\u4e0b\u8f7d</button> ' +
+          '<button onclick="fileDelete(' + item.id + ')">\u5220\u9664</button>' +
+          '</td></tr>').join('');
+        content.innerHTML = '<div class="toolbar"><input id="fileKeyword" placeholder="\u5173\u952e\u5b57"><input id="fileType" placeholder="\u6587\u4ef6\u7c7b\u578b\u5982 png"><input id="fileStatus" placeholder="\u72b6\u6001"><input id="fileUploaderId" placeholder="\u4e0a\u4f20\u7528\u6237ID"><input id="fileRoomId" placeholder="\u7fa4\u804aID"><button onclick="loadFiles()">\u67e5\u8be2</button> <button onclick="fileScan()">\u5f02\u5e38\u68c0\u67e5</button> <button onclick="fileCleanup()">\u6e05\u7406\u5b64\u7acb\u5bf9\u8c61</button></div>' +
+          '<h3 style="margin-top:14px">\u6587\u4ef6\u7ba1\u7406</h3><table class="admin-table"><thead><tr><th>ID</th><th>Object Key</th><th>\u539f\u59cb\u6587\u4ef6\u540d</th><th>SHA-256</th><th>\u5927\u5c0f</th><th>\u4e0a\u4f20\u7528\u6237</th><th>\u6240\u5c5e\u7fa4\u804a</th><th>\u4e0a\u4f20\u65f6\u95f4</th><th>\u5b58\u50a8\u7c7b\u578b</th><th>\u72b6\u6001</th><th>\u5b9e\u9645\u5b58\u5728</th><th>\u6d88\u606f\u5f15\u7528</th><th>\u64cd\u4f5c</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function fileDownload(id) {
+      try {
+        const data = await request('/admin/files/' + id + '/download');
+        if (data.download_url) window.open(data.download_url, '_blank');
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function fileDelete(id) {
+      if (!confirm('\u786e\u8ba4\u5220\u9664\u6587\u4ef6 ' + id + ' \u5417\uff1f\u8be5\u64cd\u4f5c\u540c\u65f6\u5220\u9664\u5bf9\u8c61\u5b58\u50a8\u4e2d\u7684\u5b9e\u9645\u6587\u4ef6\u3002')) return;
+      try {
+        await request('/admin/files/' + id, { method: 'DELETE' });
+        alert('\u5220\u9664\u6210\u529f');
+        loadFiles();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function fileScan() {
+      try {
+        const data = await request('/admin/files/scan');
+        const missing = (data.missing_records || []).length;
+        const orphan = (data.orphan_objects || []).length;
+        const stale = (data.stale_records || []).length;
+        alert('\u5f02\u5e38\u68c0\u67e5\u5b8c\u6210\uff1a\u7f3a\u5931 ' + missing + '\uff0c\u5b64\u7acb\u5bf9\u8c61 ' + orphan + '\uff0c\u8d85\u65f6\u672a\u5f15\u7528 ' + stale);
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function fileCleanup() {
+      if (!confirm('\u786e\u8ba4\u6e05\u7406\u5b64\u7acb\u5bf9\u8c61\u5417\uff1f\u4ec5\u4f1a\u5220\u9664\u65e0\u6570\u636e\u5e93\u8bb0\u5f55\u7684\u5bf9\u8c61\u3002')) return;
+      try {
+        const data = await request('/admin/files/cleanup', { method: 'POST' });
+        alert('\u5df2\u6e05\u7406 ' + data.cleaned + ' \u4e2a\u5b64\u7acb\u5bf9\u8c61');
+        loadFiles();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    window.loadFiles = loadFiles;
+    window.fileDownload = fileDownload;
+    window.fileDelete = fileDelete;
+    window.fileScan = fileScan;
+    window.fileCleanup = fileCleanup;
+
     async function loadRooms() {
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">????????...</div>';

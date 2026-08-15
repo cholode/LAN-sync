@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -69,6 +71,43 @@ func (p *OssProvider) GetDownloadURL(ctx context.Context, key string) (string, e
 
 func (p *OssProvider) Delete(ctx context.Context, key string) error {
 	return p.bucket.DeleteObject(key)
+}
+
+func (p *OssProvider) Stat(ctx context.Context, key string) (ObjectStat, error) {
+	headers, err := p.bucket.GetObjectMeta(key)
+	if err != nil {
+		return ObjectStat{Key: key}, nil
+	}
+	size, _ := strconv.ParseInt(headers.Get("Content-Length"), 10, 64)
+	lastModified, _ := http.ParseTime(headers.Get("Last-Modified"))
+	return ObjectStat{
+		Key:          key,
+		Size:         size,
+		LastModified: lastModified,
+		ETag:         headers.Get("ETag"),
+		Exists:       true,
+	}, nil
+}
+
+func (p *OssProvider) ListObjects(ctx context.Context, prefix string, limit int) ([]ObjectStat, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	result, err := p.bucket.ListObjects(oss.Prefix(prefix), oss.MaxKeys(limit))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ObjectStat, 0, len(result.Objects))
+	for _, obj := range result.Objects {
+		out = append(out, ObjectStat{
+			Key:          obj.Key,
+			Size:         obj.Size,
+			LastModified: obj.LastModified,
+			ETag:         obj.ETag,
+			Exists:       true,
+		})
+	}
+	return out, nil
 }
 
 func (p *OssProvider) BackendType() Backend {

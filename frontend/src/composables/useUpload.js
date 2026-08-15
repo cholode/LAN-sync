@@ -30,6 +30,19 @@ function updateProgress(percent) {
   state.upload.progress = Math.max(0, Math.min(100, percent));
 }
 
+async function computeFileSha256Hex(file) {
+  if (!globalThis.crypto || !globalThis.crypto.subtle) return '';
+  try {
+    const buffer = await file.arrayBuffer();
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  } catch (err) {
+    return '';
+  }
+}
+
 function putFileWithProgress(url, file) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -97,6 +110,22 @@ export async function startUpload(file) {
 
     state.upload.status = '上传完成';
     const downloadUrl = '/api/v1/download/' + encodeURIComponent(data.object_key);
+    const sha256 = await computeFileSha256Hex(file);
+    try {
+      await request('/files/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          object_key: data.object_key,
+          original_name: file.name,
+          sha256,
+          file_size: file.size,
+          room_id: uploadRoomId,
+        }),
+      });
+    } catch (err) {
+      // 元数据记录失败不阻塞消息发送。
+    }
     sendFileMessage(uploadRoomId, downloadUrl);
   } catch (err) {
     if (err && err.name === 'AbortError') {

@@ -26,12 +26,24 @@ type UploadResult struct {
 	Size      int64
 }
 
+// ObjectStat 描述对象存储中单个对象的元数据。
+type ObjectStat struct {
+	Key          string
+	Size         int64
+	LastModified time.Time
+	ETag         string
+	Exists       bool
+}
+
 // Provider 抽象了对象存储的操作接口
+// Stat 和 ListObjects 主要服务于超级管理员后台的文件健康检查。
 type Provider interface {
 	PreSignedUploadURL(ctx context.Context, key string, ttl time.Duration) (url string, err error)
 	Save(ctx context.Context, key string, reader io.Reader, size int64) (*UploadResult, error)
 	GetDownloadURL(ctx context.Context, key string) (string, error)
 	Delete(ctx context.Context, key string) error
+	Stat(ctx context.Context, key string) (ObjectStat, error)
+	ListObjects(ctx context.Context, prefix string, limit int) ([]ObjectStat, error)
 	BackendType() Backend
 }
 
@@ -94,7 +106,7 @@ func newMinioProviderFromEnv() Provider {
 	return provider
 }
 
-func storagePanic(format string, args ...interface{}) {
-	pkg.Errorf(format, args...)
-	panic(fmt.Sprintf(format, args...))
+func storagePanic(message string, err error) {
+	pkg.Errorf("%s: %v", message, err)
+	panic(fmt.Sprintf("%s: %v", message, err))
 }

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/internal/storage"
 	"lan-im-go/pkg"
 )
@@ -17,9 +19,16 @@ import (
 // Storage is the global object storage provider initialized by main.
 var Storage storage.Provider
 
+var adminFileService *adminservice.FileService
+
 // InitFileStorage initializes the object storage provider.
 func InitFileStorage() {
 	Storage = storage.New()
+}
+
+// InitAdminFileService initializes the admin file service used by upload completion.
+func InitAdminFileService(svc *adminservice.FileService) {
+	adminFileService = svc
 }
 
 // PreSignUploadRequest is the presigned upload request body.
@@ -69,6 +78,39 @@ func PreSignUploadHandler(c *gin.Context) {
 		"object_key": key,
 		"expires_in": 900,
 	})
+}
+
+// CompleteUploadHandler 记录客户端直传完成后的文件元数据，供超级管理员后台管理。
+// POST /api/v1/files/complete
+func CompleteUploadHandler(c *gin.Context) {
+	var req struct {
+		ObjectKey    string `json:"object_key" binding:"required"`
+		OriginalName string `json:"original_name" binding:"required"`
+		SHA256       string `json:"sha256"`
+		FileSize     int64  `json:"file_size"`
+		RoomID       int64  `json:"room_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数不合法"})
+		return
+	}
+	if adminFileService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件服务未初始化"})
+		return
+	}
+	userID := c.GetInt64("user_id")
+	record, err := adminFileService.RecordUpload(c.Request.Context(), userID, adminservice.CompleteUploadRequest{
+		ObjectKey:    req.ObjectKey,
+		OriginalName: req.OriginalName,
+		SHA256:       req.SHA256,
+		FileSize:     req.FileSize,
+		RoomID:       req.RoomID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存文件记录失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"id": record.ID, "object_key": record.ObjectKey})
 }
 
 func downloadSegmentFromRequest(c *gin.Context) string {

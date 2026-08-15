@@ -121,6 +121,50 @@ func (p *MinioProvider) Delete(ctx context.Context, key string) error {
 	return p.client.RemoveObject(ctx, p.bucket, key, minio.RemoveObjectOptions{})
 }
 
+func (p *MinioProvider) Stat(ctx context.Context, key string) (ObjectStat, error) {
+	info, err := p.client.StatObject(ctx, p.bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+			return ObjectStat{Key: key}, nil
+		}
+		return ObjectStat{Key: key}, err
+	}
+	return ObjectStat{
+		Key:          key,
+		Size:         info.Size,
+		LastModified: info.LastModified,
+		ETag:         info.ETag,
+		Exists:       true,
+	}, nil
+}
+
+func (p *MinioProvider) ListObjects(ctx context.Context, prefix string, limit int) ([]ObjectStat, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	ch := p.client.ListObjects(ctx, p.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+	out := make([]ObjectStat, 0)
+	for obj := range ch {
+		if obj.Err != nil {
+			return out, obj.Err
+		}
+		out = append(out, ObjectStat{
+			Key:          obj.Key,
+			Size:         obj.Size,
+			LastModified: obj.LastModified,
+			ETag:         obj.ETag,
+			Exists:       true,
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
 func (p *MinioProvider) BackendType() Backend {
 	return BackendMinIO
 }

@@ -34,6 +34,14 @@ func (f *fakeStorageProvider) GetDownloadURL(_ context.Context, key string) (str
 
 func (f *fakeStorageProvider) Delete(_ context.Context, _ string) error { return nil }
 
+func (f *fakeStorageProvider) Stat(_ context.Context, key string) (storage.ObjectStat, error) {
+	return storage.ObjectStat{Key: key, Size: 1, Exists: true}, nil
+}
+
+func (f *fakeStorageProvider) ListObjects(_ context.Context, prefix string, limit int) ([]storage.ObjectStat, error) {
+	return []storage.ObjectStat{{Key: prefix + "/example.png", Size: 1, Exists: true}}, nil
+}
+
 func (f *fakeStorageProvider) BackendType() storage.Backend { return storage.BackendMinIO }
 
 func setupTestRouter() *gin.Engine {

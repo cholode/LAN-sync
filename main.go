@@ -125,6 +125,7 @@ func main() {
 	api.InitAdminUserService(adminservice.NewUserService(infrastructure.DB, adminMessageStore, hub, adminAuditService))
 	api.InitAdminConnectionService(adminservice.NewConnectionService(hub, adminAuditService))
 	api.InitAdminModerationService(adminservice.NewModerationService(infrastructure.DB, adminAuditService))
+	api.InitAdminFileService(adminservice.NewFileService(infrastructure.DB, api.Storage, adminAuditService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -195,6 +196,7 @@ func main() {
 		})
 
 		authorized.POST("/files/presign", api.PreSignUploadHandler)
+		authorized.POST("/files/complete", api.CompleteUploadHandler)
 
 		authorized.GET("/rooms/:id/messages", api.GetChatHistory())
 		authorized.GET("/rooms/:id/messages/search", api.SearchMessages())
@@ -234,6 +236,12 @@ func main() {
 		admin.GET("/connections", middleware.RequirePermission(models.PermConnectionRead), api.AdminConnectionList)
 		admin.POST("/connections/close", middleware.RequirePermission(models.PermConnectionClose), api.AdminConnectionClose)
 		admin.POST("/connections/force-offline", middleware.RequirePermission(models.PermConnectionClose), api.AdminUserForceOffline)
+		admin.GET("/files", middleware.RequirePermission(models.PermFileRead), api.AdminFileList)
+		admin.GET("/files/scan", middleware.RequirePermission(models.PermFileRead), api.AdminFileScan)
+		admin.POST("/files/cleanup", middleware.RequirePermission(models.PermFileDelete), api.AdminFileCleanup)
+		admin.GET("/files/:id", middleware.RequirePermission(models.PermFileRead), api.AdminFileDetail)
+		admin.GET("/files/:id/download", middleware.RequirePermission(models.PermFileRead), api.AdminFileDownload)
+		admin.DELETE("/files/:id", middleware.RequirePermission(models.PermFileDelete), api.AdminFileDelete)
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))
 	}
 
