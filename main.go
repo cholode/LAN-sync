@@ -120,7 +120,8 @@ func main() {
 		hub,
 	))
 	api.InitAdminRAGService(adminservice.NewRAGService(infrastructure.DB))
-	api.InitAdminModerationService(adminservice.NewModerationService(infrastructure.DB))
+	adminAuditService := adminservice.NewAuditService(infrastructure.DB)
+	api.InitAdminModerationService(adminservice.NewModerationService(infrastructure.DB, adminAuditService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -215,6 +216,9 @@ func main() {
 		admin.GET("/dashboard/rag", middleware.RequireAnyPermission(models.PermDashboardRead, models.PermAgentRead), api.AdminRAGDashboard)
 		admin.GET("/rag/queries", middleware.RequirePermission(models.PermAgentRead), api.AdminRAGQueries)
 		admin.GET("/dashboard/moderation", middleware.RequirePermission(models.PermModerationRead), api.AdminModerationDashboard)
+		admin.GET("/moderation", middleware.RequirePermission(models.PermModerationRead), api.AdminModerationList)
+		admin.GET("/moderation/:id", middleware.RequirePermission(models.PermModerationRead), api.AdminModerationDetail)
+		admin.POST("/moderation/:id/action", middleware.RequirePermission(models.PermModerationReview), api.AdminModerationAction)
 		admin.GET("/dashboard/overview", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardOverview)
 		admin.DELETE("/users/:id", middleware.RequirePermission(models.PermUserDelete), api.AdminDeleteUser(hub))
 		admin.DELETE("/rooms/:id", middleware.RequirePermission(models.PermRoomDelete), api.AdminDeleteRoom(hub))

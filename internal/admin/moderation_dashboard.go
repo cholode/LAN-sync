@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -11,12 +12,13 @@ import (
 
 // ModerationService ?????? Dashboard ??????????
 type ModerationService struct {
-	db *gorm.DB
+	db    *gorm.DB
+	audit *AuditService
 }
 
 // NewModerationService ?????????
-func NewModerationService(db *gorm.DB) *ModerationService {
-	return &ModerationService{db: db}
+func NewModerationService(db *gorm.DB, audit *AuditService) *ModerationService {
+	return &ModerationService{db: db, audit: audit}
 }
 
 // ModerationDashboard ???? Dashboard ?????
@@ -163,4 +165,141 @@ func moderationItem(item models.ModerationEvent) ModerationEventItem {
 		ReviewStatus:  item.ReviewStatus,
 		CreatedAt:     item.CreatedAt,
 	}
+}
+
+// ModerationListQuery ?????????
+type ModerationListQuery struct {
+	Page          int
+	PageSize      int
+	Username      string
+	UserID        int64
+	RoomID        int64
+	Category      string
+	RiskLevel     string
+	PenaltyStatus string
+	Start         time.Time
+	End           time.Time
+}
+
+// ListEvents ?????????
+func (s *ModerationService) ListEvents(ctx context.Context, q ModerationListQuery) ([]ModerationEventItem, int64, error) {
+	query := s.db.WithContext(ctx).Model(&models.ModerationEvent{})
+	if q.UserID > 0 {
+		query = query.Where("user_id = ?", q.UserID)
+	}
+	if q.RoomID > 0 {
+		query = query.Where("room_id = ?", q.RoomID)
+	}
+	if q.Username != "" {
+		query = query.Where("username LIKE ?", "%"+q.Username+"%")
+	}
+	if q.Category != "" {
+		query = query.Where("category = ?", q.Category)
+	}
+	if q.RiskLevel != "" {
+		query = query.Where("risk_level = ?", q.RiskLevel)
+	}
+	if q.PenaltyStatus != "" {
+		query = query.Where("penalty_status = ?", q.PenaltyStatus)
+	}
+	if !q.Start.IsZero() {
+		query = query.Where("created_at >= ?", q.Start)
+	}
+	if !q.End.IsZero() {
+		query = query.Where("created_at < ?", q.End)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var events []models.ModerationEvent
+	if err := query.Order("created_at DESC").
+		Offset((q.Page - 1) * q.PageSize).
+		Limit(q.PageSize).
+		Find(&events).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return moderationItems(events), total, nil
+}
+
+// GetEvent ???????????
+func (s *ModerationService) GetEvent(ctx context.Context, id int64) (*ModerationEventItem, error) {
+	var event models.ModerationEvent
+	if err := s.db.WithContext(ctx).First(&event, id).Error; err != nil {
+		return nil, err
+	}
+	item := moderationItem(event)
+	return &item, nil
+}
+
+// ModerationAction ????????
+type ModerationAction struct {
+	Action      string
+	AdminUserID int64
+	AdminName   string
+	RequestID   string
+	RemoteIP    string
+	UserAgent   string
+}
+
+// ApplyAction ?????????/????????????
+func (s *ModerationService) ApplyAction(ctx context.Context, id int64, action ModerationAction) error {
+	var event models.ModerationEvent
+	if err := s.db.WithContext(ctx).First(&event, id).Error; err != nil {
+		return err
+	}
+	before := moderationItem(event)
+
+	switch action.Action {
+	case "warn":
+		event.PenaltyStatus = "warned"
+		event.ReviewStatus = "reviewed"
+	case "mute":
+		event.PenaltyStatus = "muted"
+		event.ReviewStatus = "reviewed"
+	case "kick":
+		event.PenaltyStatus = "kicked"
+		event.ReviewStatus = "reviewed"
+	case "ban":
+		event.PenaltyStatus = "banned"
+		event.ReviewStatus = "reviewed"
+	case "revoke":
+		event.PenaltyStatus = "none"
+		event.ReviewStatus = "revoked"
+	case "false_positive":
+		event.ReviewStatus = "false_positive"
+		event.PenaltyStatus = "none"
+	case "confirmed":
+		event.ReviewStatus = "confirmed"
+	default:
+		event.ReviewStatus = "reviewed"
+	}
+
+	event.ReviewedBy = action.AdminUserID
+	now := time.Now()
+	event.ReviewedAt = &now
+
+	if err := s.db.WithContext(ctx).Save(&event).Error; err != nil {
+		return err
+	}
+
+	if s.audit != nil {
+		_ = s.audit.Log(ctx, AuditEntry{
+			AdminUserID:   action.AdminUserID,
+			AdminUsername: action.AdminName,
+			Action:        "moderation." + action.Action,
+			TargetType:    "moderation_event",
+			TargetID:      strconv.FormatInt(id, 10),
+			BeforeData:    before,
+			AfterData:     moderationItem(event),
+			RequestID:     action.RequestID,
+			RemoteIP:      action.RemoteIP,
+			UserAgent:     action.UserAgent,
+			Result:        "success",
+		})
+	}
+	return nil
 }

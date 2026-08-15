@@ -208,10 +208,45 @@
           '</div>' +
           '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th></tr></thead><tbody>' + catRows + '</tbody></table>' +
           '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th><th>??</th><th>????</th><th>????</th><th>??</th><th>????</th><th>????</th></tr></thead><tbody>' + recentRows + '</tbody></table>';
+        loadModerationEvents();
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }
     }
+
+    async function loadModerationEvents() {
+      const content = document.getElementById('content');
+      try {
+        const data = await request('/admin/moderation?page=1&page_size=50');
+        const rows = (data.items || []).map(item => '<tr><td>' + item.id + '</td><td>' + item.username + '</td><td>' + item.user_id + '</td><td>' + item.room_name + '</td><td>' + item.original_msg + '</td><td>' + item.category + '</td><td>' + item.risk_level + '</td><td>' + item.penalty_status + '</td><td>' + item.review_status + '</td><td>' +
+          '<button onclick="moderationAction(' + item.id + ',\'warn\')">??</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'mute\')">??</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'kick\')">??</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'ban\')">??</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'revoke\')">??</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'false_positive\')">??</button> ' +
+          '<button onclick="moderationAction(' + item.id + ',\'confirmed\')">????</button>' +
+          '</td></tr>').join('');
+        content.insertAdjacentHTML('beforeend', '<h3>??????</h3><table class="admin-table"><thead><tr><th>ID</th><th>??</th><th>UserID</th><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th><th>??</th></tr></thead><tbody>' + rows + '</tbody></table>');
+      } catch (error) {
+        content.insertAdjacentHTML('beforeend', '<div class="error">?????????' + error.message + '</div>');
+      }
+    }
+
+    async function moderationAction(id, action) {
+      if (!confirm('????? ' + id + ' ???' + action + '?????')) return;
+      try {
+        await request('/admin/moderation/' + id + '/action', {
+          method: 'POST',
+          body: JSON.stringify({ action })
+        });
+        alert('????');
+        loadModerationDashboard();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+    window.moderationAction = moderationAction;
 
     async function loadRAGDashboard() {
       const content = document.getElementById('content');
