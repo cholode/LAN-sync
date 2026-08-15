@@ -45,6 +45,7 @@ var rolePermissionMap = map[int8]map[string]struct{}{
 		PermUserKick:         {},
 		PermRoomRead:         {},
 		PermRoomFreeze:       {},
+		PermRoomDelete:       {},
 		PermMessageRead:      {},
 		PermMessageDelete:    {},
 		PermModerationRead:   {},
