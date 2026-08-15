@@ -1,4 +1,4 @@
-package core
+﻿package core
 
 import (
 	"context"
@@ -21,6 +21,7 @@ const (
 	poolDispatchThreshold = 100
 )
 
+// RoomAction 表示客户端在房间内的动作，例如加入、离开或解散。
 type RoomAction struct {
 	UserID int64
 	RoomID int64
@@ -28,25 +29,32 @@ type RoomAction struct {
 }
 
 // Hub 局部内存路由引擎(Local Routing Engine)
-// 物理定位：绝对无状态！重启不会丢失任何业务数据，只管理当前节点的 TCP 句柄。
+// 重启不会丢失任何业务数据，只管理当前节点的 TCP 句柄。
 type Hub struct {
 	mu    sync.RWMutex
 	rooms map[int64]map[*Client]bool
 	users map[int64]*Client
 
-	Subscribe   chan *Subscription
+	// Subscribe 接收客户端订阅请求。
+	Subscribe chan *Subscription
+	// Unsubscribe 接收客户端退订请求。
 	Unsubscribe chan *Subscription
 
+	// ForwardMessage 接收需要转发给客户端消息队列的消息。
 	ForwardMessage chan *models.Message
 
+	// RoomActionChan 接收加入、离开、解散等房间动作。
 	RoomActionChan chan *RoomAction
-	Kick           chan int64
-	CloseConn      chan string
+	// Kick 接收需要强制下线的用户 ID。
+	Kick chan int64
+	// CloseConn 接收需要关闭的连接 ID。
+	CloseConn chan string
 
 	// killClient 接收来自协程池中检测到的慢客户端，由 Hub 主循环统一清理
 	killClient chan *Client
 }
 
+// NewHub 创建并初始化本地内存路由引擎。
 func NewHub() *Hub {
 	return &Hub{
 		rooms:       make(map[int64]map[*Client]bool),
@@ -63,7 +71,7 @@ func NewHub() *Hub {
 	}
 }
 
-// ConnectionSnapshot ???????????????????? WebSocket ?????
+// ConnectionSnapshot 表示单个客户端 WebSocket 连接的运行时快照。
 type ConnectionSnapshot struct {
 	UserID        int64     `json:"user_id"`
 	Username      string    `json:"username"`
@@ -78,7 +86,7 @@ type ConnectionSnapshot struct {
 	RoomIDs       []int64   `json:"room_ids"`
 }
 
-// Connections ???? Hub ?????????????
+// Connections 返回当前 Hub 中所有客户端连接快照。
 func (h *Hub) Connections() []ConnectionSnapshot {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -109,7 +117,7 @@ func (h *Hub) Connections() []ConnectionSnapshot {
 	return out
 }
 
-// CloseConnection ?? Hub ????????????????????? WebSocket?
+// CloseConnection 请求 Hub 按连接 ID 关闭指定 WebSocket 连接。
 func (h *Hub) CloseConnection(connectionID string) {
 	select {
 	case h.CloseConn <- connectionID:
@@ -117,13 +125,13 @@ func (h *Hub) CloseConnection(connectionID string) {
 	}
 }
 
-// HubStats ? Hub ????????????????????????? map?
+// HubStats 表示 Hub 的客户端数量和房间数量统计。
 type HubStats struct {
 	ClientCount int
 	RoomCount   int
 }
 
-// Stats ?????? Hub ????????
+// Stats 返回当前 Hub 的客户端与房间统计信息。
 func (h *Hub) Stats() HubStats {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -133,6 +141,7 @@ func (h *Hub) Stats() HubStats {
 	}
 }
 
+// StartGlobalListener 启动 Redis Pub/Sub 全局监听，将跨节点广播消息转发到本地 Hub。
 func StartGlobalListener(ctx context.Context, localHub *Hub) {
 	pubsub := config.RedisClient.PSubscribe(ctx, "im:broadcast:room:*")
 	defer pubsub.Close()
@@ -194,7 +203,7 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 	start := time.Now()
 	defer metrics.ObserveHubDispatchLatency(msg.RoomID, time.Since(start).Seconds())
 
-	// ????????????
+	// 小房间直接内联分发，避免协程池调度开销。
 	if len(clients) < poolDispatchThreshold {
 		dispatched := 0
 		for _, client := range clients {
@@ -211,7 +220,7 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 		return
 	}
 
-	// ?????????????????? Hub ???
+	// 大房间通过协程池并行分发，避免单个房间阻塞整个 Hub。
 	for _, client := range clients {
 		c := client
 		taskpool.Go(func() {
@@ -227,19 +236,21 @@ func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
 	}
 }
 
-// requestEvict ?? Hub ??????????????????????? map?
+// requestEvict 请求 Hub 清理发送队列已满的慢客户端。
 func (h *Hub) requestEvict(client *Client) {
 	select {
 	case h.killClient <- client:
 	default:
-		// kill ???????Hub ?????????????
+		// kill 队列已满时丢弃本次请求，避免阻塞当前分发协程。
 	}
 }
+
+// evictClient 从 Hub 中移除慢客户端，并从所有房间清理其连接。
 func (h *Hub) evictClient(client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	pkg.Infof("[Local Hub ??] ??? %d ???????", client.UserID)
+	pkg.Infof("[Local Hub 清理] 用户 %d 已被移出本地路由", client.UserID)
 	for rid, roomClients := range h.rooms {
 		delete(roomClients, client)
 		if len(roomClients) == 0 {
@@ -249,12 +260,14 @@ func (h *Hub) evictClient(client *Client) {
 	if _, ok := h.users[client.UserID]; ok {
 		delete(h.users, client.UserID)
 	}
-	// ????????????????recover ?? panic
+	// 关闭发送通道时做 recover 保护，避免重复关闭引发 panic。
 	func() {
 		defer func() { recover() }()
 		close(client.Send)
 	}()
 }
+
+// Run 启动 Hub 主循环，串行处理订阅、退订、消息转发和房间动作。
 func (h *Hub) Run(ctx context.Context) {
 	pkg.Infoln("[Local Hub] 本地内存路由引擎已启动，等待 Redis 指令...")
 	for {

@@ -2,7 +2,8 @@ package models
 
 import "time"
 
-// ToolCallLog \u8bb0\u5f55 Agent Tool Calling \u7684\u6267\u884c\u60c5\u51b5\uff0c\u7528\u4e8e\u8d85\u7ea7\u7ba1\u7406\u5458\u540e\u53f0\u6392\u67e5\u3002
+// ToolCallLog 记录 Agent Tool Calling 的执行情况，用于超级管理员后台排查。
+
 type ToolCallLog struct {
 	ID             int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	ToolCallID     string    `gorm:"type:varchar(128);index:idx_tool_call_id;not null" json:"tool_call_id"`

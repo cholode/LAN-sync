@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// TestHub_SubscribeAndUnsubscribe 测试客户端订阅和退订房间。
 func TestHub_SubscribeAndUnsubscribe(t *testing.T) {
 	hub := NewHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -53,7 +54,7 @@ func TestHub_SubscribeAndUnsubscribe(t *testing.T) {
 		t.Fatal("room 100 still exists after user left")
 	}
 
-	// Send channel should be closed after unsubscribe
+	// 退订后发送通道应被关闭。
 	select {
 	case _, ok := <-client.Send:
 		if ok {
@@ -63,6 +64,7 @@ func TestHub_SubscribeAndUnsubscribe(t *testing.T) {
 	}
 }
 
+// TestHub_ForwardMessage 测试消息转发给单个客户端。
 func TestHub_ForwardMessage(t *testing.T) {
 	hub := NewHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -110,6 +112,7 @@ func TestHub_ForwardMessage(t *testing.T) {
 	}
 }
 
+// TestHub_ForwardMessageToMultipleClients 测试消息广播给多个客户端。
 func TestHub_ForwardMessageToMultipleClients(t *testing.T) {
 	hub := NewHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -159,6 +162,7 @@ func TestHub_ForwardMessageToMultipleClients(t *testing.T) {
 	}
 }
 
+// TestHub_RoomAction_JoinAndLeave 测试房间动作中的加入与离开。
 func TestHub_RoomAction_JoinAndLeave(t *testing.T) {
 	hub := NewHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -207,6 +211,7 @@ func TestHub_RoomAction_JoinAndLeave(t *testing.T) {
 	}
 }
 
+// TestHub_RoomAction_Disband 测试房间解散动作。
 func TestHub_RoomAction_Disband(t *testing.T) {
 	hub := NewHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -240,6 +245,7 @@ func TestHub_RoomAction_Disband(t *testing.T) {
 	}
 }
 
+// TestHub_ConcurrentSubscribe 测试多个客户端并发订阅。
 func TestHub_ConcurrentSubscribe(t *testing.T) {
 	hub := NewHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -277,6 +283,7 @@ func TestHub_ConcurrentSubscribe(t *testing.T) {
 	}
 }
 
+// TestHub_Shutdown 测试 Hub 收到上下文取消后能正常退出。
 func TestHub_Shutdown(t *testing.T) {
 	hub := NewHub()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -292,7 +299,7 @@ func TestHub_Shutdown(t *testing.T) {
 
 	select {
 	case <-done:
-		// ok
+		// Hub 已正常退出。
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("hub did not shut down in time")
 	}

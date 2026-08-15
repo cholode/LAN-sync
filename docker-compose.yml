@@ -155,6 +155,7 @@ services:
       - ES_INDEX_MESSAGES=${ES_INDEX_MESSAGES:-lan-im-messages}
       - QDRANT_HOST=qdrant
       - AGENT_GRPC_ADDR=agent-service:50051
+      - ADMIN_CONTROL_GRPC_ADDR=0.0.0.0:50053
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL}
@@ -220,7 +221,7 @@ services:
       - MONGO_DB=${MONGO_DB:-lan_im}
       - QDRANT_HOST=qdrant
       - JWT_SECRET=${JWT_SECRET}
-      - IM_CONTROL_BASE_URL=http://backend:8080
+      - ADMIN_CONTROL_GRPC_ADDR=backend:50053
       - ADMIN_CONTROL_TOKEN=${ADMIN_CONTROL_TOKEN:-change-me-admin-token}
       - MINIO_ENDPOINT=minio:9000
       - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-localhost:9000}

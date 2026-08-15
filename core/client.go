@@ -14,6 +14,7 @@ import (
 	"time"
 )
 
+// CurrentGatewayNodeID 当前网关节点 ID，用于标记该连接所属的服务节点。
 var CurrentGatewayNodeID = metrics.NodeID()
 
 const (
@@ -29,10 +30,10 @@ type Client struct {
 	Hub    *Hub
 	UserID int64
 	Conn   *websocket.Conn
-	// ???????????????????
+	// Send 发送通道，用于将消息推送给客户端。
 	Send chan []byte
 
-	// ??????????????
+	// 客户端连接元信息。
 	Username      string
 	ConnID        string
 	RemoteIP      string
@@ -44,17 +45,17 @@ type Client struct {
 	lastWriteAt atomic.Int64
 }
 
-// SetLastRead ????????????????
+// SetLastRead 记录客户端最近一次读取消息的时间。
 func (c *Client) SetLastRead(t time.Time) {
 	c.lastReadAt.Store(t.UnixMilli())
 }
 
-// SetLastWrite ????????????????
+// SetLastWrite 记录客户端最近一次写入消息的时间。
 func (c *Client) SetLastWrite(t time.Time) {
 	c.lastWriteAt.Store(t.UnixMilli())
 }
 
-// LastReadAt ????????
+// LastReadAt 返回客户端最近一次读取消息的时间。
 func (c *Client) LastReadAt() time.Time {
 	if value := c.lastReadAt.Load(); value > 0 {
 		return time.UnixMilli(value)
@@ -62,7 +63,7 @@ func (c *Client) LastReadAt() time.Time {
 	return c.ConnectedAt
 }
 
-// LastWriteAt ????????
+// LastWriteAt 返回客户端最近一次写入消息的时间。
 func (c *Client) LastWriteAt() time.Time {
 	if value := c.lastWriteAt.Load(); value > 0 {
 		return time.UnixMilli(value)
@@ -70,12 +71,13 @@ func (c *Client) LastWriteAt() time.Time {
 	return c.ConnectedAt
 }
 
-// Subscription 订阅信息
+// Subscription 表示客户端与房间之间的订阅关系。
 type Subscription struct {
 	Client  *Client
 	RoomIDs []int64 // 操作关联的群聊集合
 }
 
+// ReadPump 持续读取客户端消息，解析后投递到 Kafka 全局消息流。
 func (c *Client) ReadPump() {
 	defer func() {
 		c.Hub.Unsubscribe <- &Subscription{Client: c, RoomIDs: nil}
@@ -143,9 +145,6 @@ func (c *Client) ReadPump() {
 			continue
 		}
 
-		// 架构级定调：
-		// 此时绝对不调用 c.Hub.Broadcast。
-		// 你的网关协程在这一步已经完成了它的历史使命，可以立刻进行下一次循环，去接住用户的高频连发。
 	}
 }
 

@@ -39,11 +39,15 @@ func main() {
 	repository.InitRepositories(infrastructure.DB, messageRepo)
 	adminapi.InitFileStorage()
 
-	controlBaseURL := os.Getenv("IM_CONTROL_BASE_URL")
-	if controlBaseURL == "" {
-		controlBaseURL = "http://127.0.0.1:8080"
+	controlAddr := os.Getenv("ADMIN_CONTROL_GRPC_ADDR")
+	if controlAddr == "" {
+		controlAddr = "127.0.0.1:50053"
 	}
-	runtimeClient := admincontrol.NewHTTPClient(controlBaseURL, os.Getenv("ADMIN_CONTROL_TOKEN"))
+	runtimeClient, err := admincontrol.NewGRPCClient(controlAddr, os.Getenv("ADMIN_CONTROL_TOKEN"))
+	if err != nil {
+		pkg.Fatalf("创建 AdminControl gRPC 客户端失败: %v", err)
+	}
+	defer runtimeClient.Close()
 	adminapi.InitRuntimeController(runtimeClient)
 
 	adminAuditService := adminservice.NewAuditService(infrastructure.DB)

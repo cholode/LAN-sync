@@ -149,6 +149,16 @@ func main() {
 		Hub:          hub,
 		AgentManager: agentMgr,
 	}
+	adminControlAddr := os.Getenv("ADMIN_CONTROL_GRPC_ADDR")
+	if adminControlAddr == "" {
+		adminControlAddr = "0.0.0.0:50053"
+	}
+	adminControlServer := admincontrol.NewServer(localAdminRuntime)
+	go func() {
+		if err := adminControlServer.Start(ctx, adminControlAddr, os.Getenv("ADMIN_CONTROL_TOKEN")); err != nil {
+			pkg.Fatalf("[致命错误] AdminControl gRPC 服务启动失败: %v", err)
+		}
+	}()
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
@@ -206,10 +216,6 @@ func main() {
 		// Agent 管理路由
 		api.RegisterAgentRoutes(authorized, agentMgr, infrastructure.DB)
 	}
-
-	// 管理端控制面（供独立 admin 服务调用）
-	internalAdmin := r.Group("/internal/admin")
-	admincontrol.RegisterInternalRoutes(internalAdmin, os.Getenv("ADMIN_CONTROL_TOKEN"), localAdminRuntime)
 
 	// ================================
 	// 静态文件服务 - 前端 SPA

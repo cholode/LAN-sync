@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-// RAGQueryLog ?? RAG ??????????????????
+// RAGQueryLog 记录 RAG 检索查询的日志信息，用于超级管理员后台排查分析。
 type RAGQueryLog struct {
 	ID               int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	RoomID           int64     `gorm:"type:bigint;index:idx_rag_query_room;not null" json:"room_id"`
@@ -17,7 +17,7 @@ type RAGQueryLog struct {
 	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
-// TableName ?????
+// TableName 返回数据库表名
 func (RAGQueryLog) TableName() string {
 	return "rag_query_logs"
 }

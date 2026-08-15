@@ -2,7 +2,8 @@ package models
 
 import "time"
 
-// SystemErrorLog \u96c6\u4e2d\u8bb0\u5f55\u7cfb\u7edf\u8fd0\u884c\u8fc7\u7a0b\u4e2d\u7684\u5f02\u5e38\u4e8b\u4ef6\uff0c\u7528\u4e8e\u8d85\u7ea7\u7ba1\u7406\u5458\u540e\u53f0\u6392\u67e5\u3002
+// SystemErrorLog 集中记录系统运行过程中的异常事件，用于超级管理员后台排查。
+
 type SystemErrorLog struct {
 	ID           int64      `gorm:"primaryKey;autoIncrement" json:"id"`
 	Timestamp    time.Time  `gorm:"index:idx_system_error_time;not null" json:"timestamp"`

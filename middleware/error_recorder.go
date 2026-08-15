@@ -11,7 +11,7 @@ import (
 	adminservice "lan-im-go/internal/admin"
 )
 
-// RecoveryWithErrorRecorder \u66ff\u4ee3 gin.Recovery\uff0c\u5c06 panic \u548c 5xx \u54cd\u5e94\u5199\u5165\u7cfb\u7edf\u9519\u8bef\u4e2d\u5fc3\u3002
+// RecoveryWithErrorRecorder 替代 gin.Recovery，将 panic 和 5xx 响应写入系统错误中心。
 func RecoveryWithErrorRecorder(errorService *adminservice.ErrorCenterService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
@@ -27,7 +27,7 @@ func RecoveryWithErrorRecorder(errorService *adminservice.ErrorCenterService) gi
 						StackTrace:   string(debug.Stack()),
 					})
 				}
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "\u7cfb\u7edf\u5185\u90e8\u9519\u8bef"})
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "系统内部错误"})
 			}
 		}()
 
@@ -46,6 +46,7 @@ func RecoveryWithErrorRecorder(errorService *adminservice.ErrorCenterService) gi
 	}
 }
 
+// parseRoomIDFromContext 从 Gin 上下文、路径参数或查询参数中解析房间 ID。
 func parseRoomIDFromContext(c *gin.Context) int64 {
 	if roomID, ok := c.Get("room_id"); ok {
 		if value, ok := roomID.(int64); ok {

@@ -1,0 +1,157 @@
+syntax = "proto3";
+
+package lan_im.admincontrol.v1;
+
+option go_package = "lan-im-go/proto/admincontrol/v1;admincontrolv1";
+
+import "google/protobuf/empty.proto";
+
+service AdminControlService {
+  rpc ListConnections(google.protobuf.Empty) returns (ListConnectionsResponse);
+  rpc CloseConnection(CloseConnectionRequest) returns (CloseConnectionResponse);
+  rpc KickUser(KickUserRequest) returns (KickUserResponse);
+  rpc DisbandRoom(DisbandRoomRequest) returns (DisbandRoomResponse);
+  rpc RemoveRoomMember(RemoveRoomMemberRequest) returns (RemoveRoomMemberResponse);
+  rpc HubStats(google.protobuf.Empty) returns (HubStatsResponse);
+  rpc RuntimeSnapshots(google.protobuf.Empty) returns (RuntimeSnapshotsResponse);
+  rpc AddAgent(AddAgentRequest) returns (AddAgentResponse);
+  rpc PauseAgent(PauseAgentRequest) returns (PauseAgentResponse);
+}
+
+message ConnectionSnapshot {
+  int64 user_id = 1;
+  string username = 2;
+  string connection_id = 3;
+  string remote_ip = 4;
+  string user_agent = 5;
+  string client_version = 6;
+  int64 connected_at_unix_ms = 7;
+  int64 last_read_at_unix_ms = 8;
+  int64 last_write_at_unix_ms = 9;
+  int32 send_queue_len = 10;
+  repeated int64 room_ids = 11;
+}
+
+message ListConnectionsResponse {
+  repeated ConnectionSnapshot items = 1;
+}
+
+message CloseConnectionRequest {
+  string connection_id = 1;
+}
+
+message CloseConnectionResponse {}
+
+message KickUserRequest {
+  int64 user_id = 1;
+}
+
+message KickUserResponse {}
+
+message DisbandRoomRequest {
+  int64 room_id = 1;
+}
+
+message DisbandRoomResponse {}
+
+message RemoveRoomMemberRequest {
+  int64 room_id = 1;
+  int64 user_id = 2;
+}
+
+message RemoveRoomMemberResponse {}
+
+message HubStatsResponse {
+  int64 client_count = 1;
+  int64 room_count = 2;
+}
+
+message WebSocketRuntime {
+  int64 current_connections = 1;
+  int64 established_total = 2;
+  int64 closed_total = 3;
+  int64 abnormal_closed_total = 4;
+  double average_connection_duration_ms = 5;
+  int64 read_messages_per_minute = 6;
+  int64 write_messages_per_minute = 7;
+  int64 send_queue_backlog = 8;
+  int64 slow_clients = 9;
+}
+
+message GoRuntime {
+  int64 goroutines = 1;
+  int64 gomaxprocs = 2;
+  uint64 heap_alloc = 3;
+  uint64 heap_sys = 4;
+  uint32 gc_count = 5;
+  int64 last_gc_unix = 6;
+  uint64 gc_pause_ns = 7;
+  double uptime_seconds = 8;
+}
+
+message APIRuntime {
+  double qps_1m = 1;
+  double qps_5m = 2;
+  double average_latency_ms = 3;
+  double p50_latency_ms = 4;
+  double p95_latency_ms = 5;
+  double p99_latency_ms = 6;
+  int64 status_4xx = 7;
+  int64 status_5xx = 8;
+  double error_rate = 9;
+}
+
+message RuntimeSnapshot {
+  WebSocketRuntime websocket = 1;
+  GoRuntime golang = 2;
+  APIRuntime api = 3;
+}
+
+message AgentFailureEvent {
+  int64 time_unix_ms = 1;
+  string model = 2;
+  string request_id = 3;
+  string error_type = 4;
+  int32 http_status = 5;
+  double latency_ms = 6;
+  int32 retries = 7;
+}
+
+message AgentRuntimeSnapshot {
+  int64 calls_today = 1;
+  int64 current_requests = 2;
+  double success_rate = 3;
+  double failure_rate = 4;
+  double average_response_ms = 5;
+  double p95_response_ms = 6;
+  int64 total_tokens = 7;
+  int64 input_tokens = 8;
+  int64 output_tokens = 9;
+  double average_tokens_per_call = 10;
+  int64 tool_calls = 11;
+  double tool_success_rate = 12;
+  int64 rag_calls = 13;
+  int64 time_tool_calls = 14;
+  int64 moderation_calls = 15;
+  int64 embedding_calls = 16;
+  int64 embedding_failures = 17;
+  repeated AgentFailureEvent recent_failures = 18;
+}
+
+message RuntimeSnapshotsResponse {
+  RuntimeSnapshot runtime = 1;
+  AgentRuntimeSnapshot agent = 2;
+}
+
+message AddAgentRequest {
+  int64 room_id = 1;
+}
+
+message AddAgentResponse {}
+
+message PauseAgentRequest {
+  int64 room_id = 1;
+}
+
+message PauseAgentResponse {}
+
