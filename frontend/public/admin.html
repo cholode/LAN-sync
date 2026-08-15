@@ -29,6 +29,9 @@
     .metric-value { font-size: 28px; font-weight: 700; color: #111827; }
     .metric-label { margin-top: 6px; color: #64748b; font-size: 13px; }
     .loading { color: #64748b; }
+    .admin-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; margin: 10px 0 22px; }
+    .admin-table th, .admin-table td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    .admin-table th { background: #f8fafc; color: #475569; }
   </style>
 </head>
 <body>
@@ -48,6 +51,7 @@
     <aside>
       <h1>????</h1>
       <a href="#dashboard" data-page="dashboard" class="active">Dashboard</a>
+      <a href="#message-traffic" data-page="message-traffic">????</a>
       <a href="#users" data-page="users">????</a>
       <a href="#rooms" data-page="rooms">????</a>
       <a href="#connections" data-page="connections">????</a>
@@ -69,6 +73,7 @@
     const userKey = 'lan_im_admin_user';
     const pageTitles = {
       dashboard: 'Dashboard',
+      'message-traffic': '????',
       users: '????',
       rooms: '????',
       connections: '????',
@@ -117,6 +122,8 @@
       document.getElementById('pageTitle').textContent = pageTitles[page] || page;
       if (page === 'dashboard') {
         loadDashboard();
+      } else if (page === 'message-traffic') {
+        loadMessageTraffic();
       } else {
         document.getElementById('content').textContent = '?????' + (pageTitles[page] || page) + '???????? /api/v1/admin/*?';
       }
@@ -164,6 +171,32 @@
           metricCard('?? @Agent ????', m.agent_today) +
           '</div>';
         loadRuntime();
+      } catch (error) {
+        content.innerHTML = '<div class="error">' + error.message + '</div>';
+      }
+    }
+
+    async function loadMessageTraffic() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">??????????...</div>';
+      try {
+        const data = await request('/admin/dashboard/message-traffic');
+        const hourRows = (data.hourly || []).map(item => '<tr><td>' + item.time + '</td><td>' + item.count + '</td></tr>').join('');
+        const dayRows = (data.daily || []).map(item => '<tr><td>' + item.time + '</td><td>' + item.count + '</td></tr>').join('');
+        const roomRows = (data.top_rooms || []).map(item => '<tr><td>' + item.key + '</td><td>' + item.count + '</td></tr>').join('');
+        const userRows = (data.top_users || []).map(item => '<tr><td>' + item.key + '</td><td>' + item.count + '</td></tr>').join('');
+        const typeRows = Object.entries(data.type_distribution || {}).map(([k, v]) => '<tr><td>' + k + '</td><td>' + v + '</td></tr>').join('');
+        content.innerHTML = '<h3 style="margin-top:0">??????</h3>' +
+          '<div class="metric-grid">' +
+          metricCard('??????', data.private_group.private) +
+          metricCard('??????', data.private_group.group) +
+          metricCard('??????', data.peak_hour || '-') +
+          '</div>' +
+          '<h3>??????</h3><table class="admin-table"><thead><tr><th>??</th><th>????</th></tr></thead><tbody>' + typeRows + '</tbody></table>' +
+          '<h3>?? 24 ????</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th></tr></thead><tbody>' + hourRows + '</tbody></table>' +
+          '<h3>?? 7 ???</h3><table class="admin-table"><thead><tr><th>??</th><th>??</th></tr></thead><tbody>' + dayRows + '</tbody></table>' +
+          '<h3>???????? Top 10</h3><table class="admin-table"><thead><tr><th>Room ID</th><th>???</th></tr></thead><tbody>' + roomRows + '</tbody></table>' +
+          '<h3>???? Top 10</h3><table class="admin-table"><thead><tr><th>User ID</th><th>???</th></tr></thead><tbody>' + userRows + '</tbody></table>';
       } catch (error) {
         content.innerHTML = '<div class="error">' + error.message + '</div>';
       }

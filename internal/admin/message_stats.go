@@ -18,6 +18,27 @@ type MessageStatsStore interface {
 	CountPrivateGroupMessages(ctx context.Context, start, end time.Time) (private, group int64, err error)
 	CountAgentMentions(ctx context.Context, start, end time.Time) (int64, error)
 	ActiveSenders(ctx context.Context, since time.Time) (int64, error)
+	HourlyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error)
+	DailyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error)
+	TopRooms(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error)
+	TopSenders(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error)
+}
+
+// TimeCount ?????????
+type TimeCount struct {
+	Time  string `json:"time"`
+	Count int64  `json:"count"`
+}
+
+// KeyCount ?/????????????
+type KeyCount struct {
+	Key   int64 `json:"key"`
+	Count int64 `json:"count"`
+}
+
+type keyCountRow struct {
+	Key   int64
+	Count int64
 }
 
 type mysqlMessageStats struct {
@@ -104,6 +125,88 @@ func (s *mysqlMessageStats) ActiveSenders(ctx context.Context, since time.Time) 
 		Select("COUNT(DISTINCT sender_id)").
 		Scan(&count).Error
 	return count, err
+}
+
+func (s *mysqlMessageStats) HourlyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error) {
+	type row struct {
+		Time  string
+		Count int64
+	}
+	var rows []row
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Select("DATE_FORMAT(created_at, '%Y-%m-%d %H:00') AS time, COUNT(*) AS count").
+		Where("created_at >= ? AND created_at < ?", start, end).
+		Group("time").
+		Order("time ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TimeCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, TimeCount{Time: r.Time, Count: r.Count})
+	}
+	return out, nil
+}
+
+func (s *mysqlMessageStats) DailyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error) {
+	type row struct {
+		Time  string
+		Count int64
+	}
+	var rows []row
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Select("DATE_FORMAT(created_at, '%Y-%m-%d') AS time, COUNT(*) AS count").
+		Where("created_at >= ? AND created_at < ?", start, end).
+		Group("time").
+		Order("time ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TimeCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, TimeCount{Time: r.Time, Count: r.Count})
+	}
+	return out, nil
+}
+
+func (s *mysqlMessageStats) TopRooms(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error) {
+	var rows []keyCountRow
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Select("room_id AS key, COUNT(*) AS count").
+		Where("created_at >= ? AND created_at < ?", start, end).
+		Group("room_id").
+		Order("count DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return keyCountFromRows(rows), nil
+}
+
+func (s *mysqlMessageStats) TopSenders(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error) {
+	var rows []keyCountRow
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Select("sender_id AS key, COUNT(*) AS count").
+		Where("created_at >= ? AND created_at < ?", start, end).
+		Group("sender_id").
+		Order("count DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return keyCountFromRows(rows), nil
+}
+
+func keyCountFromRows(rows []keyCountRow) []KeyCount {
+	out := make([]KeyCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, KeyCount{Key: r.Key, Count: r.Count})
+	}
+	return out
 }
 
 type mongoMessageStats struct {
@@ -216,4 +319,76 @@ func (s *mongoMessageStats) ActiveSenders(ctx context.Context, since time.Time) 
 		return 0, err
 	}
 	return int64(len(senders)), nil
+}
+
+func (s *mongoMessageStats) HourlyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error) {
+	return s.timeCounts(ctx, start, end, "%Y-%m-%d %H")
+}
+
+func (s *mongoMessageStats) DailyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error) {
+	return s.timeCounts(ctx, start, end, "%Y-%m-%d")
+}
+
+func (s *mongoMessageStats) timeCounts(ctx context.Context, start, end time.Time, format string) ([]TimeCount, error) {
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: s.baseFilter(start, end)}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":   bson.M{"$dateToString": bson.M{"format": format, "date": "$created_at", "timezone": "Asia/Shanghai"}},
+			"count": bson.M{"$sum": 1},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.M{"_id": 1}}},
+	}
+	cursor, err := s.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var rows []struct {
+		Time  string `bson:"_id"`
+		Count int64  `bson:"count"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]TimeCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, TimeCount{Time: r.Time, Count: r.Count})
+	}
+	return out, nil
+}
+
+func (s *mongoMessageStats) TopRooms(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error) {
+	return s.topKey(ctx, start, end, "room_id", limit)
+}
+
+func (s *mongoMessageStats) TopSenders(ctx context.Context, start, end time.Time, limit int) ([]KeyCount, error) {
+	return s.topKey(ctx, start, end, "sender_id", limit)
+}
+
+func (s *mongoMessageStats) topKey(ctx context.Context, start, end time.Time, field string, limit int) ([]KeyCount, error) {
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: s.baseFilter(start, end)}},
+		bson.D{{Key: "$group", Value: bson.M{"_id": "$" + field, "count": bson.M{"$sum": 1}}}},
+		bson.D{{Key: "$sort", Value: bson.M{"count": -1}}},
+		bson.D{{Key: "$limit", Value: int64(limit)}},
+	}
+	cursor, err := s.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var rows []struct {
+		Key   int64 `bson:"_id"`
+		Count int64 `bson:"count"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]KeyCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, KeyCount{Key: r.Key, Count: r.Count})
+	}
+	return out, nil
 }

@@ -38,3 +38,18 @@ func AdminDashboardOverview(c *gin.Context) {
 func AdminDashboardRuntime(c *gin.Context) {
 	c.JSON(http.StatusOK, metrics.RuntimeSnapshotNow())
 }
+
+// AdminDashboardMessageTraffic ?????????
+// GET /api/v1/admin/dashboard/message-traffic
+func AdminDashboardMessageTraffic(c *gin.Context) {
+	if adminDashboardService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		return
+	}
+	traffic, err := adminDashboardService.MessageTraffic(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "??????????"})
+		return
+	}
+	c.JSON(http.StatusOK, traffic)
+}
