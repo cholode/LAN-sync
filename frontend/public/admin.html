@@ -185,7 +185,7 @@
 
     async function loadDashboard() {
       const content = document.getElementById('content');
-      content.innerHTML = '<div class="loading">???? Dashboard...</div>';
+      content.innerHTML = '<div class="loading">正在加载 Dashboard...</div>';
       try {
         const data = await request('/admin/dashboard/overview');
         const u = data.sections.users;
@@ -193,65 +193,65 @@
         const m = data.sections.messages;
         const rt = data.sections.realtime;
         content.innerHTML = '<div class="metric-grid">' +
-          metricCard('????', u.total) +
-          metricCard('??????', u.new_today) +
-          metricCard('7 ?????', u.new_last_7_days) +
-          metricCard('30 ?????', u.new_last_30_days) +
-          metricCard('??????', u.online) +
-          metricCard('?? WebSocket ??', rt.websocket_connections) +
-          metricCard('?????? DAU', u.active_today) +
-          metricCard('7 ????? WAU', u.active_last_7_days) +
-          metricCard('30 ????? MAU', u.active_last_30_days) +
-          metricCard('????', r.total) +
-          metricCard('??????', r.new_today) +
-          metricCard('?????', m.today) +
-          metricCard('??????', m.private_today) +
-          metricCard('??????', m.group_today) +
-          metricCard('??????', m.file_today) +
-          metricCard('?? @Agent ??', m.agent_today) +
+          metricCard('用户总数', u.total) +
+          metricCard('今日新增用户', u.new_today) +
+          metricCard('7 日新增用户', u.new_last_7_days) +
+          metricCard('30 日新增用户', u.new_last_30_days) +
+          metricCard('当前在线用户', u.online) +
+          metricCard('当前 WebSocket 连接', rt.websocket_connections) +
+          metricCard('今日活跃用户 DAU', u.active_today) +
+          metricCard('7 日活跃用户 WAU', u.active_last_7_days) +
+          metricCard('30 日活跃用户 MAU', u.active_last_30_days) +
+          metricCard('群聊总数', r.total) +
+          metricCard('今日新增群聊', r.new_today) +
+          metricCard('今日消息数', m.today) +
+          metricCard('今日私聊消息', m.private_today) +
+          metricCard('今日群聊消息', m.group_today) +
+          metricCard('今日文件消息', m.file_today) +
+          metricCard('今日 @Agent 消息', m.agent_today) +
           '</div>';
 
         const ws = data.websocket || {};
-        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">WebSocket ????</h3><div class="metric-grid">' +
-          metricCard('????', ws.current_connections || 0) +
-          metricCard('??????', ws.established_total || 0) +
-          metricCard('??????', ws.closed_total || 0) +
-          metricCard('??????', ws.abnormal_closed_total || 0) +
-          metricCard('??????(ms)', Math.round(ws.average_connection_duration_ms || 0)) +
-          metricCard('??????', ws.read_messages_per_minute || 0) +
-          metricCard('??????', ws.write_messages_per_minute || 0) +
-          metricCard('??????', ws.send_queue_backlog || 0) +
-          metricCard('????', ws.slow_clients || 0) +
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">WebSocket 运行状态</h3><div class="metric-grid">' +
+          metricCard('当前连接', ws.current_connections || 0) +
+          metricCard('累计建立连接', ws.established_total || 0) +
+          metricCard('累计关闭连接', ws.closed_total || 0) +
+          metricCard('异常关闭连接', ws.abnormal_closed_total || 0) +
+          metricCard('平均连接时长(ms)', Math.round(ws.average_connection_duration_ms || 0)) +
+          metricCard('每分钟读消息', ws.read_messages_per_minute || 0) +
+          metricCard('每分钟写消息', ws.write_messages_per_minute || 0) +
+          metricCard('发送队列积压', ws.send_queue_backlog || 0) +
+          metricCard('慢客户端', ws.slow_clients || 0) +
           '</div>');
 
         const mod = data.moderation || {};
-        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">AI ??????</h3><div class="metric-grid">' +
-          metricCard('????', mod.today_reviewed || 0) +
-          metricCard('????', mod.today_violations || 0) +
-          metricCard('???', ((mod.violation_rate || 0) * 100).toFixed(2) + '%') +
-          metricCard('?????', mod.pending_reviews || 0) +
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">AI 内容审核概览</h3><div class="metric-grid">' +
+          metricCard('今日审核', mod.today_reviewed || 0) +
+          metricCard('今日违规', mod.today_violations || 0) +
+          metricCard('违规率', ((mod.violation_rate || 0) * 100).toFixed(2) + '%') +
+          metricCard('待人工复核', mod.pending_reviews || 0) +
           '</div>');
 
         const agent = data.agent || {};
-        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">Agent ????</h3><div class="metric-grid">' +
-          metricCard('????', agent.calls_today || 0) +
-          metricCard('????', agent.current_requests || 0) +
-          metricCard('???', ((agent.success_rate || 0) * 100).toFixed(2) + '%') +
-          metricCard('????(ms)', (agent.average_response_ms || 0).toFixed(2)) +
-          metricCard('? Token', agent.total_tokens || 0) +
+        content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">Agent 运行概览</h3><div class="metric-grid">' +
+          metricCard('累计调用', agent.calls_today || 0) +
+          metricCard('当前请求', agent.current_requests || 0) +
+          metricCard('成功率', ((agent.success_rate || 0) * 100).toFixed(2) + '%') +
+          metricCard('平均响应(ms)', (agent.average_response_ms || 0).toFixed(2)) +
+          metricCard('总 Token', agent.total_tokens || 0) +
           metricCard('Tool Calling', agent.tool_calls || 0) +
-          metricCard('RAG ??', agent.rag_calls || 0) +
-          metricCard('Embedding ??', agent.embedding_calls || 0) +
+          metricCard('RAG 调用', agent.rag_calls || 0) +
+          metricCard('Embedding 调用', agent.embedding_calls || 0) +
           '</div>');
 
         const rag = data.rag || {};
         content.insertAdjacentHTML('beforeend', '<h3 style="margin:22px 0 12px">RAG / Qdrant</h3><div class="metric-grid">' +
-          metricCard('Qdrant', rag.qdrant_online ? '??' : '??') +
-          metricCard('Collection ?', rag.collection_count || 0) +
-          metricCard('????', rag.vector_count || 0) +
-          metricCard('??????', rag.today_new_vectors || 0) +
+          metricCard('Qdrant', rag.qdrant_online ? '在线' : '离线') +
+          metricCard('Collection 数', rag.collection_count || 0) +
+          metricCard('向量总数', rag.vector_count || 0) +
+          metricCard('今日新增向量', rag.today_new_vectors || 0) +
           metricCard('Top K', rag.top_k || 0) +
-          metricCard('????', rag.vector_dimension || 0) +
+          metricCard('向量维度', rag.vector_dimension || 0) +
           '</div>');
 
         const systemItems = data.system || [];

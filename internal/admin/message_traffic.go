@@ -23,7 +23,7 @@ type RoomTypeDistribution struct {
 }
 
 // MessageTraffic ???? 24 ????? 7 ??????
-func (s *DashboardService) MessageTraffic(ctx context.Context) (*MessageTraffic, error) {
+func (s *DashboardService) buildMessageTraffic(ctx context.Context) (*MessageTraffic, error) {
 	now := time.Now()
 	last24h := now.Add(-24 * time.Hour)
 	last7d := now.AddDate(0, 0, -6)

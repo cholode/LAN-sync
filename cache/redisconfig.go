@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/go-redis/redis/v8"
+
 	"lan-im-go/config"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
-	"time"
 )
 
 const (
@@ -44,6 +47,28 @@ func CheckUserOnline(ctx context.Context, userID int64) (bool, string, error) {
 		return false, "", nil
 	}
 	return true, nodeID, nil
+}
+
+// CheckUsersOnline 批量判断一组用户是否在线，避免列表页对 Redis 发起 N+1 查询。
+func CheckUsersOnline(ctx context.Context, userIDs []int64) (map[int64]bool, error) {
+	out := make(map[int64]bool, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	pipe := config.RedisClient.Pipeline()
+	cmds := make([]*redis.StringCmd, 0, len(userIDs))
+	for _, userID := range userIDs {
+		key := fmt.Sprintf("%s%d", onlineKeyPrefix, userID)
+		cmds = append(cmds, pipe.Get(ctx, key))
+	}
+	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+		return out, err
+	}
+	for i, userID := range userIDs {
+		_, err := cmds[i].Result()
+		out[userID] = err == nil
+	}
+	return out, nil
 }
 
 // ============================================================================

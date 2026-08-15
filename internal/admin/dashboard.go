@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -14,8 +15,10 @@ import (
 	"lan-im-go/models"
 )
 
-// DashboardService ?????????????????????????????
-// ??????????? service ???? Handler ???? SQL?
+const dashboardCacheTTL = 30 * time.Second
+
+// DashboardService 聚合管理员首页所需的用户、房间、消息、实时运行状态等数据。
+// 所有数据库访问都集中在 service 层，避免 Handler 直接接触 SQL。
 type DashboardService struct {
 	db           *gorm.DB
 	messageStore MessageStatsStore
@@ -23,10 +26,24 @@ type DashboardService struct {
 	moderation   *ModerationService
 	rag          *RAGService
 	health       *HealthService
+
+	mu            sync.Mutex
+	overviewCache *dashboardOverviewCache
+	trafficCache  *messageTrafficCache
 }
 
-// NewDashboardService ????????????
-// messageStore ???? MySQL ? MongoDB ?????????
+type dashboardOverviewCache struct {
+	data      *DashboardOverview
+	expiresAt time.Time
+}
+
+type messageTrafficCache struct {
+	data      *MessageTraffic
+	expiresAt time.Time
+}
+
+// NewDashboardService 创建管理员首页聚合服务。
+// messageStore 用于区分 MySQL 与 MongoDB 两种消息存储实现。
 func NewDashboardService(
 	db *gorm.DB,
 	messageCollection *mongo.Collection,
@@ -52,7 +69,7 @@ func NewDashboardService(
 	}
 }
 
-// MetricPoint ?????????????
+// MetricPoint 表示一个统计指标及其趋势。
 type MetricPoint struct {
 	Value          int64   `json:"value"`
 	YesterdayValue int64   `json:"yesterday_value"`
@@ -60,7 +77,7 @@ type MetricPoint struct {
 	Trend          []int64 `json:"trend"`
 }
 
-// OverviewSection ????????????
+// OverviewSection 管理员首页核心业务数据。
 type OverviewSection struct {
 	Users    UserOverview     `json:"users"`
 	Rooms    RoomOverview     `json:"rooms"`
@@ -96,7 +113,7 @@ type RealtimeOverview struct {
 	WebSocketConnections int64 `json:"websocket_connections"`
 }
 
-// DashboardOverview ???????????
+// DashboardOverview 管理员首页聚合返回体。
 type DashboardOverview struct {
 	GeneratedAt time.Time                    `json:"generated_at"`
 	Sections    OverviewSection              `json:"sections"`
@@ -107,8 +124,33 @@ type DashboardOverview struct {
 	System      []HealthItem                 `json:"system"`
 }
 
-// CoreOverview ????????????????????????
+// CoreOverview 聚合首页核心数据，并通过内存缓存减少频繁打开首页的数据库压力。
 func (s *DashboardService) CoreOverview(ctx context.Context) (*DashboardOverview, error) {
+	if cached, ok := s.getOverviewCache(); ok {
+		return cached, nil
+	}
+
+	data, err := s.buildCoreOverview(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.overviewCache = &dashboardOverviewCache{data: data, expiresAt: time.Now().Add(dashboardCacheTTL)}
+	s.mu.Unlock()
+	return data, nil
+}
+
+func (s *DashboardService) getOverviewCache() (*DashboardOverview, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.overviewCache == nil || time.Now().After(s.overviewCache.expiresAt) {
+		return nil, false
+	}
+	return s.overviewCache.data, true
+}
+
+func (s *DashboardService) buildCoreOverview(ctx context.Context) (*DashboardOverview, error) {
 	now := time.Now()
 	todayStart := startOfDay(now)
 	yesterdayStart := todayStart.AddDate(0, 0, -1)
@@ -264,7 +306,33 @@ func (s *DashboardService) onlineUserCount(ctx context.Context) int64 {
 	return count
 }
 
-// DashboardTimeSeries ??????????????
+// MessageTraffic 返回消息流量图表数据，并通过缓存避免多个图表重复查询。
+func (s *DashboardService) MessageTraffic(ctx context.Context) (*MessageTraffic, error) {
+	if cached, ok := s.getTrafficCache(); ok {
+		return cached, nil
+	}
+
+	data, err := s.buildMessageTraffic(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.trafficCache = &messageTrafficCache{data: data, expiresAt: time.Now().Add(dashboardCacheTTL)}
+	s.mu.Unlock()
+	return data, nil
+}
+
+func (s *DashboardService) getTrafficCache() (*MessageTraffic, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.trafficCache == nil || time.Now().After(s.trafficCache.expiresAt) {
+		return nil, false
+	}
+	return s.trafficCache.data, true
+}
+
+// DashboardTimeSeries 用于前端图表的时间序列数据。
 type DashboardTimeSeries struct {
 	Metric      string      `json:"metric"`
 	Period      string      `json:"period"`
@@ -272,24 +340,24 @@ type DashboardTimeSeries struct {
 	GeneratedAt time.Time   `json:"generated_at"`
 }
 
-// TimeSeries ??????????????
-// ???? metric=messages?period ?? 1h?24h?7d?30d?
+// TimeSeries 返回指定指标的时间序列数据。
+// 目前支持 metric=messages，period 支持 1h、24h、7d、30d。
 func (s *DashboardService) TimeSeries(ctx context.Context, metric, period string) (*DashboardTimeSeries, error) {
 	if metric != "messages" {
-		return nil, fmt.Errorf("???????: %s", metric)
+		return nil, fmt.Errorf("暂不支持的指标: %s", metric)
 	}
 
 	now := time.Now()
-	start, hourly, err := timeSeriesWindow(period)
+	window, hourly, err := timeSeriesWindow(period)
 	if err != nil {
 		return nil, err
 	}
 
 	var points []TimeCount
 	if hourly {
-		points, err = s.messageStore.HourlyCounts(ctx, now.Add(-start), now)
+		points, err = s.messageStore.HourlyCounts(ctx, now.Add(-window), now)
 	} else {
-		points, err = s.messageStore.DailyCounts(ctx, now.Add(-start), now)
+		points, err = s.messageStore.DailyCounts(ctx, now.Add(-window), now)
 	}
 	if err != nil {
 		return nil, err

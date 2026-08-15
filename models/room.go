@@ -17,7 +17,7 @@ type Room struct {
 	Status            int8      `gorm:"type:tinyint;not null;default:0;comment:'0:?? 1:??'"`
 	LastActiveAt      time.Time `gorm:"type:datetime(3);comment:'??????'"`
 	BotUserID         int64     `gorm:"type:bigint unsigned;default:0;comment:'群Agent对应的Bot用户ID'"`
-	CreatedAt         time.Time
+	CreatedAt         time.Time `gorm:"index:idx_rooms_created"`
 	UpdatedAt         time.Time
 	DeletedAt         soft_delete.DeletedAt `gorm:"type:bigint unsigned;index:idx_deleted_at;softDelete:milli"`
 }

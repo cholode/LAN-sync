@@ -17,7 +17,7 @@ type User struct {
 	Status       int8                  `gorm:"type:tinyint;not null;default:0;comment:'0:?? 1:??'"`
 	LastLoginAt  time.Time             `gorm:"type:datetime(3);comment:'??????'"`
 	LastActiveAt time.Time             `gorm:"type:datetime(3);comment:'??????'"`
-	CreatedAt    time.Time             `gorm:"comment:'创建时间'"`
+	CreatedAt    time.Time             `gorm:"index:idx_users_created;comment:'创建时间'"`
 	UpdatedAt    time.Time             `gorm:"comment:'更新时间'"`
 	DeletedAt    soft_delete.DeletedAt `gorm:"type:bigint unsigned;uniqueIndex:idx_username_deleted,priority:2;softDelete:milli;comment:'毫秒级软删除标记'"`
 }

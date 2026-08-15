@@ -64,7 +64,7 @@ type ModerationEventItem struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// ModerationOverview ????????????????
+// ModerationOverview 用于管理员首页的轻量级审核概览。
 type ModerationOverview struct {
 	TodayReviewed   int64     `json:"today_reviewed"`
 	TodayViolations int64     `json:"today_violations"`
@@ -73,7 +73,7 @@ type ModerationOverview struct {
 	GeneratedAt     time.Time `json:"generated_at"`
 }
 
-// Overview ??????????????????????
+// Overview 通过一次聚合查询返回首页需要的审核核心指标。
 func (s *ModerationService) Overview(ctx context.Context) (ModerationOverview, error) {
 	start := startOfDay(time.Now())
 	var row struct {
@@ -103,37 +103,30 @@ func (s *ModerationService) Overview(ctx context.Context) (ModerationOverview, e
 	}, nil
 }
 
-// Dashboard ???????????
+// Dashboard 聚合返回审核 Dashboard 数据，避免对同一张表执行多次 COUNT。
 func (s *ModerationService) Dashboard(ctx context.Context) (*ModerationDashboard, error) {
 	start := startOfDay(time.Now())
 
-	var total, violations, kicks, bans, manual, revoked, toolFailures int64
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
-		Where("created_at >= ?", start).Count(&total).Error; err != nil {
-		return nil, err
+	var row struct {
+		Total         int64 `gorm:"column:total"`
+		Violations    int64 `gorm:"column:violations"`
+		Kicks         int64 `gorm:"column:kicks"`
+		Bans          int64 `gorm:"column:bans"`
+		ManualReviews int64 `gorm:"column:manual_reviews"`
+		Revoked       int64 `gorm:"column:revoked"`
+		ToolFailures  int64 `gorm:"column:tool_failures"`
 	}
 	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
-		Where("created_at >= ? AND model_result <> ?", start, "safe").Count(&violations).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
-		Where("created_at >= ? AND penalty_status = ?", start, "kicked").Count(&kicks).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
-		Where("created_at >= ? AND penalty_status = ?", start, "banned").Count(&bans).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
-		Where("created_at >= ? AND review_status <> ?", start, "pending").Count(&manual).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
-		Where("created_at >= ? AND review_status = ?", start, "revoked").Count(&revoked).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
-		Where("created_at >= ? AND tool_result LIKE ?", start, "%??%").Count(&toolFailures).Error; err != nil {
+		Select(`COUNT(*) AS total,
+			COALESCE(SUM(CASE WHEN model_result <> ? THEN 1 ELSE 0 END), 0) AS violations,
+			COALESCE(SUM(CASE WHEN penalty_status = ? THEN 1 ELSE 0 END), 0) AS kicks,
+			COALESCE(SUM(CASE WHEN penalty_status = ? THEN 1 ELSE 0 END), 0) AS bans,
+			COALESCE(SUM(CASE WHEN review_status <> ? THEN 1 ELSE 0 END), 0) AS manual_reviews,
+			COALESCE(SUM(CASE WHEN review_status = ? THEN 1 ELSE 0 END), 0) AS revoked,
+			COALESCE(SUM(CASE WHEN tool_result LIKE ? THEN 1 ELSE 0 END), 0) AS tool_failures`,
+			"safe", "kicked", "banned", "pending", "revoked", "%失败%").
+		Where("created_at >= ?", start).
+		Scan(&row).Error; err != nil {
 		return nil, err
 	}
 
@@ -156,19 +149,19 @@ func (s *ModerationService) Dashboard(ctx context.Context) (*ModerationDashboard
 	}
 
 	var violationRate float64
-	if total > 0 {
-		violationRate = float64(violations) / float64(total)
+	if row.Total > 0 {
+		violationRate = float64(row.Violations) / float64(row.Total)
 	}
 
 	return &ModerationDashboard{
-		TodayReviewed:     total,
-		TodayViolations:   violations,
+		TodayReviewed:     row.Total,
+		TodayViolations:   row.Violations,
 		ViolationRate:     violationRate,
-		AutoKickCount:     kicks,
-		AutoBanCount:      bans,
-		ManualReviewCount: manual,
-		RevokedCount:      revoked,
-		ToolFailureCount:  toolFailures,
+		AutoKickCount:     row.Kicks,
+		AutoBanCount:      row.Bans,
+		ManualReviewCount: row.ManualReviews,
+		RevokedCount:      row.Revoked,
+		ToolFailureCount:  row.ToolFailures,
 		CategoryStats:     categoryRows,
 		RecentViolations:  moderationItems(recent),
 		GeneratedAt:       time.Now(),
@@ -230,7 +223,7 @@ func (s *ModerationService) ListEvents(ctx context.Context, q ModerationListQuer
 		query = query.Where("room_id = ?", q.RoomID)
 	}
 	if q.Username != "" {
-		query = query.Where("username LIKE ?", "%"+q.Username+"%")
+		query = query.Where("username LIKE ?", q.Username+"%")
 	}
 	if q.Category != "" {
 		query = query.Where("category = ?", q.Category)

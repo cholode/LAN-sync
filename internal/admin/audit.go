@@ -55,7 +55,7 @@ type AuditListQuery struct {
 func (s *AuditService) List(ctx context.Context, q AuditListQuery) ([]models.AdminAuditLog, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.AdminAuditLog{})
 	if q.Keyword != "" {
-		like := "%" + q.Keyword + "%"
+		like := q.Keyword + "%"
 		query = query.Where("action LIKE ? OR target_type LIKE ? OR target_id LIKE ? OR admin_username LIKE ?", like, like, like, like)
 	}
 	if q.AdminUserID > 0 {

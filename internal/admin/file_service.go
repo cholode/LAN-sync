@@ -111,7 +111,7 @@ type CompleteUploadRequest struct {
 func (s *FileService) ListFiles(ctx context.Context, q FileListQuery) ([]FileListItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.FileRecord{})
 	if q.Keyword != "" {
-		like := "%" + q.Keyword + "%"
+		like := q.Keyword + "%"
 		query = query.Where("original_name LIKE ? OR object_key LIKE ?", like, like)
 	}
 	if q.UploaderID > 0 {
@@ -144,10 +144,20 @@ func (s *FileService) ListFiles(ctx context.Context, q FileListQuery) ([]FileLis
 	}
 
 	items := make([]FileListItem, 0, len(records))
+	uploaderIDs := make([]int64, 0, len(records))
+	roomIDs := make([]int64, 0, len(records))
+	for _, record := range records {
+		uploaderIDs = append(uploaderIDs, record.UploaderID)
+		if record.RoomID > 0 {
+			roomIDs = append(roomIDs, record.RoomID)
+		}
+	}
+	usernameMap := s.usernames(ctx, uploaderIDs)
+	roomNameMap := s.roomNames(ctx, roomIDs)
 	for _, record := range records {
 		item := FileListItem{FileRecord: record, HasMessage: record.MessageID > 0}
-		item.Username = s.username(ctx, record.UploaderID)
-		item.RoomName = s.roomName(ctx, record.RoomID)
+		item.Username = usernameMap[record.UploaderID]
+		item.RoomName = roomNameMap[record.RoomID]
 		item.Exists = s.objectExists(ctx, record.ObjectKey)
 		items = append(items, item)
 	}
@@ -287,6 +297,34 @@ func (s *FileService) objectExists(ctx context.Context, key string) bool {
 	defer cancel()
 	stat, err := s.storage.Stat(statCtx, key)
 	return err == nil && stat.Exists
+}
+
+func (s *FileService) usernames(ctx context.Context, userIDs []int64) map[int64]string {
+	out := make(map[int64]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return out
+	}
+	var users []models.User
+	if err := s.db.WithContext(ctx).Select("id, username").Where("id IN ?", userIDs).Find(&users).Error; err == nil {
+		for _, user := range users {
+			out[user.ID] = user.Username
+		}
+	}
+	return out
+}
+
+func (s *FileService) roomNames(ctx context.Context, roomIDs []int64) map[int64]string {
+	out := make(map[int64]string, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out
+	}
+	var rooms []models.Room
+	if err := s.db.WithContext(ctx).Select("id, name").Where("id IN ?", roomIDs).Find(&rooms).Error; err == nil {
+		for _, room := range rooms {
+			out[room.ID] = room.Name
+		}
+	}
+	return out
 }
 
 func (s *FileService) username(ctx context.Context, userID int64) string {

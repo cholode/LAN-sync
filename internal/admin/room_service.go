@@ -58,10 +58,15 @@ type RoomListItem struct {
 }
 
 // ListRooms ???????
+// ListRooms 分页查询群聊，并用批量查询避免列表页 N+1。
 func (s *RoomService) ListRooms(ctx context.Context, q RoomListQuery) ([]RoomListItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.Room{})
 	if q.Keyword != "" {
-		query = query.Where("name LIKE ?", "%"+q.Keyword+"%")
+		if roomID, err := strconv.ParseInt(q.Keyword, 10, 64); err == nil {
+			query = query.Where("id = ?", roomID)
+		} else {
+			query = query.Where("name LIKE ?", q.Keyword+"%")
+		}
 	}
 	if q.RoomType > 0 {
 		query = query.Where("type = ?", q.RoomType)
@@ -92,7 +97,19 @@ func (s *RoomService) ListRooms(ctx context.Context, q RoomListQuery) ([]RoomLis
 		return nil, 0, err
 	}
 
+	roomIDs := make([]int64, 0, len(rooms))
+	for _, room := range rooms {
+		roomIDs = append(roomIDs, room.ID)
+	}
+
 	start := startOfDay(time.Now())
+	now := time.Now()
+	memberCountMap, _ := s.countMembersByIDs(ctx, roomIDs)
+	onlineCountMap, _ := s.onlineMemberCounts(ctx, roomIDs)
+	todayMessageMap, _ := s.messageStore.CountsByRoomIDs(ctx, roomIDs, start, now)
+	totalMessageMap, _ := s.messageStore.CountsByRoomTotalIDs(ctx, roomIDs)
+	violationCountMap, _ := s.countRoomViolationsByIDs(ctx, roomIDs, start)
+
 	items := make([]RoomListItem, 0, len(rooms))
 	for _, room := range rooms {
 		item := RoomListItem{
@@ -105,12 +122,12 @@ func (s *RoomService) ListRooms(ctx context.Context, q RoomListQuery) ([]RoomLis
 			AgentEnabled:      room.AgentEnabled,
 			ModerationEnabled: room.ModerationEnabled,
 			Status:            room.Status,
+			MemberCount:       memberCountMap[room.ID],
+			OnlineMemberCount: onlineCountMap[room.ID],
+			TodayMessageCount: todayMessageMap[room.ID],
+			TotalMessageCount: totalMessageMap[room.ID],
+			ViolationCount:    violationCountMap[room.ID],
 		}
-		item.MemberCount, _ = s.countMembers(ctx, room.ID)
-		item.OnlineMemberCount, _ = s.countOnlineMembers(ctx, room.ID)
-		item.TodayMessageCount, _ = s.messageStore.CountByRoom(ctx, room.ID, start, time.Now())
-		item.TotalMessageCount, _ = s.messageStore.CountByRoomTotal(ctx, room.ID)
-		item.ViolationCount, _ = s.countRoomViolations(ctx, room.ID, start)
 		items = append(items, item)
 	}
 	return items, total, nil
@@ -316,6 +333,79 @@ func roomAuditItem(room models.Room) map[string]any {
 	}
 }
 
+func (s *RoomService) countMembersByIDs(ctx context.Context, roomIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		RoomID int64
+		Count  int64
+	}
+	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).
+		Select("room_id, COUNT(*) AS count").
+		Where("room_id IN ?", roomIDs).
+		Group("room_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.RoomID] = row.Count
+	}
+	return out, nil
+}
+
+func (s *RoomService) onlineMemberCounts(ctx context.Context, roomIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out, nil
+	}
+	var members []models.RoomMember
+	if err := s.db.WithContext(ctx).Where("room_id IN ?", roomIDs).Find(&members).Error; err != nil {
+		return nil, err
+	}
+
+	userIDs := make([]int64, 0, len(members))
+	seen := make(map[int64]struct{}, len(members))
+	for _, member := range members {
+		if _, ok := seen[member.UserID]; !ok {
+			seen[member.UserID] = struct{}{}
+			userIDs = append(userIDs, member.UserID)
+		}
+	}
+	onlineMap, _ := cache.CheckUsersOnline(ctx, userIDs)
+	for _, member := range members {
+		if onlineMap[member.UserID] {
+			out[member.RoomID]++
+		}
+	}
+	return out, nil
+}
+
+func (s *RoomService) countRoomViolationsByIDs(ctx context.Context, roomIDs []int64, since time.Time) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		RoomID int64
+		Count  int64
+	}
+	err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+		Select("room_id, COUNT(*) AS count").
+		Where("room_id IN ? AND created_at >= ?", roomIDs, since).
+		Group("room_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.RoomID] = row.Count
+	}
+	return out, nil
+}
+
 func (s *RoomService) countMembers(ctx context.Context, roomID int64) (int64, error) {
 	var count int64
 	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).Where("room_id = ?", roomID).Count(&count).Error
@@ -341,18 +431,33 @@ func (s *RoomService) roomMembers(ctx context.Context, roomID int64) ([]RoomMemb
 	if err := s.db.WithContext(ctx).Where("room_id = ?", roomID).Find(&members).Error; err != nil {
 		return nil, err
 	}
+
+	userIDs := make([]int64, 0, len(members))
+	seen := make(map[int64]struct{}, len(members))
+	for _, member := range members {
+		if _, ok := seen[member.UserID]; !ok {
+			seen[member.UserID] = struct{}{}
+			userIDs = append(userIDs, member.UserID)
+		}
+	}
+
+	var users []models.User
+	if err := s.db.WithContext(ctx).Select("id, username").Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	usernameMap := make(map[int64]string, len(users))
+	for _, user := range users {
+		usernameMap[user.ID] = user.Username
+	}
+	onlineMap, _ := cache.CheckUsersOnline(ctx, userIDs)
+
 	out := make([]RoomMemberItem, 0, len(members))
 	for _, member := range members {
-		var user models.User
-		if err := s.db.WithContext(ctx).First(&user, member.UserID).Error; err != nil {
-			continue
-		}
-		online, _, _ := cache.CheckUserOnline(ctx, member.UserID)
 		out = append(out, RoomMemberItem{
 			UserID:   member.UserID,
-			Username: user.Username,
+			Username: usernameMap[member.UserID],
 			Role:     member.Role,
-			Online:   online,
+			Online:   onlineMap[member.UserID],
 		})
 	}
 	return out, nil

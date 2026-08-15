@@ -54,10 +54,15 @@ type UserListItem struct {
 }
 
 // ListUsers ???????
+// ListUsers 分页查询用户，并用批量查询避免列表页 N+1。
 func (s *UserService) ListUsers(ctx context.Context, q UserListQuery) ([]UserListItem, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.User{})
 	if q.Keyword != "" {
-		query = query.Where("username LIKE ?", "%"+q.Keyword+"%")
+		if userID, err := strconv.ParseInt(q.Keyword, 10, 64); err == nil {
+			query = query.Where("id = ?", userID)
+		} else {
+			query = query.Where("username LIKE ?", q.Keyword+"%")
+		}
 	}
 	if q.Role >= 0 {
 		query = query.Where("role = ?", q.Role)
@@ -85,23 +90,32 @@ func (s *UserService) ListUsers(ctx context.Context, q UserListQuery) ([]UserLis
 		return nil, 0, err
 	}
 
+	userIDs := make([]int64, 0, len(users))
+	for _, user := range users {
+		userIDs = append(userIDs, user.ID)
+	}
+
+	onlineMap, _ := cache.CheckUsersOnline(ctx, userIDs)
+	roomCountMap, _ := s.countUserRoomsByIDs(ctx, userIDs)
+	messageCountMap, _ := s.messageStore.CountsBySenderIDs(ctx, userIDs)
+	violationCountMap, _ := s.countUserViolationsByIDs(ctx, userIDs)
+
 	items := make([]UserListItem, 0, len(users))
 	for _, user := range users {
-		online, _, _ := cache.CheckUserOnline(ctx, user.ID)
 		item := UserListItem{
-			ID:           user.ID,
-			Username:     user.Username,
-			Role:         user.Role,
-			RoleName:     models.RoleName(user.Role),
-			CreatedAt:    user.CreatedAt,
-			LastLoginAt:  user.LastLoginAt,
-			LastActiveAt: user.LastActiveAt,
-			Online:       online,
-			Status:       user.Status,
+			ID:             user.ID,
+			Username:       user.Username,
+			Role:           user.Role,
+			RoleName:       models.RoleName(user.Role),
+			CreatedAt:      user.CreatedAt,
+			LastLoginAt:    user.LastLoginAt,
+			LastActiveAt:   user.LastActiveAt,
+			Online:         onlineMap[user.ID],
+			Status:         user.Status,
+			RoomCount:      roomCountMap[user.ID],
+			MessageCount:   messageCountMap[user.ID],
+			ViolationCount: violationCountMap[user.ID],
 		}
-		item.RoomCount, _ = s.countUserRooms(ctx, user.ID)
-		item.MessageCount, _ = s.messageStore.CountBySender(ctx, user.ID)
-		item.ViolationCount, _ = s.countUserViolations(ctx, user.ID)
 		items = append(items, item)
 	}
 
@@ -253,6 +267,52 @@ func userAuditItem(user models.User) map[string]any {
 		"role":     user.Role,
 		"status":   user.Status,
 	}
+}
+
+func (s *UserService) countUserRoomsByIDs(ctx context.Context, userIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		UserID int64
+		Count  int64
+	}
+	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).
+		Select("user_id, COUNT(*) AS count").
+		Where("user_id IN ?", userIDs).
+		Group("user_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.UserID] = row.Count
+	}
+	return out, nil
+}
+
+func (s *UserService) countUserViolationsByIDs(ctx context.Context, userIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		UserID int64
+		Count  int64
+	}
+	err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+		Select("user_id, COUNT(*) AS count").
+		Where("user_id IN ?", userIDs).
+		Group("user_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.UserID] = row.Count
+	}
+	return out, nil
 }
 
 func (s *UserService) countUserRooms(ctx context.Context, userID int64) (int64, error) {

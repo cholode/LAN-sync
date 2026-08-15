@@ -25,6 +25,9 @@ type MessageStatsStore interface {
 	CountBySender(ctx context.Context, senderID int64) (int64, error)
 	CountByRoom(ctx context.Context, roomID int64, start, end time.Time) (int64, error)
 	CountByRoomTotal(ctx context.Context, roomID int64) (int64, error)
+	CountsBySenderIDs(ctx context.Context, senderIDs []int64) (map[int64]int64, error)
+	CountsByRoomIDs(ctx context.Context, roomIDs []int64, start, end time.Time) (map[int64]int64, error)
+	CountsByRoomTotalIDs(ctx context.Context, roomIDs []int64) (map[int64]int64, error)
 }
 
 // TimeCount ?????????
@@ -244,6 +247,66 @@ func (s *mysqlMessageStats) CountByRoomTotal(ctx context.Context, roomID int64) 
 	return count, err
 }
 
+func (s *mysqlMessageStats) CountsBySenderIDs(ctx context.Context, senderIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(senderIDs))
+	if len(senderIDs) == 0 {
+		return out, nil
+	}
+	var rows []keyCountRow
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Select("sender_id AS key, COUNT(*) AS count").
+		Where("sender_id IN ?", senderIDs).
+		Group("sender_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.Key] = row.Count
+	}
+	return out, nil
+}
+
+func (s *mysqlMessageStats) CountsByRoomIDs(ctx context.Context, roomIDs []int64, start, end time.Time) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out, nil
+	}
+	var rows []keyCountRow
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Select("room_id AS key, COUNT(*) AS count").
+		Where("room_id IN ? AND created_at >= ? AND created_at < ?", roomIDs, start, end).
+		Group("room_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.Key] = row.Count
+	}
+	return out, nil
+}
+
+func (s *mysqlMessageStats) CountsByRoomTotalIDs(ctx context.Context, roomIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out, nil
+	}
+	var rows []keyCountRow
+	err := s.notDeleted(s.db.WithContext(ctx)).
+		Select("room_id AS key, COUNT(*) AS count").
+		Where("room_id IN ?", roomIDs).
+		Group("room_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.Key] = row.Count
+	}
+	return out, nil
+}
+
 type mongoMessageStats struct {
 	coll *mongo.Collection
 	db   *gorm.DB
@@ -372,6 +435,47 @@ func (s *mongoMessageStats) CountByRoomTotal(ctx context.Context, roomID int64) 
 	f := notDeletedFilter()
 	f["room_id"] = roomID
 	return s.coll.CountDocuments(ctx, f)
+}
+
+func (s *mongoMessageStats) CountsBySenderIDs(ctx context.Context, senderIDs []int64) (map[int64]int64, error) {
+	return s.groupCountByKeys(ctx, notDeletedFilter(), "sender_id", senderIDs)
+}
+
+func (s *mongoMessageStats) CountsByRoomIDs(ctx context.Context, roomIDs []int64, start, end time.Time) (map[int64]int64, error) {
+	return s.groupCountByKeys(ctx, s.baseFilter(start, end), "room_id", roomIDs)
+}
+
+func (s *mongoMessageStats) CountsByRoomTotalIDs(ctx context.Context, roomIDs []int64) (map[int64]int64, error) {
+	return s.groupCountByKeys(ctx, notDeletedFilter(), "room_id", roomIDs)
+}
+
+func (s *mongoMessageStats) groupCountByKeys(ctx context.Context, filter bson.M, field string, keys []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(keys))
+	if len(keys) == 0 {
+		return out, nil
+	}
+	filter[field] = bson.M{"$in": keys}
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: filter}},
+		bson.D{{Key: "$group", Value: bson.M{"_id": "$" + field, "count": bson.M{"$sum": 1}}}},
+	}
+	cursor, err := s.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var rows []struct {
+		Key   int64 `bson:"_id"`
+		Count int64 `bson:"count"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.Key] = row.Count
+	}
+	return out, nil
 }
 
 func (s *mongoMessageStats) HourlyCounts(ctx context.Context, start, end time.Time) ([]TimeCount, error) {

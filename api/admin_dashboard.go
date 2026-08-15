@@ -11,60 +11,60 @@ import (
 
 var adminDashboardService *adminservice.DashboardService
 
-// InitAdminDashboardService ?? Dashboard ?????
+// InitAdminDashboardService 初始化 Dashboard 服务。
 func InitAdminDashboardService(svc *adminservice.DashboardService) {
 	adminDashboardService = svc
 }
 
-// AdminDashboardOverview ?????????????
+// AdminDashboardOverview 返回管理员首页聚合数据。
 // GET /api/v1/admin/dashboard/overview
 func AdminDashboardOverview(c *gin.Context) {
 	if adminDashboardService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard 服务未初始化"})
 		return
 	}
 
 	overview, err := adminDashboardService.CoreOverview(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "?? Dashboard ????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取 Dashboard 概览失败"})
 		return
 	}
 
 	c.JSON(http.StatusOK, overview)
 }
 
-// AdminDashboardRuntime ???????????
+// AdminDashboardRuntime 返回 Go 运行时运行状态。
 // GET /api/v1/admin/dashboard/runtime
 func AdminDashboardRuntime(c *gin.Context) {
 	c.JSON(http.StatusOK, metrics.RuntimeSnapshotNow())
 }
 
-// AdminDashboardMessageTraffic ?????????
+// AdminDashboardMessageTraffic 返回消息流量图表数据。
 // GET /api/v1/admin/dashboard/message-traffic
 func AdminDashboardMessageTraffic(c *gin.Context) {
 	if adminDashboardService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "???????????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard 服务未初始化"})
 		return
 	}
 	traffic, err := adminDashboardService.MessageTraffic(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "??????????"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取消息流量失败"})
 		return
 	}
 	c.JSON(http.StatusOK, traffic)
 }
 
-// AdminAgentDashboard ?? Agent ???????
+// AdminAgentDashboard 返回 Agent 运行概览。
 // GET /api/v1/admin/dashboard/agent
 func AdminAgentDashboard(c *gin.Context) {
 	c.JSON(http.StatusOK, metrics.AgentRuntimeSnapshotNow())
 }
 
-// AdminDashboardTimeSeries ????????????????
+// AdminDashboardTimeSeries 返回首页图表需要的时间序列数据。
 // GET /api/v1/admin/dashboard/timeseries?metric=messages&period=24h
 func AdminDashboardTimeSeries(c *gin.Context) {
 	if adminDashboardService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard ??????"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard 服务未初始化"})
 		return
 	}
 

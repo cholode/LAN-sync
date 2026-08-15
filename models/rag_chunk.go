@@ -45,7 +45,7 @@ type RAGChunk struct {
 	MessageIDs string                `gorm:"type:json;comment:'消息ID列表 JSON'"`
 	VectorID   string                `gorm:"type:varchar(128);comment:'向量存储中的唯一标识'"`
 	TokenCount int                   `gorm:"type:int;default:0;comment:'content 的 token 数量'"`
-	CreatedAt  time.Time             `gorm:"autoCreateTime"`
+	CreatedAt  time.Time             `gorm:"autoCreateTime;index:idx_rag_chunks_created"`
 	UpdatedAt  time.Time             `gorm:"autoUpdateTime"`
 	DeletedAt  soft_delete.DeletedAt `gorm:"type:bigint unsigned;index;softDelete:milli"`
 }

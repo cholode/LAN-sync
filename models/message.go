@@ -14,6 +14,6 @@ type Message struct {
 	ClientMsgID string                `gorm:"type:varchar(64);not null;uniqueIndex:idx_client_msg_id;comment:'客户端防重发凭证(UUID/雪花)'"`
 	Type        int8                  `gorm:"type:tinyint;not null;default:1;comment:'1:文本 2:文件/图片 3:系统通知'"`
 	Content     string                `gorm:"type:text;not null;comment:'消息内容或文件JSON载荷'"`
-	CreatedAt   time.Time             `gorm:"index:idx_room_created,priority:2;comment:'创建时间'"`
+	CreatedAt   time.Time             `gorm:"index:idx_room_created,priority:2;index:idx_messages_created;comment:'创建时间'"`
 	DeletedAt   soft_delete.DeletedAt `gorm:"type:bigint unsigned;index:idx_msg_deleted;softDelete:milli;comment:'用于实现消息撤回的软删除'"`
 }
