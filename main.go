@@ -170,6 +170,7 @@ func main() {
 	gin.SetMode(gin.DebugMode)
 
 	r := gin.New()
+	r.Use(middleware.RequestID())
 	r.Use(middleware.RecoveryWithErrorRecorder(adminErrorService))
 	r.Use(func(c *gin.Context) {
 		start := time.Now()
@@ -222,7 +223,7 @@ func main() {
 
 	// 管理员路由
 	admin := r.Group("/api/v1/admin")
-	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin())
+	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin(), middleware.AdminRateLimit(10, 30))
 	{
 		admin.GET("/dashboard/runtime", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardRuntime)
 		admin.GET("/dashboard/message-traffic", middleware.RequirePermission(models.PermDashboardRead), api.AdminDashboardMessageTraffic)
