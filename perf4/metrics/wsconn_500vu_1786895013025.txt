@@ -1,0 +1,268 @@
+# HELP im_agent_rooms_enabled Rooms with Agent enabled
+# TYPE im_agent_rooms_enabled gauge
+im_agent_rooms_enabled 22
+# HELP im_build_info IM 服务构建信息
+# TYPE im_build_info gauge
+im_build_info{version="dev"} 1
+# HELP im_db_pool_idle_connections MySQL 当前空闲连接数
+# TYPE im_db_pool_idle_connections gauge
+im_db_pool_idle_connections{db="mysql"} 89
+# HELP im_db_pool_in_use_connections MySQL 当前使用中的连接数
+# TYPE im_db_pool_in_use_connections gauge
+im_db_pool_in_use_connections{db="mysql"} 0
+# HELP im_db_pool_open_connections MySQL 当前打开的连接数
+# TYPE im_db_pool_open_connections gauge
+im_db_pool_open_connections{db="mysql"} 89
+# HELP im_db_pool_wait_count_total MySQL 等待连接累计次数
+# TYPE im_db_pool_wait_count_total counter
+im_db_pool_wait_count_total{db="mysql"} 0
+# HELP im_db_pool_wait_duration_seconds_total MySQL 等待连接累计秒数
+# TYPE im_db_pool_wait_duration_seconds_total counter
+im_db_pool_wait_duration_seconds_total{db="mysql"} 0
+# HELP im_db_query_duration_seconds 数据库查询耗时
+# TYPE im_db_query_duration_seconds histogram
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="0.005"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="0.01"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="0.025"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="0.05"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="0.1"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="0.25"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="0.5"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="1"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="2.5"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="5"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="10"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="agent_configs",le="+Inf"} 22
+im_db_query_duration_seconds_sum{db="mysql",operation="query",table="agent_configs"} 0.004965508
+im_db_query_duration_seconds_count{db="mysql",operation="query",table="agent_configs"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="0.005"} 1228
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="0.01"} 1322
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="0.025"} 1463
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="0.05"} 1481
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="0.1"} 2001
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="0.25"} 2214
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="0.5"} 2300
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="1"} 2344
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="2.5"} 2395
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="5"} 2405
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="10"} 2416
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="messages",le="+Inf"} 2416
+im_db_query_duration_seconds_sum{db="mysql",operation="query",table="messages"} 316.83888836800014
+im_db_query_duration_seconds_count{db="mysql",operation="query",table="messages"} 2416
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="0.005"} 6367
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="0.01"} 9319
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="0.025"} 14758
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="0.05"} 17938
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="0.1"} 22346
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="0.25"} 23438
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="0.5"} 23450
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="1"} 23451
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="2.5"} 23451
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="5"} 23451
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="10"} 23451
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="room_members",le="+Inf"} 23451
+im_db_query_duration_seconds_sum{db="mysql",operation="query",table="room_members"} 706.3474692310019
+im_db_query_duration_seconds_count{db="mysql",operation="query",table="room_members"} 23451
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="0.005"} 2808
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="0.01"} 4019
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="0.025"} 6476
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="0.05"} 7258
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="0.1"} 10592
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="0.25"} 11241
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="0.5"} 11242
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="1"} 11242
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="2.5"} 11242
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="5"} 11242
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="10"} 11242
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="rooms",le="+Inf"} 11242
+im_db_query_duration_seconds_sum{db="mysql",operation="query",table="rooms"} 425.11937242899864
+im_db_query_duration_seconds_count{db="mysql",operation="query",table="rooms"} 11242
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="0.005"} 760
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="0.01"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="0.025"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="0.05"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="0.1"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="0.25"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="0.5"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="1"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="2.5"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="5"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="10"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="query",table="users",le="+Inf"} 762
+im_db_query_duration_seconds_sum{db="mysql",operation="query",table="users"} 0.3141774470000004
+im_db_query_duration_seconds_count{db="mysql",operation="query",table="users"} 762
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="0.005"} 21
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="0.01"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="0.025"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="0.05"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="0.1"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="0.25"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="0.5"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="1"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="2.5"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="5"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="10"} 22
+im_db_query_duration_seconds_bucket{db="mysql",operation="update",table="rooms",le="+Inf"} 22
+im_db_query_duration_seconds_sum{db="mysql",operation="update",table="rooms"} 0.053248470000000006
+im_db_query_duration_seconds_count{db="mysql",operation="update",table="rooms"} 22
+# HELP im_db_query_total 数据库查询累计数
+# TYPE im_db_query_total counter
+im_db_query_total{db="mysql",operation="query",status="success",table="agent_configs"} 22
+im_db_query_total{db="mysql",operation="query",status="success",table="messages"} 2416
+im_db_query_total{db="mysql",operation="query",status="success",table="room_members"} 23451
+im_db_query_total{db="mysql",operation="query",status="success",table="rooms"} 11242
+im_db_query_total{db="mysql",operation="query",status="success",table="users"} 762
+im_db_query_total{db="mysql",operation="update",status="success",table="rooms"} 22
+# HELP im_hub_clients_total 当前 Hub 管理的客户端连接数
+# TYPE im_hub_clients_total gauge
+im_hub_clients_total 129
+# HELP im_hub_rooms_total 当前 Hub 管理的房间数
+# TYPE im_hub_rooms_total gauge
+im_hub_rooms_total 25
+# HELP im_hub_task_pool_capacity 当前任务池容量
+# TYPE im_hub_task_pool_capacity gauge
+im_hub_task_pool_capacity 256
+# HELP im_hub_task_pool_running 当前任务池正在运行的任务数
+# TYPE im_hub_task_pool_running gauge
+im_hub_task_pool_running 0
+# HELP im_hub_task_pool_waiting 当前任务池等待执行的任务数
+# TYPE im_hub_task_pool_waiting gauge
+im_hub_task_pool_waiting 0
+# HELP im_redis_errors_total Redis 命令错误累计数
+# TYPE im_redis_errors_total counter
+im_redis_errors_total{error_type="canceled",operation="pipeline"} 2415
+im_redis_errors_total{error_type="connection",operation="pipeline"} 1
+# HELP im_redis_latency_seconds Redis 命令执行耗时
+# TYPE im_redis_latency_seconds histogram
+im_redis_latency_seconds_bucket{operation="del",le="0.005"} 632
+im_redis_latency_seconds_bucket{operation="del",le="0.01"} 633
+im_redis_latency_seconds_bucket{operation="del",le="0.025"} 633
+im_redis_latency_seconds_bucket{operation="del",le="0.05"} 633
+im_redis_latency_seconds_bucket{operation="del",le="0.1"} 633
+im_redis_latency_seconds_bucket{operation="del",le="0.25"} 633
+im_redis_latency_seconds_bucket{operation="del",le="0.5"} 633
+im_redis_latency_seconds_bucket{operation="del",le="1"} 633
+im_redis_latency_seconds_bucket{operation="del",le="2.5"} 633
+im_redis_latency_seconds_bucket{operation="del",le="5"} 633
+im_redis_latency_seconds_bucket{operation="del",le="10"} 633
+im_redis_latency_seconds_bucket{operation="del",le="+Inf"} 633
+im_redis_latency_seconds_sum{operation="del"} 0.07805794499999998
+im_redis_latency_seconds_count{operation="del"} 633
+im_redis_latency_seconds_bucket{operation="get",le="0.005"} 1
+im_redis_latency_seconds_bucket{operation="get",le="0.01"} 1
+im_redis_latency_seconds_bucket{operation="get",le="0.025"} 1
+im_redis_latency_seconds_bucket{operation="get",le="0.05"} 1
+im_redis_latency_seconds_bucket{operation="get",le="0.1"} 1
+im_redis_latency_seconds_bucket{operation="get",le="0.25"} 1
+im_redis_latency_seconds_bucket{operation="get",le="0.5"} 1
+im_redis_latency_seconds_bucket{operation="get",le="1"} 1
+im_redis_latency_seconds_bucket{operation="get",le="2.5"} 1
+im_redis_latency_seconds_bucket{operation="get",le="5"} 1
+im_redis_latency_seconds_bucket{operation="get",le="10"} 1
+im_redis_latency_seconds_bucket{operation="get",le="+Inf"} 1
+im_redis_latency_seconds_sum{operation="get"} 0.000110395
+im_redis_latency_seconds_count{operation="get"} 1
+im_redis_latency_seconds_bucket{operation="lrange",le="0.005"} 5199
+im_redis_latency_seconds_bucket{operation="lrange",le="0.01"} 7327
+im_redis_latency_seconds_bucket{operation="lrange",le="0.025"} 9428
+im_redis_latency_seconds_bucket{operation="lrange",le="0.05"} 9753
+im_redis_latency_seconds_bucket{operation="lrange",le="0.1"} 11385
+im_redis_latency_seconds_bucket{operation="lrange",le="0.25"} 11448
+im_redis_latency_seconds_bucket{operation="lrange",le="0.5"} 11448
+im_redis_latency_seconds_bucket{operation="lrange",le="1"} 11448
+im_redis_latency_seconds_bucket{operation="lrange",le="2.5"} 11448
+im_redis_latency_seconds_bucket{operation="lrange",le="5"} 11448
+im_redis_latency_seconds_bucket{operation="lrange",le="10"} 11448
+im_redis_latency_seconds_bucket{operation="lrange",le="+Inf"} 11448
+im_redis_latency_seconds_sum{operation="lrange"} 190.7583580289996
+im_redis_latency_seconds_count{operation="lrange"} 11448
+im_redis_latency_seconds_bucket{operation="ping",le="0.005"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="0.01"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="0.025"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="0.05"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="0.1"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="0.25"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="0.5"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="1"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="2.5"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="5"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="10"} 1
+im_redis_latency_seconds_bucket{operation="ping",le="+Inf"} 1
+im_redis_latency_seconds_sum{operation="ping"} 0.00133142
+im_redis_latency_seconds_count{operation="ping"} 1
+im_redis_latency_seconds_bucket{operation="pipeline",le="0.005"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="0.01"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="0.025"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="0.05"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="0.1"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="0.25"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="0.5"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="1"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="2.5"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="5"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="10"} 2416
+im_redis_latency_seconds_bucket{operation="pipeline",le="+Inf"} 2416
+im_redis_latency_seconds_sum{operation="pipeline"} 0.014764358999999998
+im_redis_latency_seconds_count{operation="pipeline"} 2416
+im_redis_latency_seconds_bucket{operation="set",le="0.005"} 759
+im_redis_latency_seconds_bucket{operation="set",le="0.01"} 762
+im_redis_latency_seconds_bucket{operation="set",le="0.025"} 762
+im_redis_latency_seconds_bucket{operation="set",le="0.05"} 762
+im_redis_latency_seconds_bucket{operation="set",le="0.1"} 762
+im_redis_latency_seconds_bucket{operation="set",le="0.25"} 762
+im_redis_latency_seconds_bucket{operation="set",le="0.5"} 762
+im_redis_latency_seconds_bucket{operation="set",le="1"} 762
+im_redis_latency_seconds_bucket{operation="set",le="2.5"} 762
+im_redis_latency_seconds_bucket{operation="set",le="5"} 762
+im_redis_latency_seconds_bucket{operation="set",le="10"} 762
+im_redis_latency_seconds_bucket{operation="set",le="+Inf"} 762
+im_redis_latency_seconds_sum{operation="set"} 0.17525920600000025
+im_redis_latency_seconds_count{operation="set"} 762
+# HELP im_redis_ops_total Redis 命令执行累计数
+# TYPE im_redis_ops_total counter
+im_redis_ops_total{operation="del",status="success"} 633
+im_redis_ops_total{operation="get",status="success"} 1
+im_redis_ops_total{operation="lrange",status="success"} 11448
+im_redis_ops_total{operation="ping",status="success"} 1
+im_redis_ops_total{operation="pipeline",status="error"} 2416
+im_redis_ops_total{operation="set",status="success"} 762
+# HELP im_redis_pool_idle_connections Redis 连接池空闲连接数
+# TYPE im_redis_pool_idle_connections gauge
+im_redis_pool_idle_connections 2
+# HELP im_redis_pool_total_connections Redis 连接池总连接数
+# TYPE im_redis_pool_total_connections gauge
+im_redis_pool_total_connections 4
+# HELP im_redis_pubsub_total Redis Pub/Sub 事件累计数
+# TYPE im_redis_pubsub_total counter
+im_redis_pubsub_total{action="subscribe",channel="im:broadcast:room:*",status="success"} 2
+# HELP im_redis_up Redis 连接是否可用，1 表示可用
+# TYPE im_redis_up gauge
+im_redis_up 1
+# HELP im_uptime_seconds IM 服务进程已运行秒数
+# TYPE im_uptime_seconds gauge
+im_uptime_seconds 979.950798499
+# HELP im_ws_connection_duration_seconds WebSocket connection duration distribution
+# TYPE im_ws_connection_duration_seconds histogram
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="0.005"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="0.01"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="0.025"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="0.05"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="0.1"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="0.25"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="0.5"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="1"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="2.5"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="5"} 0
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="10"} 633
+im_ws_connection_duration_seconds_bucket{close_reason="normal",node_id="lan-im-node-1",le="+Inf"} 633
+im_ws_connection_duration_seconds_sum{close_reason="normal",node_id="lan-im-node-1"} 3190.736847831002
+im_ws_connection_duration_seconds_count{close_reason="normal",node_id="lan-im-node-1"} 633
+# HELP im_ws_connections_active Current active WebSocket connections
+# TYPE im_ws_connections_active gauge
+im_ws_connections_active 129
+# HELP im_ws_connections_total Total WebSocket connections
+# TYPE im_ws_connections_total counter
+im_ws_connections_total{close_reason="normal",node_id="lan-im-node-1",status="success"} 633
+# HELP im_ws_read_errors_total Total WebSocket read errors
+# TYPE im_ws_read_errors_total counter
+im_ws_read_errors_total{error_type="error",node_id="lan-im-node-1"} 633

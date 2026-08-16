@@ -1,0 +1,144 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAN-IM 第二轮压测报告</title>
+<style>
+:root { color-scheme: light; --bg:#f5f7fb; --card:#fff; --text:#17202a; --muted:#5f6b7a; --line:#e3e8f0; --accent:#2f6fed; --ok:#1c8b4f; --warn:#b4690e; --bad:#c0392b; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.6; }
+.container { max-width:1180px; margin:0 auto; padding:32px 20px 56px; }
+h1 { margin:0 0 8px; font-size:30px; }
+h2 { margin:32px 0 12px; font-size:22px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin:12px 0; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; }
+.metric { border-left:4px solid var(--accent); }
+.metric strong { display:block; font-size:24px; margin-top:4px; }
+.metric span { color:var(--muted); font-size:13px; }
+table { width:100%; border-collapse:collapse; background:var(--card); border-radius:10px; overflow:hidden; font-size:14px; }
+th, td { padding:10px 12px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+th { background:#f0f3f9; font-weight:600; }
+tr:last-child td { border-bottom:none; }
+.tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; }
+.tag.ok { background:#e5f6ec; color:var(--ok); }
+.tag.warn { background:#fff2d7; color:var(--warn); }
+.tag.bad { background:#fde8e7; color:var(--bad); }
+ul { padding-left:20px; }
+li { margin:6px 0; }
+code { background:#eef2f7; padding:2px 5px; border-radius:5px; font-size:13px; }
+.footer { color:var(--muted); font-size:13px; margin-top:24px; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>LAN-IM 第二轮压测报告</h1>
+<p>数据目录：<code>perf2/</code> · 测试时间：2026-08-16</p>
+
+<div class="grid">
+  <div class="card metric"><span>目标地址</span><strong>8.130.151.211</strong></div>
+  <div class="card metric"><span>监控端点</span><strong>:6060/metrics</strong></div>
+  <div class="card metric"><span>WS 短连接</span><strong>500 全成功</strong></div>
+  <div class="card metric"><span>登录吞吐</span><strong>约 8 QPS</strong></div>
+</div>
+
+<h2>1. 测试范围</h2>
+<div class="card">
+<ul>
+<li>本次不压测 Agent，不做长连接长时间保持，不在启用 Agent 的群聊中压测。</li>
+<li>登录接口使用 bcrypt，属于固定计算成本，单独进行慢爬坡压测。</li>
+<li>房间映射：10 人 → 房间 2，100 人 → 房间 3，500 人 → 房间 4，1000 人 → 房间 5。</li>
+<li>指标每 2 秒抓取一次，原始数据保存在 <code>perf2/metrics/</code>。</li>
+</ul>
+</div>
+
+<h2>2. HTTP 只读接口</h2>
+<table>
+<thead><tr><th>并发</th><th>成功率</th><th>RPS</th><th>P95</th><th>P99</th><th>评价</th></tr></thead>
+<tbody>
+<tr><td>5 VU</td><td>100%</td><td>26.56</td><td>575ms</td><td>800ms</td><td><span class="tag ok">稳定</span></td></tr>
+<tr><td>10 VU</td><td>100%</td><td>32.27</td><td>1.48s</td><td>1.72s</td><td><span class="tag ok">可用</span></td></tr>
+<tr><td>20 VU</td><td>100%</td><td>34.0</td><td>3.48s</td><td>4.11s</td><td><span class="tag warn">延迟上升</span></td></tr>
+<tr><td>50 VU</td><td>98.91%</td><td>-</td><td>14.93s</td><td>19.96s</td><td><span class="tag bad">members 失败</span></td></tr>
+</tbody>
+</table>
+
+<h2>3. 登录接口</h2>
+<table>
+<thead><tr><th>并发</th><th>成功率</th><th>平均延迟</th><th>P95</th><th>吞吐</th></tr></thead>
+<tbody>
+<tr><td>1 VU</td><td>100%</td><td>-</td><td>158.68ms</td><td>8.57 QPS</td></tr>
+<tr><td>2 VU</td><td>100%</td><td>240ms</td><td>296.79ms</td><td>-</td></tr>
+<tr><td>3 VU</td><td>100%</td><td>363ms</td><td>495.22ms</td><td>-</td></tr>
+<tr><td>5 VU</td><td>100%</td><td>601.7ms</td><td>798.65ms</td><td>8.12 QPS</td></tr>
+</tbody>
+</table>
+
+<h2>4. WebSocket 短连接建连</h2>
+<table>
+<thead><tr><th>并发</th><th>成功率</th><th>建连 P95</th><th>Ping P95</th></tr></thead>
+<tbody>
+<tr><td>10 VU</td><td>100%</td><td>89.29ms</td><td>43.7ms</td></tr>
+<tr><td>50 VU</td><td>100%</td><td>87.58ms</td><td>41.77ms</td></tr>
+<tr><td>100 VU</td><td>100%</td><td>97.2ms</td><td>43.35ms</td></tr>
+<tr><td>200 VU</td><td>100%</td><td>123.07ms</td><td>51.28ms</td></tr>
+<tr><td>300 VU</td><td>100%</td><td>122.28ms</td><td>43.65ms</td></tr>
+<tr><td>400 VU</td><td>100%</td><td>118.87ms</td><td>46.28ms</td></tr>
+<tr><td>500 VU</td><td>100%</td><td>130.11ms</td><td>43.54ms</td></tr>
+</tbody>
+</table>
+
+<h2>5. 9 人房间短消息吞吐</h2>
+<table>
+<thead><tr><th>目标速率</th><th>实际发送</th><th>实际接收</th><th>E2E 平均</th><th>E2E P95</th><th>E2E P99</th></tr></thead>
+<tbody>
+<tr><td>50 msg/s</td><td>49.5 msg/s</td><td>385.0 msg/s</td><td>88.74ms</td><td>156ms</td><td>1056ms</td></tr>
+<tr><td>100 msg/s</td><td>99.0 msg/s</td><td>733.9 msg/s</td><td>42.16ms</td><td>53ms</td><td>80ms</td></tr>
+<tr><td>200 msg/s</td><td>198.7 msg/s</td><td>1408.5 msg/s</td><td>38.97ms</td><td>43ms</td><td>50ms</td></tr>
+<tr><td>500 msg/s</td><td>496.9 msg/s</td><td>3991.2 msg/s</td><td>41.19ms</td><td>45ms</td><td>50ms</td></tr>
+</tbody>
+</table>
+
+<h2>6. 群聊广播</h2>
+<table>
+<thead><tr><th>房间规模</th><th>发送消息</th><th>接收消息</th><th>E2E 平均</th><th>E2E P95</th><th>E2E P99</th><th>峰值在线</th></tr></thead>
+<tbody>
+<tr><td>10</td><td>713</td><td>5393</td><td>40.70ms</td><td>47ms</td><td>60ms</td><td>11</td></tr>
+<tr><td>100</td><td>957</td><td>70309</td><td>42.41ms</td><td>47ms</td><td>52ms</td><td>100</td></tr>
+<tr><td>500</td><td>1001</td><td>340375</td><td>162.21ms</td><td>243.3ms</td><td>3943ms</td><td>500</td></tr>
+<tr><td>1000</td><td>1008</td><td>650166</td><td>91.78ms</td><td>180ms</td><td>293ms</td><td>912</td></tr>
+</tbody>
+</table>
+<div class="card">
+<p>1000 人补充：K6 累计发起 1040 个 WebSocket 会话，服务端成功建连约 913 个，成功建连率约 87.8%；建连 P95 约 21.03s。</p>
+</div>
+
+<h2>7. 关键服务端指标</h2>
+<table>
+<thead><tr><th>场景</th><th>WS 峰值在线</th><th>Hub 运行任务峰值</th><th>Kafka Lag 峰值</th><th>MySQL 使用连接峰值</th><th>Redis 平均延迟</th></tr></thead>
+<tbody>
+<tr><td>基线</td><td>0</td><td>0</td><td>0</td><td>0</td><td>-</td></tr>
+<tr><td>HTTP 50 VU</td><td>0</td><td>0</td><td>0</td><td>50</td><td>2.32ms</td></tr>
+<tr><td>WS 500 短连接</td><td>500</td><td>0</td><td>0</td><td>0</td><td>26.73ms</td></tr>
+<tr><td>消息 500 msg/s</td><td>9</td><td>1</td><td>0</td><td>0</td><td>0.09ms</td></tr>
+<tr><td>广播 100</td><td>100</td><td>1</td><td>0</td><td>0</td><td>0.26ms</td></tr>
+<tr><td>广播 500</td><td>500</td><td>256</td><td>0</td><td>0</td><td>2.82ms</td></tr>
+<tr><td>广播 1000</td><td>912</td><td>256</td><td>0</td><td>2</td><td>3.52ms</td></tr>
+</tbody>
+</table>
+
+<h2>8. 风险与优化</h2>
+<div class="card">
+<ul>
+<li>bcrypt 登录吞吐约 8 QPS，建议独立服务或加入限流、验证码和异步登录。</li>
+<li>HTTP 读接口 20 VU 后延迟上升，50 VU 出现失败，建议为成员列表和历史消息增加缓存。</li>
+<li>500 人以上广播时 Hub 任务池达到容量上限 256，端到端延迟出现长尾。</li>
+<li>1000 人全在线广播达到单节点容量边界，建议限制连接速率、合并推送或拆分 Hub。</li>
+<li>Kafka 消费滞后全程为 0，当前消息链路表现稳定。</li>
+</ul>
+</div>
+
+<div class="footer">原始指标：<code>perf2/metrics/</code> · 指标摘要：<code>perf2/metrics_summary.json</code> · 表格数据：<code>perf2/report_table.tsv</code></div>
+</div>
+</body>
+</html>
