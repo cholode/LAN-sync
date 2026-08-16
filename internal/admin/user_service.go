@@ -39,18 +39,18 @@ type UserListQuery struct {
 
 // UserListItem 表示用户列表项。
 type UserListItem struct {
-	ID             int64     `json:"id"`
-	Username       string    `json:"username"`
-	Role           int8      `json:"role"`
-	RoleName       string    `json:"role_name"`
-	CreatedAt      time.Time `json:"created_at"`
-	LastLoginAt    time.Time `json:"last_login_at"`
-	LastActiveAt   time.Time `json:"last_active_at"`
-	Online         bool      `json:"online"`
-	Status         int8      `json:"status"`
-	RoomCount      int64     `json:"room_count"`
-	MessageCount   int64     `json:"message_count"`
-	ViolationCount int64     `json:"violation_count"`
+	ID             int64      `json:"id"`
+	Username       string     `json:"username"`
+	Role           int8       `json:"role"`
+	RoleName       string     `json:"role_name"`
+	CreatedAt      time.Time  `json:"created_at"`
+	LastLoginAt    *time.Time `json:"last_login_at"`
+	LastActiveAt   *time.Time `json:"last_active_at"`
+	Online         bool       `json:"online"`
+	Status         int8       `json:"status"`
+	RoomCount      int64      `json:"room_count"`
+	MessageCount   int64      `json:"message_count"`
+	ViolationCount int64      `json:"violation_count"`
 }
 
 // ListUsers 分页查询用户列表。
@@ -130,8 +130,8 @@ type UserDetail struct {
 	RoleName       string                `json:"role_name"`
 	Status         int8                  `json:"status"`
 	CreatedAt      time.Time             `json:"created_at"`
-	LastLoginAt    time.Time             `json:"last_login_at"`
-	LastActiveAt   time.Time             `json:"last_active_at"`
+	LastLoginAt    *time.Time            `json:"last_login_at"`
+	LastActiveAt   *time.Time            `json:"last_active_at"`
 	Online         bool                  `json:"online"`
 	RoomCount      int64                 `json:"room_count"`
 	MessageCount   int64                 `json:"message_count"`

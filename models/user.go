@@ -15,8 +15,8 @@ type User struct {
 	Role         int8                  `gorm:"type:tinyint;not null;default:0;comment:'0:???? 1:?? 2:??? 3:??'"`
 	IsBot        bool                  `gorm:"type:tinyint(1);default:0;comment:'是否为Bot/AI用户'"`
 	Status       int8                  `gorm:"type:tinyint;not null;default:0;comment:'0:?? 1:??'"`
-	LastLoginAt  time.Time             `gorm:"type:datetime(3);comment:'??????'"`
-	LastActiveAt time.Time             `gorm:"type:datetime(3);comment:'??????'"`
+	LastLoginAt  *time.Time            `gorm:"type:datetime(3);comment:'最后登录时间'"`
+	LastActiveAt *time.Time            `gorm:"type:datetime(3);comment:'最后活跃时间'"`
 	CreatedAt    time.Time             `gorm:"index:idx_users_created;comment:'创建时间'"`
 	UpdatedAt    time.Time             `gorm:"comment:'更新时间'"`
 	DeletedAt    soft_delete.DeletedAt `gorm:"type:bigint unsigned;uniqueIndex:idx_username_deleted,priority:2;softDelete:milli;comment:'毫秒级软删除标记'"`
