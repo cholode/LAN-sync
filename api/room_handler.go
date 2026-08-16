@@ -4,10 +4,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"lan-im-go/core"
 	"lan-im-go/models"
-	"lan-im-go/repository"
 	"lan-im-go/pkg"
+	"lan-im-go/repository"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 // JoinRoom 加入群聊
@@ -85,6 +86,14 @@ func RemoveRoomMember(hub *core.Hub) gin.HandlerFunc {
 		}
 
 		// 执行移除成员操作
+		if operatorID != targetUserID && globalRole != 1 {
+			room, roomErr := repository.Room.GetRoomByID(roomID)
+			if roomErr == nil && room.CreatorID == targetUserID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "cannot remove room owner"})
+				return
+			}
+		}
+
 		err := repository.RoomMember.RemoveMember(roomID, targetUserID)
 		if err != nil {
 			if err.Error() == "record not found" || err.Error() == "该成员不在群聊中" {
@@ -147,6 +156,7 @@ func GetRoomMembers() gin.HandlerFunc {
 			response = append(response, map[string]interface{}{
 				"user_id":    u.ID,
 				"username":   u.Username,
+				"avatar":     u.Avatar,
 				"role":       role,
 				"is_creator": u.ID == creatorID,
 			})
@@ -182,9 +192,10 @@ func CreateRoom(hub *core.Hub) gin.HandlerFunc {
 
 		// 构建群聊数据
 		room := &models.Room{
-			Name:      req.Name,
-			CreatorID: creatorID,
-			Type:      2, // 2=普通群聊
+			Name:         req.Name,
+			CreatorID:    creatorID,
+			Type:         2, // 2=普通群聊
+			LastActiveAt: time.Now(),
 		}
 
 		// 事务创建群聊并添加创建者为成员
@@ -234,11 +245,12 @@ func GetMyRooms() gin.HandlerFunc {
 				myRole = role
 			}
 			res = append(res, map[string]interface{}{
-				"room_id":    r.ID,
-				"room_name":  r.Name,
-				"created_at": r.CreatedAt,
-				"creator_id": r.CreatorID,
-				"my_role":    myRole,
+				"room_id":       r.ID,
+				"room_name":     r.Name,
+				"agent_enabled": r.AgentEnabled,
+				"created_at":    r.CreatedAt,
+				"creator_id":    r.CreatorID,
+				"my_role":       myRole,
 			})
 		}
 

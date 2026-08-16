@@ -1,27 +1,35 @@
-﻿// src/router/index.js —— SPA 视图切换引擎
-import { state } from '../store/index.js';
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth.js'
 
-export function switchView() {
-    const token = localStorage.getItem('lan_im_token');
-    const loginView = document.getElementById('login-view');
-    const chatView = document.getElementById('chat-view');
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/login', component: () => import('../views/LoginView.vue') },
+    { path: '/register', component: () => import('../views/RegisterView.vue') },
+    { path: '/chat', component: () => import('../views/ChatView.vue'), meta: { auth: true } },
+    {
+      path: '/admin', component: () => import('../layouts/AdminLayout.vue'), meta: { auth: true, admin: true },
+      children: [
+        { path: '', redirect: '/admin/dashboard' },
+        { path: 'dashboard', component: () => import('../views/admin/DashboardView.vue') },
+        { path: 'users', component: () => import('../views/admin/UsersView.vue') },
+        { path: 'rooms', component: () => import('../views/admin/RoomsView.vue') },
+        { path: 'moderation', component: () => import('../views/admin/ModerationView.vue') },
+        { path: 'agent', component: () => import('../views/admin/AgentOpsView.vue') },
+        { path: 'system', component: () => import('../views/admin/SystemView.vue') },
+        { path: 'audit', component: () => import('../views/admin/AuditView.vue') },
+      ],
+    },
+    { path: '/', redirect: '/chat' },
+    { path: '/:pathMatch(.*)*', component: () => import('../views/NotFoundView.vue') },
+  ],
+})
 
-    if (!loginView || !chatView) {
-        console.error('[致命异常] 路由引擎寻址失败，DOM 树中缺少核心视图容器。');
-        return;
-    }
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (to.meta.auth && !auth.isLoggedIn) return { path: '/login', query: { redirect: to.fullPath } }
+  if (to.meta.admin && !auth.isSuperAdmin) return '/chat'
+  if (to.path === '/login' && auth.isLoggedIn) return auth.isSuperAdmin ? '/admin/dashboard' : '/chat'
+})
 
-    if (token) {
-        loginView.style.display = 'none';
-        chatView.style.display = 'flex';
-        console.log('[路由总机] 鉴权通过，已挂载主业务视图。');
-    } else {
-        loginView.style.display = 'flex';
-        chatView.style.display = 'none';
-        if (state.ws) {
-            state.ws.close();
-            state.ws = null;
-            console.log('[路由总机] 视图降级，已物理斩断残存 WebSocket 连接。');
-        }
-    }
-}
+export default router

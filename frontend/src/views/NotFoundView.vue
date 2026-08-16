@@ -1,0 +1,1 @@
+<template><div class="nf"><b>404</b><h1>页面不存在</h1><RouterLink class="btn btn-primary" to="/">返回首页</RouterLink></div></template><style scoped>.nf{min-height:100vh;display:grid;place-items:center;align-content:center;gap:12px}.nf>b{font-size:60px;color:var(--primary)}h1{font-size:18px}</style>

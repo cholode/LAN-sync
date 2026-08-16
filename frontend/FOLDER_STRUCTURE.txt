@@ -1,0 +1,48 @@
+frontend/
+├── src/
+│   ├── api/
+│   │   ├── admin.js
+│   │   ├── auth.js
+│   │   ├── http.js
+│   │   └── im.js
+│   ├── components/
+│   │   ├── admin/
+│   │   │   ├── ChartCard.vue
+│   │   │   └── MetricCard.vue
+│   │   ├── charts/
+│   │   │   └── BaseChart.vue
+│   │   └── common/
+│   │       ├── AppLogo.vue
+│   │       └── StatusBadge.vue
+│   ├── layouts/
+│   │   └── AdminLayout.vue
+│   ├── router/
+│   │   └── index.js
+│   ├── services/
+│   │   └── uploader.js
+│   ├── stores/
+│   │   ├── auth.js
+│   │   └── ui.js
+│   ├── styles/
+│   │   ├── global.css
+│   │   └── tokens.css
+│   ├── views/
+│   │   ├── admin/
+│   │   │   ├── AgentOpsView.vue
+│   │   │   ├── AuditView.vue
+│   │   │   ├── DashboardView.vue
+│   │   │   ├── ModerationView.vue
+│   │   │   ├── RoomsView.vue
+│   │   │   ├── SystemView.vue
+│   │   │   └── UsersView.vue
+│   │   ├── ChatView.vue
+│   │   ├── LoginView.vue
+│   │   ├── NotFoundView.vue
+│   │   └── RegisterView.vue
+│   ├── App.vue
+│   └── main.js
+├── .env.example
+├── index.html
+├── package.json
+├── README_MIGRATION.md
+└── vite.config.js

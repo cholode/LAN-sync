@@ -26,7 +26,7 @@ RUN go mod download
 COPY . .
 
 # 编译项目，剔除调试符号减小二进制文件体积
-RUN go build -ldflags="-s -w" -o im-server main.go
+RUN go build -v -trimpath -ldflags="-s -w" -o im-server main.go
 
 # ==========================================
 # 第二阶段：运行阶段

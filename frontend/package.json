@@ -1,22 +1,22 @@
 {
-  "name": "lan-im-frontend",
-  "version": "1.0.0",
-  "description": "LAN-IM 局域网即时通讯系统前端基建",
+  "name": "lan-im-vue-frontend",
+  "private": true,
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview"
-  },
-  "devDependencies": {
-    "vite": "^5.2.0",
-    "@vitejs/plugin-vue": "^5.2.1"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "hash-wasm": "^4.12.0",
-    "vue": "^3.5.13"
+    "echarts": "^5.5.0",
+    "lucide-vue-next": "^0.468.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.0",
+    "vite": "^6.0.0"
   }
 }

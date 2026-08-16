@@ -1,3 +1,33 @@
+# VCS / 配置文件
 .git
 .gitignore
+.gitattributes
+
+# 本地缓存和临时目录
+.gocache/
+.gotmp/
 data/
+data_storage/
+
+# 前端构建产物和依赖，后端镜像不需要
+frontend/
+frontendold/
+.backup_frontend_20260816/
+LAN-IM-interface-connected/
+frontend.zip
+
+# 本地编译产物和归档
+*.exe
+*.zip
+*.7z
+*.tar.gz
+
+# 文档与开发辅助文件
+docs/
+.github/
+ARCHITECTURE.md
+CONTRIBUTING.md
+README.md
+SECURITY.md
+LICENSE
+superadmin要求.md

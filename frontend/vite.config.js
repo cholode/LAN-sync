@@ -1,28 +1,33 @@
-import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
+import { defineConfig, loadEnv } from 'vite'
+import vue from '@vitejs/plugin-vue'
 
-export default defineConfig({
-  plugins: [vue()],
-  server: {
-    host: '0.0.0.0',
-    port: 5173,
-    strictPort: true,
-    proxy: {
-      '/api/v1/ws': {
-        target: 'ws://127.0.0.1:8080',
-        ws: true,
-        changeOrigin: true,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const backend = env.VITE_DEV_BACKEND || 'http://127.0.0.1:8080'
+  const adminBackend = env.VITE_DEV_ADMIN_BACKEND || 'http://127.0.0.1:8081'
+
+  return {
+    plugins: [vue()],
+    server: {
+      host: '0.0.0.0',
+      port: 5173,
+      proxy: {
+        '/api/v1/admin': {
+          target: adminBackend,
+          changeOrigin: true,
+          ws: true,
+        },
+        '/api': {
+          target: backend,
+          changeOrigin: true,
+          ws: true,
+        },
       },
-      '/api/v1': {
-        target: 'http://127.0.0.1:8080',
-        changeOrigin: true,
-      }
-    }
-  },
-  build: {
-    outDir: 'dist',
-    emptyOutDir: true,
-    target: 'es2015',
-    minify: 'esbuild'
+    },
+    build: {
+      outDir: 'dist',
+      assetsDir: 'assets',
+      sourcemap: false,
+    },
   }
-});
+})

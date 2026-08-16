@@ -1,0 +1,26 @@
+<template>
+  <div class="page">
+    <div class="page-head"><div><h1 class="page-title">Agent & RAG</h1><p class="page-subtitle">模型调用、Embedding、Qdrant 检索与 Tool Calling 运行状态</p></div><div class="head-actions"><StatusBadge :tone="error?'danger':'success'" dot>{{error?'Agent 接口异常':'Agent Manager Online'}}</StatusBadge><button class="btn" @click="load"><RefreshCw :size="14"/>刷新</button></div></div>
+    <div class="kpi-grid"><MetricCard label="Agent 调用" :value="d.calls_today" hint="今日累计" :icon="Bot"/><MetricCard label="成功率" :value="d.success_rate" suffix="%" hint="模型调用成功" :icon="CircleCheck" tone="success"/><MetricCard label="P95 延迟" :value="d.p95_ms" suffix="ms" hint="Agent end-to-end" :icon="Timer" tone="warning"/><MetricCard label="向量记录" :value="d.vector_count" hint="RAG chunks" :icon="DatabaseZap" tone="purple"/></div>
+    <div class="two-col">
+      <section class="app-card config"><div class="panel-head"><div><h3>运行策略</h3><p>配置写入后端并进入审计日志；API Key 不在此页面展示。</p></div><SlidersHorizontal :size="17"/></div>
+        <label>默认模型<input v-model="config.default_model" class="input"/></label>
+        <label>Embedding 模型<input v-model="config.embedding_model" class="input"/></label>
+        <div class="form-row"><label>RAG Top-K<input v-model.number="config.rag_top_k" class="input" type="number" min="1" max="50"/></label><label>Similarity Threshold<input v-model.number="config.similarity_threshold" class="input" type="number" min="0" max="1" step="0.01"/></label></div>
+        <div class="form-row"><label>Chunk Size<input v-model.number="config.chunk_size" class="input" type="number" min="128"/></label><label>Chunk Overlap<input v-model.number="config.chunk_overlap" class="input" type="number" min="0"/></label></div>
+        <label>System Prompt<textarea v-model="config.system_prompt" class="textarea" rows="6"></textarea></label>
+        <div class="save"><span>{{saveMessage||'修改会记录管理员与修改时间'}}</span><button class="btn btn-primary" :disabled="saving" @click="save">{{saving?'保存中…':'保存策略'}}</button></div>
+      </section>
+      <section class="app-card pipeline"><div class="panel-head"><div><h3>Agent Pipeline</h3><p>一次典型 @Agent 请求的执行链路</p></div><Workflow :size="17"/></div><div class="steps"><div v-for="(s,i) in steps" :key="s.name"><span>{{i+1}}</span><div><b>{{s.name}}</b><small>{{s.desc}}</small></div><StatusBadge tone="success">正常</StatusBadge></div></div><div class="mini-stats"><div><span>Tool Calls</span><b>{{d.tool_calls??0}}</b></div><div><span>RAG Calls</span><b>{{d.rag_calls??0}}</b></div><div><span>Qdrant P95</span><b>{{d.qdrant_p95_ms??0}} ms</b></div></div></section>
+    </div>
+  </div>
+</template>
+<script setup>
+import{onMounted,reactive,ref}from'vue';import{Bot,CircleCheck,Timer,DatabaseZap,SlidersHorizontal,Workflow,RefreshCw}from'lucide-vue-next';import MetricCard from'../../components/admin/MetricCard.vue';import StatusBadge from'../../components/common/StatusBadge.vue';import{adminApi}from'../../api/admin.js';
+const d=ref({}),error=ref(''),saving=ref(false),saveMessage=ref('');const config=reactive({default_model:'',embedding_model:'',temperature:0.2,max_tokens:2048,rag_top_k:8,similarity_threshold:.72,chunk_size:768,chunk_overlap:96,system_prompt:''});
+const steps=[{name:'意图识别',desc:'判断普通问答 / 时间检索 / Tool'},{name:'RAG 检索',desc:'Qdrant Top-K + 元数据过滤'},{name:'Tool Calling',desc:'时间查询 / 群管理 / 用户操作'},{name:'LLM 生成',desc:'组装上下文并生成最终回复'}]
+async function load(){error.value='';try{const [overview,cfg]=await Promise.all([adminApi.agentOverview(),adminApi.agentConfig()]);d.value=overview||{};Object.assign(config,cfg||{})}catch(e){error.value=e.message}}
+async function save(){saving.value=true;saveMessage.value='';try{const r=await adminApi.saveAgentConfig({...config});Object.assign(config,r?.config||r||{});saveMessage.value='已保存并写入审计日志'}catch(e){saveMessage.value=e.message}finally{saving.value=false}}
+onMounted(load)
+</script>
+<style scoped>.page{display:grid;gap:14px}.page-head,.head-actions{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.config,.pipeline{padding:18px}.panel-head{display:flex;justify-content:space-between;color:var(--text-2);margin-bottom:16px}.panel-head h3{margin:0;color:var(--text);font-size:14px}.panel-head p{margin:4px 0 0;font-size:11px;color:var(--text-3)}label{display:grid;gap:6px;font-size:11px;font-weight:650;margin-bottom:12px}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.save{display:flex;justify-content:space-between;align-items:center;color:var(--text-3);font-size:10px;gap:10px}.steps{display:grid}.steps>div{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}.steps>div>span{width:26px;height:26px;border-radius:8px;background:var(--primary-soft);color:var(--primary);display:grid;place-items:center;font-size:10px;font-weight:800}.steps b,.steps small{display:block}.steps b{font-size:11px}.steps small{margin-top:3px;color:var(--text-3);font-size:10px}.mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.mini-stats div{padding:11px;background:var(--surface-soft);border-radius:9px}.mini-stats span,.mini-stats b{display:block}.mini-stats span{font-size:9px;color:var(--text-3)}.mini-stats b{margin-top:4px;font-size:14px}</style>

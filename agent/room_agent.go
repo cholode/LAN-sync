@@ -58,6 +58,9 @@ func (a *RoomAgent) Stop() { a.cancel() }
 
 // HandleMessage 处理群消息：触发判断 + 冷却，通过后异步交给 Python。
 func (a *RoomAgent) HandleMessage(msg AgentMessage) {
+	if a.ctx.Err() != nil {
+		return
+	}
 	if !a.shouldTrigger(msg) {
 		return
 	}
@@ -90,6 +93,9 @@ func (a *RoomAgent) shouldTrigger(msg AgentMessage) bool {
 }
 
 func (a *RoomAgent) processMessage(msg AgentMessage) {
+	if a.ctx.Err() != nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(a.ctx, 60*time.Second)
 	defer cancel()
 	a.lastReplyTime = time.Now()
@@ -110,6 +116,9 @@ func (a *RoomAgent) processMessage(msg AgentMessage) {
 
 	reply, skip, err := a.client.ProcessMessage(ctx, in)
 	if err != nil {
+		if a.ctx.Err() != nil {
+			return
+		}
 		metrics.AgentRequestFinished(a.roomID, model, "error", start, err)
 		pkg.Infof("[RoomAgent] room=%d agent 调用失败: %v", a.roomID, err)
 		a.sendReply("AI 助手暂时不可用，请稍后再试。")
@@ -121,6 +130,9 @@ func (a *RoomAgent) processMessage(msg AgentMessage) {
 	}
 	metrics.AgentRequestFinished(a.roomID, model, "success", start, nil)
 	if reply != "" {
+		if a.ctx.Err() != nil {
+			return
+		}
 		a.sendReply(reply)
 		pkg.Infof("[RoomAgent] room=%d 回复: %s", a.roomID, truncate(reply, 50))
 	}

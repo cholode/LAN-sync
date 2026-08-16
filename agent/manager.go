@@ -112,12 +112,10 @@ func (m *AgentManager) PauseAgent(ctx context.Context, roomID int64) error {
 	defer m.mu.Unlock()
 
 	agent, exists := m.agents[roomID]
-	if !exists {
-		return nil
+	if exists {
+		agent.Stop()
+		delete(m.agents, roomID)
 	}
-
-	agent.Stop()
-	delete(m.agents, roomID)
 	metrics.SetAgentRoomsEnabled(len(m.agents))
 
 	m.db.WithContext(ctx).Model(&models.Room{}).
