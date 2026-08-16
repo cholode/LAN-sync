@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"gorm.io/gorm"
@@ -12,6 +12,7 @@ type roomRepository interface {
 	SoftDeleteRoom(roomID int64) error
 	GetJoinedRooms(userID int64) ([]*models.Room, error)
 	GetRoomByExactName(exactName string) (*models.Room, error)
+	GetJoinedRoomsWithRole(userID int64) ([]JoinedRoom, error)
 }
 
 type roomRepoImpl struct {
@@ -63,6 +64,17 @@ func (r *roomRepoImpl) GetJoinedRooms(userID int64) ([]*models.Room, error) {
 		Where("room_members.user_id = ?", userID).
 		Find(&rooms).Error
 	return rooms, err
+}
+
+// GetJoinedRoomsWithRole 一次查询返回用户加入的群组及对应角色，避免 N+1。
+func (r *roomRepoImpl) GetJoinedRoomsWithRole(userID int64) ([]JoinedRoom, error) {
+	var rows []JoinedRoom
+	err := r.db.Model(&models.Room{}).
+		Select("rooms.id, rooms.name, rooms.agent_enabled, rooms.creator_id, rooms.created_at, room_members.role AS member_role").
+		Joins("INNER JOIN room_members ON rooms.id = room_members.room_id AND room_members.deleted_at = 0").
+		Where("room_members.user_id = ?", userID).
+		Scan(&rows).Error
+	return rows, err
 }
 
 // GetRoomByExactName 根据群聊名称精确查询群聊

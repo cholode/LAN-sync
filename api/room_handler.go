@@ -125,8 +125,8 @@ func GetRoomMembers() gin.HandlerFunc {
 			return
 		}
 
-		// 查询群成员信息
-		users, err := repository.RoomMember.GetRoomMembers(roomID)
+		// 查询群成员信息及角色，避免逐成员查询角色造成 N+1
+		members, err := repository.RoomMember.GetRoomMembersWithRoles(roomID)
 
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "获取成员列表失败"})
@@ -140,17 +140,13 @@ func GetRoomMembers() gin.HandlerFunc {
 			creatorID = room.CreatorID
 		}
 		var response []map[string]interface{}
-		for _, u := range users {
-			role := int8(1)
-			if r, ok, _ := repository.RoomMember.GetMemberRole(roomID, u.ID); ok {
-				role = r
-			}
+		for _, member := range members {
 			response = append(response, map[string]interface{}{
-				"user_id":    u.ID,
-				"username":   u.Username,
-				"avatar":     u.Avatar,
-				"role":       role,
-				"is_creator": u.ID == creatorID,
+				"user_id":    member.ID,
+				"username":   member.Username,
+				"avatar":     member.Avatar,
+				"role":       member.MemberRole,
+				"is_creator": member.ID == creatorID,
 			})
 		}
 
@@ -217,7 +213,7 @@ func GetMyRooms() gin.HandlerFunc {
 		userID := userIDVal.(int64)
 
 		// 查询用户加入的群聊列表
-		rooms, err := repository.Room.GetJoinedRooms(userID)
+		rooms, err := repository.Room.GetJoinedRoomsWithRole(userID)
 
 		if err != nil {
 			pkg.Infof("查询群聊列表失败: %v\n", err)
@@ -227,18 +223,14 @@ func GetMyRooms() gin.HandlerFunc {
 
 		// 组装响应数据（creator_id、my_role 供前端判断是否可解散）
 		var res []map[string]interface{}
-		for _, r := range rooms {
-			myRole := int8(1)
-			if role, ok, e := repository.RoomMember.GetMemberRole(r.ID, userID); e == nil && ok {
-				myRole = role
-			}
+		for _, room := range rooms {
 			res = append(res, map[string]interface{}{
-				"room_id":       r.ID,
-				"room_name":     r.Name,
-				"agent_enabled": r.AgentEnabled,
-				"created_at":    r.CreatedAt,
-				"creator_id":    r.CreatorID,
-				"my_role":       myRole,
+				"room_id":       room.ID,
+				"room_name":     room.Name,
+				"agent_enabled": room.AgentEnabled,
+				"created_at":    room.CreatedAt,
+				"creator_id":    room.CreatorID,
+				"my_role":       room.MemberRole,
 			})
 		}
 

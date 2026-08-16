@@ -83,3 +83,14 @@ func (r *roomMemberRepoImpl) GetRoomMembers(roomID int64) ([]*models.User, error
 	}
 	return users, nil
 }
+
+// GetRoomMembersWithRoles 一次联表查询群成员资料及角色，避免逐成员查询角色造成 N+1。
+func (r *roomMemberRepoImpl) GetRoomMembersWithRoles(roomID int64) ([]RoomMemberWithRole, error) {
+	var rows []RoomMemberWithRole
+	err := r.db.Model(&models.RoomMember{}).
+		Select("users.id, users.username, users.avatar, room_members.role AS member_role").
+		Joins("INNER JOIN users ON users.id = room_members.user_id AND users.deleted_at = 0").
+		Where("room_members.room_id = ? AND room_members.deleted_at = 0", roomID).
+		Scan(&rows).Error
+	return rows, err
+}

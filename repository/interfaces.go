@@ -33,6 +33,18 @@ type RoomRepository interface {
 	GetJoinedRooms(userID int64) ([]*models.Room, error)
 	// 根据名称精确查询群组
 	GetRoomByExactName(exactName string) (*models.Room, error)
+	// 查询用户加入的群组及当前用户在该群的角色，避免循环查询角色造成 N+1
+	GetJoinedRoomsWithRole(userID int64) ([]JoinedRoom, error)
+}
+
+// JoinedRoom 表示用户加入的群组及其在该群中的角色。
+type JoinedRoom struct {
+	ID           int64
+	Name         string
+	AgentEnabled bool
+	CreatorID    int64
+	CreatedAt    time.Time
+	MemberRole   int8
 }
 
 // RoomMemberRepository 群成员数据访问接口
@@ -48,6 +60,16 @@ type RoomMemberRepository interface {
 	GetMemberRole(roomID, userID int64) (role int8, ok bool, err error)
 	// 查询群成员详细信息
 	GetRoomMembers(roomID int64) ([]*models.User, error)
+	// 查询群成员及其在群内的角色，避免逐成员查询角色造成 N+1
+	GetRoomMembersWithRoles(roomID int64) ([]RoomMemberWithRole, error)
+}
+
+// RoomMemberWithRole 表示群成员资料及其在群内的角色。
+type RoomMemberWithRole struct {
+	ID         int64
+	Username   string
+	Avatar     string
+	MemberRole int8
 }
 
 // MessageRepository 消息数据访问接口
