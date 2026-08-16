@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"lan-im-go/agent/llm"
 	"lan-im-go/core"
-	"lan-im-go/repository"
 	"lan-im-go/pkg"
+	"lan-im-go/repository"
 
 	"gorm.io/gorm"
 )
@@ -60,7 +60,7 @@ func (h *KickUserHandler) Handle(args json.RawMessage) (string, error) {
 		return "", err
 	}
 
-	h.hub.Kick <- params.UserID
+	h.hub.Kick(params.UserID)
 
 	pkg.Infof("[KickUser] room=%d 已移除用户 %d, 原因: %s", h.roomID, params.UserID, params.Reason)
 	return fmt.Sprintf("%d 已被移出群聊，原因: %s", params.UserID, params.Reason), nil

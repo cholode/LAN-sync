@@ -38,11 +38,7 @@ func JoinRoom(hub *core.Hub) gin.HandlerFunc {
 		}
 
 		// 通知核心引擎更新群聊状态
-		hub.RoomActionChan <- &core.RoomAction{
-			UserID: realUserID,
-			RoomID: roomID,
-			Action: "join",
-		}
+		hub.JoinRoom(realUserID, roomID)
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "加入群聊成功",
@@ -105,11 +101,7 @@ func RemoveRoomMember(hub *core.Hub) gin.HandlerFunc {
 		}
 
 		// 通知核心引擎更新群聊状态
-		hub.RoomActionChan <- &core.RoomAction{
-			UserID: targetUserID,
-			RoomID: roomID,
-			Action: "leave",
-		}
+		hub.LeaveRoom(targetUserID, roomID)
 
 		c.JSON(http.StatusOK, gin.H{"message": "操作成功"})
 	}
@@ -206,11 +198,7 @@ func CreateRoom(hub *core.Hub) gin.HandlerFunc {
 		}
 
 		// 通知核心引擎更新群聊状态
-		hub.RoomActionChan <- &core.RoomAction{
-			UserID: creatorID,
-			RoomID: room.ID,
-			Action: "join",
-		}
+		hub.JoinRoom(creatorID, room.ID)
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "创建群聊成功",

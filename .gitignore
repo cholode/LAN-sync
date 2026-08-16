@@ -18,3 +18,5 @@ frontendold/
 .backup_frontend_20260816/
 LAN-IM-interface-connected/
 lan-im-go.exe
+perf/
+perf2/

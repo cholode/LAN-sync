@@ -38,49 +38,26 @@ var CurrentNodeID = metrics.NodeID()
 
 func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. 身份验证
 		userID, exists := c.Get("user_id")
 		if !exists {
-			pkg.Infof("用户身份信息不存在\n")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "身份验证失败，连接拒绝"})
+			pkg.Infof("user identity missing\n")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "identity invalid"})
 			return
 		}
 		realUserID := userID.(int64)
 
-		// 2. 协议升级
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			pkg.Infof("[连接失败] WebSocket协议升级异常 UID:%d, Err:%v", realUserID, err)
+			pkg.Infof("[connection failed] WebSocket upgrade error UID:%d Err:%v", realUserID, err)
 			return
 		}
-		pkg.Infof("WebSocket连接建立成功 UID:%d\n", realUserID)
+		pkg.Infof("WebSocket connected UID:%d\n", realUserID)
 		connStart := time.Now()
 		metrics.WSConnected()
 
-		// 3. 极其核心的物理动作：全局宣告上线
-		ctxTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if err := cache.SetUserOnline(ctxTimeout, realUserID, CurrentNodeID); err != nil {
-			pkg.Infof("[状态告警] UID:%d 写入全局 Redis 状态异常: %v", realUserID, err)
-			// 注意：状态写入失败不应直接阻断连接，可做降级处理允许业务继续运行
-		}
-		cancel()
-
-		// 4. 初始化群聊订阅
-		roomIDs, err := repository.RoomMember.GetUserRoomIDs(realUserID)
-		if err != nil {
-			pkg.Infof("[连接警告] 获取用户%d群聊列表失败，使用空列表初始化", realUserID)
-			roomIDs = []int64{}
-		}
-
-		// 5. 创建客户端实例
-		username := ""
-		if user, err := repository.User.GetByID(realUserID); err == nil {
-			username = user.Username
-		}
 		client := &core.Client{
 			Hub:           hub,
 			UserID:        realUserID,
-			Username:      username,
 			Conn:          conn,
 			Send:          make(chan []byte, 512),
 			ConnID:        fmt.Sprintf("%d-%d", realUserID, time.Now().UnixNano()),
@@ -90,31 +67,43 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			ConnectedAt:   time.Now(),
 		}
 
-		subscription := &core.Subscription{
-			Client:  client,
-			RoomIDs: roomIDs,
-		}
-		hub.Subscribe <- subscription
+		hub.Register(client, []int64{})
 
-		// 6. 工业级防线：资源极致回收与状态宣告下线
-		defer func() {
-			metrics.WSDisconnected(time.Since(connStart), "normal")
-
-			// A. 本地物理连接与路由表清退
-			hub.Unsubscribe <- subscription
-			conn.Close()
-
-			// B. 全局分布式状态抹除
-			ctxDel, cancelDel := context.WithTimeout(context.Background(), 2*time.Second)
-			if err := cache.SetUserOffline(ctxDel, realUserID); err != nil {
-				pkg.Infof("[状态告警] UID:%d 删除全局 Redis 状态异常: %v", realUserID, err)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := cache.SetUserOnline(ctx, realUserID, CurrentNodeID); err != nil {
+				pkg.Infof("[online warn] UID:%d Redis online state failed: %v", realUserID, err)
 			}
-			cancelDel()
-
-			pkg.Infof("[WebSocket] 用户%d连接已释放，全局状态已离线", realUserID)
 		}()
 
-		// 7. 启动读写泵
+		go func() {
+			roomIDs, err := repository.RoomMember.GetUserRoomIDs(realUserID)
+			if err != nil {
+				pkg.Infof("[connect warn] load rooms failed UID:%d: %v", realUserID, err)
+				return
+			}
+			hub.UpdateRooms(client, roomIDs)
+		}()
+
+		go func() {
+			if user, err := repository.User.GetByID(realUserID); err == nil && user != nil {
+				client.SetUsername(user.Username)
+			}
+		}()
+
+		defer func() {
+			metrics.WSDisconnected(time.Since(connStart), "normal")
+			hub.Unregister(client)
+			conn.Close()
+
+			ctxDel, cancelDel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancelDel()
+			if err := cache.SetUserOffline(ctxDel, realUserID); err != nil {
+				pkg.Infof("[offline warn] UID:%d Redis offline state failed: %v", realUserID, err)
+			}
+		}()
+
 		go client.WritePump()
 		client.ReadPump()
 	}

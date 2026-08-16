@@ -34,10 +34,7 @@ func (c *LocalRuntimeController) KickUser(_ context.Context, userID int64) error
 	if c.Hub == nil {
 		return fmt.Errorf("Hub 未初始化")
 	}
-	select {
-	case c.Hub.Kick <- userID:
-	default:
-	}
+	c.Hub.Kick(userID)
 	return nil
 }
 
@@ -45,10 +42,7 @@ func (c *LocalRuntimeController) DisbandRoom(_ context.Context, roomID int64) er
 	if c.Hub == nil {
 		return fmt.Errorf("Hub 未初始化")
 	}
-	select {
-	case c.Hub.RoomActionChan <- &core.RoomAction{RoomID: roomID, Action: "disband"}:
-	default:
-	}
+	c.Hub.DisbandRoom(roomID)
 	return nil
 }
 
@@ -56,10 +50,7 @@ func (c *LocalRuntimeController) RemoveRoomMember(_ context.Context, roomID, use
 	if c.Hub == nil {
 		return fmt.Errorf("Hub 未初始化")
 	}
-	select {
-	case c.Hub.RoomActionChan <- &core.RoomAction{UserID: userID, RoomID: roomID, Action: "leave"}:
-	default:
-	}
+	c.Hub.LeaveRoom(userID, roomID)
 	return nil
 }
 

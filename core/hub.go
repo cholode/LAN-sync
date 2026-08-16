@@ -1,9 +1,12 @@
-﻿package core
+package core
 
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 
@@ -13,12 +16,13 @@ import (
 	"lan-im-go/internal/taskpool"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
-	"time"
 )
 
 const (
-	// poolDispatchThreshold 房间成员数超过此阈值时，使用协程池分发消息
+	// poolDispatchThreshold 房间成员数超过此阈值时，使用协程池分发消息。
 	poolDispatchThreshold = 100
+
+	defaultHubShardCount = 64
 )
 
 // RoomAction 表示客户端在房间内的动作，例如加入、离开或解散。
@@ -28,50 +32,339 @@ type RoomAction struct {
 	Action string
 }
 
-// Hub 局部内存路由引擎(Local Routing Engine)
-// 重启不会丢失任何业务数据，只管理当前节点的 TCP 句柄。
+// Subscription 保留类型兼容旧测试和连接订阅语义。
+type Subscription struct {
+	Client  *Client
+	RoomIDs []int64
+}
+
+// Hub 局部内存路由引擎，按用户和房间两个维度分片。
 type Hub struct {
+	shards []*hubShard
+}
+
+type hubShard struct {
+	hub   *Hub
+	id    int
 	mu    sync.RWMutex
-	rooms map[int64]map[*Client]bool
 	users map[int64]*Client
+	rooms map[int64]map[*Client]bool
 
-	// Subscribe 接收客户端订阅请求。
-	Subscribe chan *Subscription
-	// Unsubscribe 接收客户端退订请求。
-	Unsubscribe chan *Subscription
-
-	// ForwardMessage 接收需要转发给客户端消息队列的消息。
-	ForwardMessage chan *models.Message
-
-	// RoomActionChan 接收加入、离开、解散等房间动作。
-	RoomActionChan chan *RoomAction
-	// Kick 接收需要强制下线的用户 ID。
-	Kick chan int64
-	// CloseConn 接收需要关闭的连接 ID。
-	CloseConn chan string
-
-	// killClient 接收来自协程池中检测到的慢客户端，由 Hub 主循环统一清理
+	forward    chan *models.Message
 	killClient chan *Client
 }
 
-// NewHub 创建并初始化本地内存路由引擎。
+// NewHub 创建分片式 Hub，分片数可通过 HUB_SHARD_COUNT 配置。
 func NewHub() *Hub {
-	return &Hub{
-		rooms:       make(map[int64]map[*Client]bool),
-		users:       make(map[int64]*Client),
-		Subscribe:   make(chan *Subscription),
-		Unsubscribe: make(chan *Subscription),
+	shardCount := defaultHubShardCount
+	if raw := os.Getenv("HUB_SHARD_COUNT"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			shardCount = parsed
+		}
+	}
+	return NewHubWithShards(shardCount)
+}
 
-		ForwardMessage: make(chan *models.Message, 1024),
+// NewHubWithShards 创建指定分片数的 Hub。
+func NewHubWithShards(shardCount int) *Hub {
+	if shardCount <= 0 {
+		shardCount = defaultHubShardCount
+	}
+	hub := &Hub{shards: make([]*hubShard, shardCount)}
+	for i := 0; i < shardCount; i++ {
+		hub.shards[i] = &hubShard{
+			hub:        hub,
+			id:         i,
+			users:      make(map[int64]*Client),
+			rooms:      make(map[int64]map[*Client]bool),
+			forward:    make(chan *models.Message, 1024),
+			killClient: make(chan *Client, 64),
+		}
+	}
+	return hub
+}
 
-		RoomActionChan: make(chan *RoomAction, 100),
-		Kick:           make(chan int64),
-		CloseConn:      make(chan string, 64),
-		killClient:     make(chan *Client, 64),
+func (h *Hub) shardForUser(userID int64) *hubShard {
+	return h.shards[int(uint64(userID)%uint64(len(h.shards)))]
+}
+
+func (h *Hub) shardForRoom(roomID int64) *hubShard {
+	return h.shards[int(uint64(roomID)%uint64(len(h.shards)))]
+}
+
+// Run 启动所有分片循环，直到上下文取消。
+func (h *Hub) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	for _, shard := range h.shards {
+		wg.Add(1)
+		go func(s *hubShard) {
+			defer wg.Done()
+			s.run(ctx)
+		}(shard)
+	}
+	wg.Wait()
+}
+
+func (s *hubShard) run(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-s.forward:
+			payload, err := json.Marshal(msg)
+			if err != nil {
+				pkg.Infof("[Local Hub 异常] 无法序列化消息 %v", err)
+				continue
+			}
+			s.dispatchMessage(msg, payload)
+		case client := <-s.killClient:
+			s.hub.Unregister(client)
+		}
 	}
 }
 
-// ConnectionSnapshot 表示单个客户端 WebSocket 连接的运行时快照。
+// Register 将客户端注册到用户分片，并订阅初始房间集合。
+func (h *Hub) Register(c *Client, roomIDs []int64) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	c.active = true
+	if c.roomIDs == nil {
+		c.roomIDs = make(map[int64]struct{}, len(roomIDs))
+	}
+	for roomID := range c.roomIDs {
+		delete(c.roomIDs, roomID)
+	}
+	for _, roomID := range roomIDs {
+		c.roomIDs[roomID] = struct{}{}
+	}
+
+	userShard := h.shardForUser(c.UserID)
+	userShard.mu.Lock()
+	userShard.users[c.UserID] = c
+	userShard.mu.Unlock()
+
+	for _, roomID := range roomIDs {
+		h.addClientToRoom(c, roomID)
+	}
+	c.mu.Unlock()
+
+	h.updateMetrics()
+}
+
+// Unregister 从所有分片移除客户端，并安全关闭发送通道。
+func (h *Hub) Unregister(c *Client) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	if !c.active {
+		c.mu.Unlock()
+		return
+	}
+	c.active = false
+
+	userShard := h.shardForUser(c.UserID)
+	userShard.mu.Lock()
+	if current := userShard.users[c.UserID]; current == c {
+		delete(userShard.users, c.UserID)
+	}
+	userShard.mu.Unlock()
+
+	roomIDs := make([]int64, 0, len(c.roomIDs))
+	for roomID := range c.roomIDs {
+		roomIDs = append(roomIDs, roomID)
+	}
+	for _, roomID := range roomIDs {
+		h.removeClientFromRoom(c, roomID)
+	}
+	c.roomIDs = nil
+	c.mu.Unlock()
+
+	c.closeSend()
+	h.updateMetrics()
+}
+
+// UpdateRooms 异步刷新客户端订阅的房间集合。
+func (h *Hub) UpdateRooms(c *Client, roomIDs []int64) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	if !c.active {
+		c.mu.Unlock()
+		return
+	}
+
+	newRooms := make(map[int64]struct{}, len(roomIDs))
+	for _, roomID := range roomIDs {
+		newRooms[roomID] = struct{}{}
+	}
+
+	for roomID := range c.roomIDs {
+		if _, ok := newRooms[roomID]; !ok {
+			h.removeClientFromRoom(c, roomID)
+		}
+	}
+	for roomID := range newRooms {
+		if _, ok := c.roomIDs[roomID]; !ok {
+			h.addClientToRoom(c, roomID)
+		}
+	}
+
+	c.roomIDs = newRooms
+	c.mu.Unlock()
+	h.updateMetrics()
+}
+
+// JoinRoom 将在线用户加入指定房间。
+func (h *Hub) JoinRoom(userID, roomID int64) {
+	c := h.clientByUser(userID)
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	if !c.active {
+		c.mu.Unlock()
+		return
+	}
+	if c.roomIDs == nil {
+		c.roomIDs = make(map[int64]struct{})
+	}
+	if _, exists := c.roomIDs[roomID]; exists {
+		c.mu.Unlock()
+		return
+	}
+	c.roomIDs[roomID] = struct{}{}
+	h.addClientToRoom(c, roomID)
+	c.mu.Unlock()
+	h.updateMetrics()
+}
+
+// LeaveRoom 将在线用户移出指定房间。
+func (h *Hub) LeaveRoom(userID, roomID int64) {
+	c := h.clientByUser(userID)
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	if !c.active {
+		c.mu.Unlock()
+		return
+	}
+	if _, exists := c.roomIDs[roomID]; !exists {
+		c.mu.Unlock()
+		return
+	}
+	delete(c.roomIDs, roomID)
+	h.removeClientFromRoom(c, roomID)
+	c.mu.Unlock()
+	h.updateMetrics()
+}
+
+// DisbandRoom 删除房间，并清理该房间所有在线客户端的订阅状态。
+func (h *Hub) DisbandRoom(roomID int64) {
+	roomShard := h.shardForRoom(roomID)
+
+	roomShard.mu.Lock()
+	clients := make([]*Client, 0, len(roomShard.rooms[roomID]))
+	for client := range roomShard.rooms[roomID] {
+		clients = append(clients, client)
+	}
+	delete(roomShard.rooms, roomID)
+	roomShard.mu.Unlock()
+
+	for _, client := range clients {
+		client.mu.Lock()
+		delete(client.roomIDs, roomID)
+		client.mu.Unlock()
+	}
+	h.updateMetrics()
+}
+
+// Publish 将跨节点消息投递到房间对应分片。
+func (h *Hub) Publish(msg *models.Message) {
+	if msg == nil {
+		return
+	}
+	shard := h.shardForRoom(msg.RoomID)
+	select {
+	case shard.forward <- msg:
+	default:
+		metrics.ObserveHubQueueDrop(msg.RoomID, "shard_forward_full")
+	}
+}
+
+// Kick 强制关闭指定用户的 WebSocket 连接。
+func (h *Hub) Kick(userID int64) {
+	if client := h.clientByUser(userID); client != nil && client.Conn != nil {
+		client.Conn.Close()
+	}
+}
+
+// CloseConnection 按连接 ID 关闭指定 WebSocket 连接。
+func (h *Hub) CloseConnection(connectionID string) {
+	for _, shard := range h.shards {
+		shard.mu.RLock()
+		var target *Client
+		for _, client := range shard.users {
+			if client.ConnID == connectionID {
+				target = client
+				break
+			}
+		}
+		shard.mu.RUnlock()
+
+		if target != nil && target.Conn != nil {
+			target.Conn.Close()
+			return
+		}
+	}
+}
+
+func (h *Hub) clientByUser(userID int64) *Client {
+	shard := h.shardForUser(userID)
+	shard.mu.RLock()
+	client := shard.users[userID]
+	shard.mu.RUnlock()
+	return client
+}
+
+func (h *Hub) addClientToRoom(c *Client, roomID int64) {
+	shard := h.shardForRoom(roomID)
+	shard.mu.Lock()
+	if shard.rooms[roomID] == nil {
+		shard.rooms[roomID] = make(map[*Client]bool)
+	}
+	shard.rooms[roomID][c] = true
+	shard.mu.Unlock()
+}
+
+func (h *Hub) removeClientFromRoom(c *Client, roomID int64) {
+	shard := h.shardForRoom(roomID)
+	shard.mu.Lock()
+	if clients := shard.rooms[roomID]; clients != nil {
+		delete(clients, c)
+		if len(clients) == 0 {
+			delete(shard.rooms, roomID)
+		}
+	}
+	shard.mu.Unlock()
+}
+
+func (h *Hub) updateMetrics() {
+	stats := h.Stats()
+	metrics.SetHubClientCount(stats.ClientCount)
+	metrics.SetHubRoomCount(stats.RoomCount)
+}
+
+// Connections 返回当前 Hub 中所有客户端连接快照。
 type ConnectionSnapshot struct {
 	UserID        int64     `json:"user_id"`
 	Username      string    `json:"username"`
@@ -86,23 +379,21 @@ type ConnectionSnapshot struct {
 	RoomIDs       []int64   `json:"room_ids"`
 }
 
-// Connections 返回当前 Hub 中所有客户端连接快照。
 func (h *Hub) Connections() []ConnectionSnapshot {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	out := make([]ConnectionSnapshot, 0, len(h.users))
-	for userID, client := range h.users {
-		roomIDs := make([]int64, 0)
-		for roomID, clients := range h.rooms {
-			if clients[client] {
-				roomIDs = append(roomIDs, roomID)
-			}
+	var clients []*Client
+	for _, shard := range h.shards {
+		shard.mu.RLock()
+		for _, client := range shard.users {
+			clients = append(clients, client)
 		}
+		shard.mu.RUnlock()
+	}
 
+	out := make([]ConnectionSnapshot, 0, len(clients))
+	for _, client := range clients {
 		out = append(out, ConnectionSnapshot{
-			UserID:        userID,
-			Username:      client.Username,
+			UserID:        client.UserID,
+			Username:      client.Username(),
 			ConnectionID:  client.ConnID,
 			RemoteIP:      client.RemoteIP,
 			UserAgent:     client.UserAgent,
@@ -111,18 +402,10 @@ func (h *Hub) Connections() []ConnectionSnapshot {
 			LastReadAt:    client.LastReadAt(),
 			LastWriteAt:   client.LastWriteAt(),
 			SendQueueLen:  len(client.Send),
-			RoomIDs:       roomIDs,
+			RoomIDs:       client.RoomIDs(),
 		})
 	}
 	return out
-}
-
-// CloseConnection 请求 Hub 按连接 ID 关闭指定 WebSocket 连接。
-func (h *Hub) CloseConnection(connectionID string) {
-	select {
-	case h.CloseConn <- connectionID:
-	default:
-	}
 }
 
 // HubStats 表示 Hub 的客户端数量和房间数量统计。
@@ -133,12 +416,14 @@ type HubStats struct {
 
 // Stats 返回当前 Hub 的客户端与房间统计信息。
 func (h *Hub) Stats() HubStats {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return HubStats{
-		ClientCount: len(h.users),
-		RoomCount:   len(h.rooms),
+	var stats HubStats
+	for _, shard := range h.shards {
+		shard.mu.RLock()
+		stats.ClientCount += len(shard.users)
+		stats.RoomCount += len(shard.rooms)
+		shard.mu.RUnlock()
 	}
+	return stats
 }
 
 // StartGlobalListener 启动 Redis Pub/Sub 全局监听，将跨节点广播消息转发到本地 Hub。
@@ -170,207 +455,66 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 			msg := &models.Message{
 				RoomID:      envelope.RoomID,
 				SenderID:    envelope.SenderID,
-				Content:     envelope.Content,
 				ClientMsgID: envelope.ClientMsgID,
 				Type:        envelope.Type,
+				Content:     envelope.Content,
 				CreatedAt:   envelope.CreatedAt,
 			}
-
-			select {
-			case localHub.ForwardMessage <- msg:
-			default:
-				metrics.ObserveHubQueueDrop(msg.RoomID, "forward_queue_full")
-				pkg.Infoln("[性能预警] 本地 Hub 转发队列满，物理抛弃当前广播")
-			}
+			localHub.Publish(msg)
 		}
 	}
 }
 
-// dispatchMessage 将消息分发给房间内所有客户端
-// 小房间直接内联分发，大房间通过协程池并行分发
-func (h *Hub) dispatchMessage(msg *models.Message, payload []byte) {
-	h.mu.RLock()
-	clients := make([]*Client, 0, len(h.rooms[msg.RoomID]))
-	for client := range h.rooms[msg.RoomID] {
+// dispatchMessage 将消息分发给房间内所有客户端。
+func (s *hubShard) dispatchMessage(msg *models.Message, payload []byte) {
+	s.mu.RLock()
+	clients := make([]*Client, 0, len(s.rooms[msg.RoomID]))
+	for client := range s.rooms[msg.RoomID] {
 		clients = append(clients, client)
 	}
-	h.mu.RUnlock()
+	s.mu.RUnlock()
 
 	if len(clients) == 0 {
 		return
 	}
 
 	start := time.Now()
-	defer metrics.ObserveHubDispatchLatency(msg.RoomID, time.Since(start).Seconds())
+	defer func() {
+		metrics.ObserveHubDispatchLatency(msg.RoomID, time.Since(start).Seconds())
+	}()
 
-	// 小房间直接内联分发，避免协程池调度开销。
 	if len(clients) < poolDispatchThreshold {
 		dispatched := 0
 		for _, client := range clients {
-			select {
-			case client.Send <- payload:
+			if client.TrySend(payload) {
 				dispatched++
-			default:
+			} else {
 				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
 				metrics.RecordWSSlowClient()
-				h.requestEvict(client)
+				s.requestEvict(client)
 			}
 		}
 		metrics.ObserveHubDispatch(msg.RoomID, dispatched)
 		return
 	}
 
-	// 大房间通过协程池并行分发，避免单个房间阻塞整个 Hub。
 	for _, client := range clients {
 		c := client
 		taskpool.Go(func() {
-			select {
-			case c.Send <- payload:
+			if c.TrySend(payload) {
 				metrics.ObserveHubDispatch(msg.RoomID, 1)
-			default:
+			} else {
 				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
 				metrics.RecordWSSlowClient()
-				h.requestEvict(c)
+				s.requestEvict(c)
 			}
 		})
 	}
 }
 
-// requestEvict 请求 Hub 清理发送队列已满的慢客户端。
-func (h *Hub) requestEvict(client *Client) {
+func (s *hubShard) requestEvict(client *Client) {
 	select {
-	case h.killClient <- client:
+	case s.hub.shardForUser(client.UserID).killClient <- client:
 	default:
-		// kill 队列已满时丢弃本次请求，避免阻塞当前分发协程。
-	}
-}
-
-// evictClient 从 Hub 中移除慢客户端，并从所有房间清理其连接。
-func (h *Hub) evictClient(client *Client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	pkg.Infof("[Local Hub 清理] 用户 %d 已被移出本地路由", client.UserID)
-	for rid, roomClients := range h.rooms {
-		delete(roomClients, client)
-		if len(roomClients) == 0 {
-			delete(h.rooms, rid)
-		}
-	}
-	if _, ok := h.users[client.UserID]; ok {
-		delete(h.users, client.UserID)
-	}
-	// 关闭发送通道时做 recover 保护，避免重复关闭引发 panic。
-	func() {
-		defer func() { recover() }()
-		close(client.Send)
-	}()
-}
-
-// Run 启动 Hub 主循环，串行处理订阅、退订、消息转发和房间动作。
-func (h *Hub) Run(ctx context.Context) {
-	pkg.Infoln("[Local Hub] 本地内存路由引擎已启动，等待 Redis 指令...")
-	for {
-		select {
-		case <-ctx.Done():
-			pkg.Infoln("[Local Hub] 收到系统关闭信号，本地路由引擎停止调度")
-			return
-
-		case sub := <-h.Subscribe:
-			h.mu.Lock()
-			h.users[sub.Client.UserID] = sub.Client
-			for _, roomID := range sub.RoomIDs {
-				if h.rooms[roomID] == nil {
-					h.rooms[roomID] = make(map[*Client]bool)
-				}
-				h.rooms[roomID][sub.Client] = true
-			}
-			clientCount := len(h.users)
-			roomCount := len(h.rooms)
-			h.mu.Unlock()
-			metrics.SetHubClientCount(clientCount)
-			metrics.SetHubRoomCount(roomCount)
-
-		case unsub := <-h.Unsubscribe:
-			h.mu.Lock()
-			for rid, roomClients := range h.rooms {
-				delete(roomClients, unsub.Client)
-				if len(roomClients) == 0 {
-					delete(h.rooms, rid)
-				}
-			}
-			if _, ok := h.users[unsub.Client.UserID]; ok {
-				delete(h.users, unsub.Client.UserID)
-				close(unsub.Client.Send)
-			}
-			clientCount := len(h.users)
-			roomCount := len(h.rooms)
-			h.mu.Unlock()
-			metrics.SetHubClientCount(clientCount)
-			metrics.SetHubRoomCount(roomCount)
-
-		case msg := <-h.ForwardMessage:
-			payload, err := json.Marshal(msg)
-			if err != nil {
-				pkg.Infof("[Local Hub 异常] 无法序列化消息 %v", err)
-				continue
-			}
-			h.dispatchMessage(msg, payload)
-
-		case action := <-h.RoomActionChan:
-			h.mu.Lock()
-			switch action.Action {
-			case "join":
-				if client, ok := h.users[action.UserID]; ok {
-					if h.rooms[action.RoomID] == nil {
-						h.rooms[action.RoomID] = make(map[*Client]bool)
-					}
-					h.rooms[action.RoomID][client] = true
-				}
-			case "leave":
-				if client, ok := h.users[action.UserID]; ok {
-					if h.rooms[action.RoomID] != nil {
-						delete(h.rooms[action.RoomID], client)
-					}
-				}
-			case "disband":
-				if h.rooms[action.RoomID] != nil {
-					delete(h.rooms, action.RoomID)
-				}
-			}
-			clientCount := len(h.users)
-			roomCount := len(h.rooms)
-			h.mu.Unlock()
-			metrics.SetHubClientCount(clientCount)
-			metrics.SetHubRoomCount(roomCount)
-
-		case targetUserID := <-h.Kick:
-			h.mu.RLock()
-			client, ok := h.users[targetUserID]
-			h.mu.RUnlock()
-			if ok {
-				client.Conn.Close()
-			}
-
-		case connectionID := <-h.CloseConn:
-			h.mu.RLock()
-			var target *Client
-			for _, client := range h.users {
-				if client.ConnID == connectionID {
-					target = client
-					break
-				}
-			}
-			h.mu.RUnlock()
-			if target != nil {
-				target.Conn.Close()
-			}
-
-		case client := <-h.killClient:
-			h.evictClient(client)
-			stats := h.Stats()
-			metrics.SetHubClientCount(stats.ClientCount)
-			metrics.SetHubRoomCount(stats.RoomCount)
-		}
 	}
 }

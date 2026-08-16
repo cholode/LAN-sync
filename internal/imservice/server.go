@@ -123,17 +123,18 @@ func (s *Server) SendReply(ctx context.Context, req *agentv1.SendReplyRequest) (
 }
 
 func (s *Server) notifyRoomAction(roomID, userID int64, action string) {
-	select {
-	case s.hub.RoomActionChan <- &core.RoomAction{UserID: userID, RoomID: roomID, Action: action}:
-	default:
+	switch action {
+	case "join":
+		s.hub.JoinRoom(userID, roomID)
+	case "leave":
+		s.hub.LeaveRoom(userID, roomID)
+	case "disband":
+		s.hub.DisbandRoom(roomID)
 	}
 }
 
 func (s *Server) disconnectUser(userID int64) {
-	select {
-	case s.hub.Kick <- userID:
-	default:
-	}
+	s.hub.Kick(userID)
 }
 
 func resolveUserNames(msgs []models.Message) map[int64]string {
