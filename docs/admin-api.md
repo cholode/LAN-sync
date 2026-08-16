@@ -6,9 +6,10 @@
 
 - 服务地址：`http://<host>:8081`
 - 接口前缀：`/api/v1/admin`
-- 后台页面：`/admin`
+- 后台页面：`/admin/dashboard`
 - 认证方式：`Authorization: Bearer <JWT>`
 - 请求类型：`application/json`
+- 控制通道：`admin-service` 通过 `AdminControlService` gRPC 调用 backend（默认 `backend:50053`，使用 `ADMIN_CONTROL_TOKEN` 做服务间认证）
 
 所有管理接口都经过以下中间件：
 
@@ -946,7 +947,7 @@ GET /api/v1/admin/audit-logs
 GET /api/v1/admin/health
 ```
 
-返回 MySQL、Redis、Qdrant、MinIO、LLM、Embedding、WebSocket Hub 的健康状态。
+返回 MySQL、Redis、Qdrant、MinIO、LLM、Embedding、WebSocket Hub 的健康状态。当前健康检查暂不覆盖 MongoDB、Elasticsearch 和 Kafka。
 
 ```json
 {
@@ -1031,4 +1032,3 @@ POST /api/v1/admin/alerts/:id/resolve
 ```
 
 无请求体。
-

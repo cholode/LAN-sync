@@ -1,6 +1,6 @@
 # Agent 服务
 
-基于 LangChain + LangGraph 构建的 Python 服务。它对外暴露 `AgentService` gRPC API，并与 Go 语言实现的 `RoomAgent` 消息处理链路保持一致。
+基于 LangChain + LangGraph 构建的 Python 服务。它对外暴露 `AgentService` gRPC API，是当前项目实际运行的 Agent 主服务；Go backend 通过 `internal/agentclient` 调用该服务，`agent/` 目录仅保留历史实现与兼容结构。
 
 ## 运行
 
@@ -27,7 +27,7 @@ trigger -> RAG 检索 -> 构建提示词 -> LLM -> get_messages 工具 -> 回复
 
 ## 配置
 
-服务默认从项目根目录读取 `config.yaml`。可以通过环境变量 `AGENT_CONFIG_PATH` 覆盖路径。
+服务默认从 `agent-service/config.yaml` 读取配置。可以通过环境变量 `AGENT_CONFIG_PATH` 覆盖路径。
 
 ```yaml
 grpc:
@@ -50,6 +50,9 @@ qdrant:
   host: "qdrant"
   grpc_port: 6334
   vector_size: 1024
+
+redis:
+  addr: "redis:6379"
 
 im_service:
   grpc_addr: "backend:50052"

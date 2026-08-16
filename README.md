@@ -1,20 +1,57 @@
-# Lan IM - 高性能单机 WebSocket 消息分发网关
+# Lan IM - 高性能 WebSocket 即时通讯系统
+
+## 当前架构概览
+
+- 接入层：Nginx 提供 HTTP/HTTPS 与 WebSocket 反向代理。
+- 业务层：Go `backend` 提供 REST API、WebSocket Hub、`IMService` gRPC 与 `AdminControlService` gRPC。
+- 管理端：`admin-service` 提供超级管理员后台 REST API。
+- AI 层：Python `agent-service` 基于 LangChain + LangGraph，通过 gRPC 对外服务。
+- 存储层：MySQL/MongoDB 存业务与消息，Redis 做在线状态/缓存/Pub-Sub，Elasticsearch 做消息检索，Qdrant 做向量检索，MinIO/OSS 做对象存储。
 
 ### 容器通信图
-nginx -> backend：HTTP REST + WebSocket，浏览器入口；消息载荷当前为 JSON。
+nginx -> backend：HTTP REST + WebSocket，聊天前端入口；浏览器 WebSocket 消息载荷为 JSON。
 nginx -> admin-service：HTTP JSON，管理后台浏览器入口。
-backend -> agent-service：gRPC/protobuf，已有。
-agent-service -> backend：gRPC/protobuf IMService，已有。
-admin-service -> backend：gRPC/protobuf。
+backend -> agent-service：gRPC/protobuf，调用 Python 智能体服务。
+agent-service -> backend：gRPC/protobuf，调用 IMService 的 get_messages 等工具。
+admin-service -> backend：gRPC/protobuf，调用 AdminControlService 执行控制指令。
 backend -> MySQL：原生 MySQL 协议
 backend -> Redis：原生 RESP；im:broadcast:* 消息载荷已使用 protobuf。
 backend -> Kafka：原生 Kafka 协议；聊天消息 Value 已使用 protobuf。
 backend -> MongoDB：原生 Mongo/BSON 协议
 backend -> Elasticsearch：HTTP JSON，ES 原生 API
-backend -> MinIO：S3 HTTP 协议
+backend -> MinIO/OSS：S3 兼容 HTTP 协议
 backend -> Qdrant：Qdrant gRPC/protobuf
 agent-service -> Redis/Qdrant：原生协议
 admin-service -> MySQL/Redis/Mongo/Qdrant/MinIO：基础设施原生协议
+
+## 压测基线
+
+最新结果来自 `perf3b/` 与 `perf4/`，结论均以实测数据为准。
+
+### HTTP 只读接口（N+1 修复后，perf3b）
+
+| 场景 | VU | RPS | P50 | P95 | P99 | 错误率 |
+| --- | --- | --- | --- | --- | --- | --- |
+| my_rooms/messages/members 慢爬坡 | 100 | 460.60 | 189.49ms | 421.95ms | 506.78ms | 0% |
+
+### WebSocket（Hub 64 分片后，perf4）
+
+建连爬坡：
+
+| 目标 VU | 服务端峰值在线 | 建连 P50 | 建连 P95 | 建连最大 |
+| --- | --- | --- | --- | --- |
+| 100 | 100 | 80.72ms | 88.12ms | 113.03ms |
+| 500 | 500 | 80.33ms | 88.46ms | 105.99ms |
+| 1000 | 938 | 80.64ms | 1.04s | 21.06s |
+
+群聊广播：
+
+| 房间规模 | 服务端峰值在线 | E2E 平均 | E2E P95 | 备注 |
+| --- | --- | --- | --- | --- |
+| 500 人 | 500 | 70.15ms | 99ms | Kafka lag 0，任务池等待 0 |
+| 1000 人 | 949 | 54.60ms | 71ms | 任务池运行峰值 256，等待 0 |
+
+说明：压测使用预生成 JWT，避免登录 bcrypt 占满 CPU；完整数据见 `perf3b/HTTP慢爬坡报告.md`、`perf4/WebSocket分片压测报告.md`、`perf4/WebSocket分片压测分析.md`。
 
 ## 服务器部署
 
@@ -71,7 +108,11 @@ vim .env
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | LLM 对话模型配置 |
 | `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` | Embedding 模型配置 |
 | `MESSAGE_STORE` | 消息存储后端，`mysql` 或 `mongo` |
+| `MONGO_URI` | MongoDB 地址，仅 `MESSAGE_STORE=mongo` 时使用 |
+| `ES_ADDR` | Elasticsearch 地址 |
 | `NODE_ID` | 当前节点标识，单机可保持默认值 |
+| `STORAGE_BACKEND` | 对象存储类型，`minio` 或 `oss` |
+| `AGENT_GRPC_ADDR` | Python Agent 服务 gRPC 地址 |
 
 注意：`MINIO_PUBLIC_ENDPOINT` 不能填 `localhost` 或 `127.0.0.1`，否则用户浏览器无法直接上传文件。
 
@@ -98,6 +139,7 @@ docker compose ps
 
 ```bash
 docker compose logs -f backend
+docker compose logs -f admin-service
 docker compose logs -f nginx
 docker compose logs -f agent-service
 ```
@@ -127,7 +169,7 @@ UPDATE users SET role = 1 WHERE username = '你的用户名';
 以下端口不要对公网开放：
 
 ```text
-3306 6379 9092 9200 27017 6333 6334 8080 8081 6060 50051 9001
+3306 6379 9092 9200 27017 6333 6334 8080 8081 6060 50051 50052 50053 9001
 ```
 
 MinIO 控制台 `9001` 建议只允许办公 IP 或通过 SSH 隧道访问。

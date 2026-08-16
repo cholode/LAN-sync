@@ -2,14 +2,15 @@
 
 ## 系统概述
 
-Lan IM 是一个高性能单机 WebSocket 即时通讯网关，支持 C100K 级并发长连接，集成 LLM/RAG Agent 实现群聊智能助手。
+Lan IM 是面向局域网与云服务器部署的即时通讯系统。前端通过 WebSocket 接入，后端负责会话路由、鉴权、对象存储预签名和管理控制；消息经 Kafka 与 Redis Pub/Sub 完成解耦、持久化和跨节点扇出；Python Agent 服务基于 LangChain + LangGraph 提供群聊智能助手能力。
 
 ## 系统架构图
 
 ```mermaid
 graph TB
     subgraph 客户端层
-        A[浏览器 SPA]
+        A[聊天前端 SPA]
+        A2[管理后台 SPA]
     end
 
     subgraph 接入层
@@ -17,85 +18,132 @@ graph TB
     end
 
     subgraph 业务层
-        C[Gin HTTP API :8080]
-        D[WebSocket Hub]
-        E[JWT 中间件]
-        F[文件上传]
-    end
-
-    subgraph 消息中间件
-        G[Kafka]
-    end
-
-    subgraph 存储层
-        H[(MySQL 8.0)]
-        I[(Redis)]
-        J[(Qdrant 向量库)]
+        C[backend Gin HTTP API :8080]
+        D[WebSocket Hub 64 分片]
+        E[gRPC IMService :50052]
+        F[gRPC AdminControlService :50053]
+        G[文件预签名接口]
+        H[admin-service HTTP :8081]
     end
 
     subgraph AI 层
-        K[LLM DeepSeek]
-        L[Embedding 服务]
-        M[RAG 检索器]
+        I[agent-service Python gRPC :50051]
+        J[LangChain / LangGraph]
+        K[LLM / Embedding]
+    end
+
+    subgraph 消息中间件
+        L[Kafka]
+        M[Redis Pub/Sub]
+    end
+
+    subgraph 存储层
+        N[(MySQL)]
+        O[(MongoDB)]
+        P[(Elasticsearch)]
+        Q[(MinIO / OSS)]
+        R[(Qdrant)]
     end
 
     subgraph 内部组件
-        N[消息归档消费者]
-        O[定时总结 Task]
+        S[Kafka Archiver]
+        T[Hub TaskPool]
     end
 
     A -->|HTTPS/WSS| B
-    B -->|HTTP| C
-    B -->|WebSocket| D
+    A2 -->|HTTPS| B
+    B -->|HTTP/WS| C
+    B -->|HTTP| H
+    C --> D
+    D -->|聊天消息上行| L
+    D -->|同消息发布到 Redis Pub/Sub| M
+    L -->|批量消费归档| S
+    S --> N
+    S --> O
+    S --> P
+    M -->|跨节点/本节点扇出| D
+    D -->|本地转发| T
+    C --> G
+    G --> Q
     C --> E
-    D -->|消息上行| G
-    G -->|跨节点广播| D
-    G -->|持久化| N
-    N --> H
-    D --> I
     C --> F
-    C --> H
+    H --> F
     C --> I
-    M --> J
-    M --> L
-    K --> M
-    O --> K
+    I --> J
+    J --> R
+    J --> K
+    I --> E
+    C --> N
+    C --> O
+    C --> P
 ```
 
 ## 核心模块
 
 ### WebSocket Hub（`core/`）
 
-无锁协程模型：每个客户端连接生成独立的 Goroutine，通过 Channel 进行事件分发：
+Hub 按用户和房间两个维度分片，默认 `64` 个分片，可通过 `HUB_SHARD_COUNT` 调整。每个分片使用 `sync.RWMutex + map` 维护用户和房间映射，并通过分片级 Channel 串行处理转发和踢人事件，避免单把全局锁成为扇出瓶颈。
 
-- **Subscribe**: 客户端上线，注入 Hub 路由表
-- **Unsubscribe**: 客户端断开，清理所有房间引用
-- **ForwardMessage**: 跨节点广播（Redis Pub/Sub）或本地转发
-- **RoomAction**: 动态加入/离开/解散群聊
-- **Kick**: 强制踢出用户
+- **Register**：将连接写入用户分片，并订阅初始房间集合。
+- **Unregister**：先从用户分片和所有房间分片移除，再关闭 Send Channel，避免 `send on closed channel`。
+- **UpdateRooms / JoinRoom / LeaveRoom**：动态维护房间订阅关系。
+- **Publish**：将消息投递到房间对应分片的 `forward` Channel。
+- **Kick / CloseConnection**：按用户或连接 ID 强制断开连接。
 
-关键特性：
-- 分片锁（512 个 Mutex）降低数据竞争
-- `sync.Map` 管理在线用户和会话映射
-- Send channel 关闭前先摘除引用，杜绝 `send on closed channel` panic
+房间成员数小于 `100` 时，分片内同步遍历投递；达到或超过 `100` 时，改用 `internal/taskpool`（ANTS）异步扇出，防止单房间大群阻塞分片循环。慢客户端写入队列满时会被记录并主动摘除。
 
 ### 消息链路
 
+```text
+浏览器 WebSocket（JSON）
+  → backend ReadPump 解析并校验 ClientMsgID
+  → Kafka Producer 写入 im_chat_messages（protobuf）
+  → Kafka Archiver 批量消费（1000 条/500ms）
+      → MySQL/MongoDB 历史消息
+      → Elasticsearch 索引
+      → Redis 最新消息缓存
+  → Redis Pub/Sub 同时发布 im:broadcast:room:{room_id}
+  → 各节点 StartGlobalListener 解包 protobuf
+  → 本节点 Hub.Publish
+  → 目标房间 WebSocket 客户端
 ```
-客户端 → WebSocket → Kafka Producer → Kafka → 消息归档消费者 → MySQL
-                    ↓
-              Redis Pub/Sub → 本节点 Hub → 目标客户端 WebSocket
-```
+
+说明：
+
+- 浏览器到 backend 的 WebSocket 载荷保持 JSON，便于前端直接处理。
+- Kafka 消息 Value 和 Redis `im:broadcast:*` 载荷使用 protobuf，降低内部通信开销。
+- Kafka 按 `room_id` 哈希分区，保证同群消息顺序。
+- `ClientMsgID` 用于客户端幂等和防重。
 
 ### JWT 鉴权（`middleware/`）
 
-- Bearer Token 标准头或 URL Query 参数（兼容 WebSocket 握手）
-- HMAC-SHA256 签名，24 小时过期
-- 角色隔离：普通用户(0) / 超级管理员(1)
+- Bearer Token 标准头，或 WebSocket URL Query 参数。
+- HMAC-SHA256 签名，默认 24 小时过期。
+- 普通用户与超级管理员通过角色隔离；管理接口另经 `RequireAdmin` 与限流中间件。
 
-### LLM Agent（`agent/`）
+### 对象存储（`internal/storage`）
 
-群聊 AI 助手，支持三种触发模式：
+- 通过 `STORAGE_BACKEND=minio|oss` 选择 MinIO 或阿里云 OSS。
+- 后端只签发预签名上传/下载 URL，不代理文件字节流。
+- 前端完成直传后调用完成接口，再由消息体携带 `/api/v1/download/{object_key}`。
+- 本地磁盘不再承载正常文件链路。
+
+### LLM Agent（`agent-service`）
+
+Agent 管理仍由 Go 侧 `agent.AgentManager` / `agent.RoomAgent` 负责：加载已启用房间、监听 Redis 群消息、判断触发条件和冷却；LLM/RAG/tools 处理链委托给 Python `agent-service`。Go 侧通过 `internal/agentclient` 调用其 gRPC 接口，`agent/` 目录中的旧 RAG/LLM 实现仅保留兼容结构。
+
+```text
+Go backend AgentManager / RoomAgent（触发判断、冷却）
+  → gRPC agent-service :50051
+  → LangGraph 状态图
+  → RAG 检索（Qdrant）
+  → 构建提示词
+  → LLM / Embedding
+  → 调用 backend IMService get_messages
+  → 回复消息
+```
+
+触发模式：
 
 | 模式 | 说明 |
 |------|------|
@@ -103,33 +151,63 @@ graph TB
 | 全部消息 | 对每条消息都做出响应 |
 | 关键词 | 匹配预设关键词时触发 |
 
-Agent 架构：
-
-```
-消息到达 → 触发器判断 → RAG 检索（Qdrant）→ 构建 Prompt → LLM 调用 → 回复消息
-```
-
 ## 部署架构
 
-```
+```text
 docker compose up -d
 
-┌──────────────────────────────────────┐
-│  nginx      :80, :443               │
-│  backend    :8080 (API), :6060 (pprof)│
-│  mysql      :3306                    │
-│  redis      :6379                    │
-│  kafka      :9092 (KRaft 模式)       │
-│  qdrant     :6333                    │
-└──────────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│ nginx          :80, :443                        │
+│ backend        :8080 (HTTP API), :6060 (metrics)│
+│                :50052 (IMService gRPC)          │
+│                :50053 (AdminControlService gRPC)│
+│ admin-service  :8081 (HTTP API)                 │
+│ agent-service  :50051 (gRPC)                    │
+│ mysql          :3306                             │
+│ mongo          :27017                            │
+│ elasticsearch  :9200                             │
+│ redis          :6379                             │
+│ kafka          :9092 (KRaft)                     │
+│ qdrant         :6333 (HTTP), :6334 (gRPC)        │
+│ minio          :9000 (S3), :9001 (console)       │
+└────────────────────────────────────────────────┘
 ```
+
+网络地址集中在 `.env`，迁移云服务器时只需修改地址并重启容器。
 
 ## 性能基线
 
-| 场景 | 并发连接 | 消息吞吐 | 平均延迟 |
-|------|----------|----------|----------|
-| 500 人群聊 | 500 | 11.2 万条/秒 | 5.92ms |
-| 万人在线 | 10,000 | — | WS 建连 2.45ms |
-| 千人活跃加密 | 10,000 | 2.5 万条/秒 | HTTP P95 9.48ms |
+测试工具：k6；测试数据与脚本见 `perf3b/`、`perf4/`。
 
-测试工具：K6，配置见 `bench_ws.js`
+### HTTP 只读接口（N+1 修复后）
+
+| 场景 | VU | RPS | P50 | P95 | P99 | 错误率 |
+| --- | --- | --- | --- | --- | --- | --- |
+| my_rooms / messages / members | 100 | 460.60 | 189.49ms | 421.95ms | 506.78ms | 0% |
+
+该场景使用现成 JWT，未执行登录 bcrypt；DB 连接池 in_use 峰值 74、open 峰值 89，未耗尽。
+
+### WebSocket（Hub 64 分片后）
+
+建连爬坡：
+
+| 目标 VU | 服务端峰值在线 | 建连 P50 | 建连 P95 | 建连最大 |
+| --- | --- | --- | --- | --- |
+| 100 | 100 | 80.72ms | 88.12ms | 113.03ms |
+| 500 | 500 | 80.33ms | 88.46ms | 105.99ms |
+| 1000 | 938 | 80.64ms | 1.04s | 21.06s |
+
+群聊广播：
+
+| 房间规模 | 服务端峰值在线 | E2E 平均 | E2E P95 | 接收消息 |
+| --- | --- | --- | --- | --- |
+| 500 人 | 500 | 70.15ms | 99ms | 448133 条 |
+| 1000 人 | 949 | 54.60ms | 71ms | 1068884 条 |
+
+### 结论与边界
+
+- 100/500 VU 建连成功率 100%，P95 稳定在约 88ms。
+- 1000 VU 已接近当前单节点容量边界，峰值在线 938/1000；P50 仍约 80ms，但尾部达到 1.04s/21.06s。
+- 云监控显示 CPU 在该阶段达到 100%，是当前 1000 并发建连长尾的首要嫌疑。
+- 500/1000 人群广播时 Hub 任务池运行峰值 256、等待 0，Kafka lag 0，Redis 与 DB 未成为瓶颈。
+- 不建议把登录 bcrypt 放入高并发压测路径；压测应使用预生成 JWT，避免 CPU 被密码哈希占满。

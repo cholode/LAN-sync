@@ -7,7 +7,9 @@
 - `/metrics`：Prometheus 抓取端点
 - `/debug/pprof/`：Go pprof 性能分析端点
 
-指标代码统一放在 `internal/metrics`，业务模块只调用埋点函数。
+指标代码统一放在 `internal/metrics`，业务模块只调用埋点函数。当前 backend 的 Hub 使用 64 分片，并在房间成员数达到 100 时通过 `internal/taskpool`（ANTS）异步扇出；`Hub` 与任务池指标可直接反映该路径。
+
+最新压测中，500/1000 人群广播时 `im_hub_task_pool_running` 峰值 256、`im_hub_task_pool_waiting` 为 0，`im_kafka_consumer_lag` 全程为 0；完整结果见 `perf4/`。
 
 ## 2. 环境变量
 
@@ -18,6 +20,7 @@ METRICS_ENABLED=true
 METRICS_ADDR=0.0.0.0:6060
 METRICS_PATH=/metrics
 NODE_ID=lan-im-node-1
+HUB_SHARD_COUNT=64
 ```
 
 迁移到云服务器时，只需要修改 `.env` 中的网络地址：
@@ -25,6 +28,7 @@ NODE_ID=lan-im-node-1
 - `METRICS_ADDR` 建议保持 `0.0.0.0:6060`
 - 如果使用内网监控，可改为 `10.0.0.2:6060`
 - 多节点部署时，每个节点设置不同的 `NODE_ID`
+- `HUB_SHARD_COUNT` 控制 Hub 分片数，单机建议保持默认 `64`
 
 Docker Compose 已自动将上述变量注入 `backend` 服务，并在宿主机映射 `6060` 端口。
 
@@ -105,7 +109,7 @@ Docker Compose 已自动将上述变量注入 `backend` 服务，并在宿主机
 
 | 指标 | 类型 | 说明 |
 |---|---|---|
-| `im_agent_rooms_enabled` | Gauge | 启用 Agent 的房间数 |
+| `im_agent_rooms_enabled` | Gauge | 启用 Agent 的房间数（当前由 Go 侧 agentclient 管理 Python 服务运行时状态） |
 | `im_agent_inflight_requests` | Gauge | 处理中 Agent 请求数 |
 | `im_agent_messages_received_total` | Counter | Agent 收到消息数 |
 | `im_agent_messages_triggered_total` | Counter | Agent 触发回复数 |
@@ -145,5 +149,6 @@ scrape_configs:
 - `AGENT_GRPC_ADDR`：Agent gRPC 地址
 - `MINIO_ENDPOINT`：MinIO 地址
 - `MINIO_PUBLIC_ENDPOINT`：浏览器访问 MinIO 的地址
+- `STORAGE_BACKEND`：对象存储类型，`minio` 或 `oss`
 
 上传到云服务器后，只需修改 `.env` 中的对应地址，再重启 Docker Compose 即可。

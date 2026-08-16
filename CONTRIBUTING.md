@@ -4,9 +4,12 @@
 
 ## 技术栈
 
-- **后端**: Go 1.22+, Gin, WebSocket (gorilla/websocket), GORM, Kafka, Redis
+- **后端**: Go 1.26+, Gin, WebSocket (gorilla/websocket), GORM, gRPC/protobuf, Kafka, Redis
+- **并发**: ANTS taskpool（`internal/taskpool`）
+- **存储**: MySQL 8.0, MongoDB, Redis, Elasticsearch, Qdrant, MinIO/OSS
+- **AI 服务**: Python, LangChain, LangGraph, gRPC
 - **前端**: 原生 JavaScript ES Module + Vite
-- **基础设施**: Docker Compose, MySQL 8.0, Kafka (KRaft), Qdrant
+- **基础设施**: Docker Compose, Kafka (KRaft)
 
 ## 开发环境搭建
 
@@ -18,10 +21,15 @@ cd LAN-sync-communication-go-version
 cp .env.example .env
 
 # 启动依赖服务
-docker compose up -d db redis kafka qdrant
+docker compose up -d db redis kafka qdrant mongo elasticsearch minio
 
 # 运行后端
 go run main.go
+
+# 运行 Python Agent 服务（另一个终端）
+cd agent-service
+python -m pip install -r requirements.txt
+python -m app.main
 
 # 开发前端（另一个终端）
 cd frontend && npm install && npm run dev
@@ -32,6 +40,7 @@ cd frontend && npm install && npm run dev
 - 使用语义化提交信息：`feat:`, `fix:`, `docs:`, `test:`, `refactor:`
 - 一个 commit 只做一件事
 - PR 提交前确保 `go build ./...` 和 `go test ./...` 通过
+- 修改 `.proto` 后需要重新生成 protobuf 代码，并在 PR 中说明协议变化
 
 ## 代码规范
 
@@ -39,23 +48,37 @@ cd frontend && npm install && npm run dev
 - 遵循项目现有的目录结构和分层约定
 - 新增功能需要对应的单元测试
 - 不要在代码中硬编码密钥（使用环境变量）
+- 文档使用中文，文件统一以 UTF-8 编码保存
 
 ## 目录结构
 
 ```
-├── api/            # HTTP 接口处理层
-├── agent/          # LLM Agent 智能体
-│   ├── llm/        # LLM 客户端
-│   ├── rag/        # RAG 检索增强
-│   └── tool/       # Agent 工具注册
-├── cache/          # Redis 缓存层
-├── config/         # 基础设施配置（Redis, Kafka）
-├── core/           # WebSocket 核心引擎（Hub + Client）
-├── infrastructure/ # 数据库初始化
-├── internal/       # 内部组件（Kafka 生产者/消费者）
+├── api/             # HTTP 接口处理层
+├── admin-service/   # 独立的管理端 HTTP 服务
+├── agent/           # Go 侧 Agent 兼容结构与历史实现
+├── agent-service/   # Python LangChain/LangGraph Agent 服务
+├── cache/           # Redis 缓存层
+├── cmd/             # 命令行工具
+├── config/          # Redis/Kafka 等基础设施初始化
+├── core/            # WebSocket 核心引擎（Hub + Client）
+├── deploy/          # Nginx 与部署配置
+├── docs/            # 项目文档
+├── infrastructure/  # 数据库初始化
+├── internal/        # 内部组件
+│   ├── admin/       # 管理端业务逻辑
+│   ├── agentclient/ # Agent gRPC 客户端
+│   ├── archiver/    # Kafka 归档消费者
+│   ├── imservice/   # IMService gRPC 服务
+│   ├── metrics/     # Prometheus 指标
+│   ├── producer/    # Kafka 生产者
+│   ├── protocol/    # protobuf 消息封装
+│   ├── search/      # Elasticsearch 检索
+│   ├── storage/     # MinIO/OSS 对象存储
+│   └── taskpool/    # ANTS 协程池封装
 ├── middleware/      # HTTP 中间件（JWT 鉴权）
-├── models/         # 数据模型（GORM）
-├── pkg/            # 公共工具（JWT, 日志）
-├── repository/     # 数据访问层接口与实现
-└── frontend/       # 前端 SPA
+├── models/          # 数据模型（GORM）
+├── pkg/             # 公共工具（JWT、日志）
+├── proto/           # protobuf 定义
+├── repository/      # 数据访问层接口与实现
+└── frontend/        # 前端 SPA
 ```
