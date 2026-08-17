@@ -10,6 +10,8 @@ volumes:
   kafka_data:
   qdrant_data:
   minio_data:
+  prometheus_data:
+  grafana_data:
 
 services:
   # --- [1] 持久层：MySQL ---
@@ -312,6 +314,58 @@ services:
         condition: service_started
       backend:
         condition: service_started
+
+  # --- [5.7] 可观测性：Prometheus 指标采集与存储 ---
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: im-prometheus
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle
+    depends_on:
+      backend:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  # --- [5.8] 可观测性：Grafana 指标看板 ---
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: im-grafana
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
 
   # --- [6] 接入层：Nginx ---
   nginx:

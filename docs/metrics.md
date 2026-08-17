@@ -41,6 +41,23 @@ Docker Compose 已自动将上述变量注入 `backend` 服务，并在宿主机
 | `im_build_info` | Gauge | 服务构建信息 |
 | `im_uptime_seconds` | Gauge | 进程运行时长 |
 
+### Go 进程与运行时
+
+项目使用自定义 Prometheus Registry，并显式注册了官方 Go runtime 和 process collector。
+
+| 指标 | 类型 | 说明 |
+|---|---|---|
+| `process_cpu_seconds_total` | Counter | 进程累计使用的 CPU 秒数，可通过 `rate()` 计算 CPU 使用率 |
+| `process_resident_memory_bytes` | Gauge | 进程常驻物理内存（RSS） |
+| `process_virtual_memory_bytes` | Gauge | 进程虚拟内存大小 |
+| `process_open_fds` | Gauge | 进程当前打开的文件描述符数（平台支持时提供） |
+| `process_max_fds` | Gauge | 进程文件描述符上限（平台支持时提供） |
+| `go_goroutines` | Gauge | 当前 goroutine 数量 |
+| `go_memstats_heap_alloc_bytes` | Gauge | 当前已分配且仍在使用的堆内存 |
+| `go_memstats_heap_inuse_bytes` | Gauge | Go 堆正在使用的内存 |
+| `go_memstats_sys_bytes` | Gauge | Go runtime 向操作系统申请的总内存 |
+| `go_gc_duration_seconds` | Summary | GC 暂停耗时分布 |
+
 ### WebSocket
 
 | 指标 | 类型 | 说明 |

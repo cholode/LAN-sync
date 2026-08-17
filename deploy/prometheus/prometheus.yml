@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: lan-im-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - backend:6060
+        labels:
+          service: backend
+          project: lan-im-go

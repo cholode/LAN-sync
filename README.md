@@ -144,7 +144,66 @@ docker compose logs -f nginx
 docker compose logs -f agent-service
 ```
 
-### 6. 创建账号并设置超管
+### 6. Prometheus / Grafana 监控
+
+Docker Compose 已包含 Prometheus 和 Grafana。启动完整服务时会一并启动，也可以单独启动监控组件：
+
+```bash
+docker compose up -d prometheus grafana
+docker compose ps prometheus grafana
+```
+
+本机监控入口：
+
+| 入口 | 地址 | 说明 |
+| --- | --- | --- |
+| Backend Metrics | `http://127.0.0.1:6060/metrics` | Prometheus 原始指标，包含 CPU、内存、WebSocket、Hub、Kafka、Redis、数据库和 Agent 指标 |
+| Go pprof | `http://127.0.0.1:6060/debug/pprof/` | Go CPU、堆、goroutine 等性能诊断入口 |
+| Prometheus | `http://127.0.0.1:9090` | PromQL 查询和历史时序数据 |
+| Prometheus Targets | `http://127.0.0.1:9090/targets` | 检查 `lan-im-backend` 抓取目标是否为 `UP` |
+| Grafana | `http://127.0.0.1:3000` | 预置监控看板 |
+
+Prometheus 每 5 秒从 `backend:6060/metrics` 抓取一次指标，默认保留 15 天。Grafana 已自动配置 Prometheus 数据源。登录 Grafana 后进入：
+
+```text
+Dashboards -> LAN IM -> LAN IM 运行总览
+```
+
+预置看板包含 Backend CPU、RSS 内存、WebSocket 活跃连接、Kafka Consumer Lag、消息吞吐、Hub 任务池和 Agent P95 回复延迟。默认 Grafana 用户名和密码均为 `admin`，部署前应通过 `.env` 修改：
+
+```env
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=请替换为强密码
+GRAFANA_PORT=3000
+PROMETHEUS_PORT=9090
+PROMETHEUS_RETENTION=15d
+```
+
+常用 PromQL：
+
+```promql
+# Backend 单核 CPU 使用百分比
+rate(process_cpu_seconds_total{job="lan-im-backend"}[1m]) * 100
+
+# Backend RSS 物理内存（MiB）
+process_resident_memory_bytes{job="lan-im-backend"} / 1024 / 1024
+
+# 当前 WebSocket 在线连接
+sum(im_ws_connections_active)
+
+# Kafka 最大消费积压
+max(im_kafka_consumer_lag)
+```
+
+云服务器不应将 `3000`、`6060`、`9090` 直接暴露到公网。可通过安全组限制为办公 IP，或使用 SSH 隧道访问：
+
+```bash
+ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 user@服务器地址
+```
+
+更完整的指标说明见 `docs/metrics.md`。
+
+### 7. 创建账号并设置超管
 
 先访问 `http://你的公网IP/register` 注册一个普通账号，然后进入 MySQL 提升为超级管理员：
 
@@ -158,7 +217,7 @@ UPDATE users SET role = 1 WHERE username = '你的用户名';
 
 重新登录后访问 `http://你的公网IP/admin/dashboard` 即可进入管理后台。
 
-### 7. 云服务器安全组
+### 8. 云服务器安全组
 
 公网建议只开放：
 
@@ -169,12 +228,12 @@ UPDATE users SET role = 1 WHERE username = '你的用户名';
 以下端口不要对公网开放：
 
 ```text
-3306 6379 9092 9200 27017 6333 6334 8080 8081 6060 50051 50052 50053 9001
+3000 3306 6379 9090 9092 9200 27017 6333 6334 8080 8081 6060 50051 50052 50053 9001
 ```
 
 MinIO 控制台 `9001` 建议只允许办公 IP 或通过 SSH 隧道访问。
 
-### 8. HTTPS 说明
+### 9. HTTPS 说明
 
 当前 Nginx 默认只启用 HTTP，HTTPS 配置位于 `deploy/nginx/nginx.conf` 的注释块中。生产环境建议：
 
@@ -183,7 +242,7 @@ MinIO 控制台 `9001` 建议只允许办公 IP 或通过 SSH 隧道访问。
 3. 将证书挂载到 Nginx 容器。
 4. 开启 `443 ssl` 配置。
 
-### 9. 升级部署
+### 10. 升级部署
 
 ```bash
 cd ~/apps/lan-im
@@ -197,7 +256,7 @@ cd ..
 docker compose up -d --build
 ```
 
-### 10. 数据备份
+### 11. 数据备份
 
 主要数据保存在 Docker named volume 中，可先查看：
 

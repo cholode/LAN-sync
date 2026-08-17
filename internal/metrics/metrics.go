@@ -65,6 +65,12 @@ func errorLabel(err error) string {
 }
 
 func init() {
+	// 由于应用使用了自定义注册表，因此必须显式注册 Go 标准运行时和进程采集器。
+	// 这些采集器会暴露诸如 process_cpu_seconds_total、process_resident_memory_bytes、
+	// go_goroutines 以及 go_memstats_* 等指标。
+	register(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	register(prometheus.NewGoCollector())
+
 	buildInfo := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "im_build_info",
 		Help:        "IM 服务构建信息",

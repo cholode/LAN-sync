@@ -1,0 +1,99 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"expr": "rate(process_cpu_seconds_total{job=\"lan-im-backend\"}[5m]) * 100", "legendFormat": "Backend CPU", "refId": "A"}],
+      "title": "Backend CPU 使用率",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"expr": "process_resident_memory_bytes{job=\"lan-im-backend\"}", "legendFormat": "RSS", "refId": "A"}],
+      "title": "Backend 内存",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"expr": "sum(im_ws_connections_active)", "legendFormat": "在线连接", "refId": "A"}],
+      "title": "WebSocket 活跃连接",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"expr": "max(im_kafka_consumer_lag)", "legendFormat": "最大 Lag", "refId": "A"}],
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "sum(rate(im_ws_read_messages_total[1m]))", "legendFormat": "读取消息/s", "refId": "A"},
+        {"expr": "sum(rate(im_ws_write_messages_total[1m]))", "legendFormat": "写出消息/s", "refId": "B"},
+        {"expr": "sum(rate(im_hub_dispatched_messages_total[1m]))", "legendFormat": "Hub 分发/s", "refId": "C"}
+      ],
+      "title": "消息吞吐",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "im_hub_task_pool_running", "legendFormat": "运行中", "refId": "A"},
+        {"expr": "im_hub_task_pool_waiting", "legendFormat": "等待中", "refId": "B"},
+        {"expr": "im_hub_task_pool_capacity", "legendFormat": "容量", "refId": "C"}
+      ],
+      "title": "Hub 任务池",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, model) (rate(im_agent_reply_latency_seconds_bucket[5m])))", "legendFormat": "{{model}} P95", "refId": "A"}],
+      "title": "Agent 回复延迟 P95",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["lan-im", "websocket", "kafka", "agent"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "LAN IM 运行总览",
+  "uid": "lan-im-overview",
+  "version": 1,
+  "weekStart": ""
+}
