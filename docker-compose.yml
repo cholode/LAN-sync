@@ -337,7 +337,12 @@ services:
       - lan-im-network
     ports:
       - "80:80"
-      - "443:443"
+    environment:
+      # 只替换以下部署变量，避免误替换模板中的 $host、$uri 等 Nginx 变量。
+      - NGINX_ENVSUBST_FILTER=^(NGINX_SERVER_NAME|BACKEND_HOST|BACKEND_PORT)$$
+      - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-_}
+      - BACKEND_HOST=${NGINX_BACKEND_HOST:-backend}
+      - BACKEND_PORT=${NGINX_BACKEND_PORT:-8080}
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
     ulimits:

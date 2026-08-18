@@ -23,3 +23,15 @@ perf/
 perf3/
 perf3b/
 perf5/
+
+# ============ perf 压测产物与数据（token、原始采样、结果文件，不上传） ============
+# 各 perf* 目录下的生成数据：用户 token、房间清单、summary 结果、指标原始采样、k6 日志
+perf*/users.json
+perf*/local_users.json
+perf*/rooms.json
+perf*/agent_rooms.json
+perf*/metrics/
+perf*/*.json
+perf*/*.txt
+perf*/*.tsv
+perf*/*.log

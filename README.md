@@ -2,7 +2,7 @@
 
 ## 当前架构概览
 
-- 接入层：Nginx 提供 HTTP/HTTPS 与 WebSocket 反向代理。
+- 接入层：Nginx 提供 HTTP 与 WebSocket 反向代理；生产 HTTPS 建议由云负载均衡、Ingress 或独立 TLS 网关终止。
 - 业务层：Go `backend` 提供用户端与管理端 REST API、WebSocket Hub 和 `IMService` gRPC。
 - 管理模块：管理业务保留独立模块边界，当前与 `backend` 合并部署；未来可通过 `cmd/admin` 和 `AdminControlService` gRPC 再次拆分。
 - AI 层：Python `agent-service` 基于 LangChain + LangGraph，通过 gRPC 对外服务。
@@ -112,6 +112,9 @@ vim .env
 | `NODE_ID` | 当前节点标识，单机可保持默认值 |
 | `STORAGE_BACKEND` | 对象存储类型，`minio` 或 `oss` |
 | `AGENT_GRPC_ADDR` | Python Agent 服务 gRPC 地址 |
+| `NGINX_SERVER_NAME` | Nginx 接收的域名，本地/局域网可使用 `_` |
+| `NGINX_BACKEND_HOST` | Nginx 上游服务名，Docker Compose 默认使用 `backend` |
+| `NGINX_BACKEND_PORT` | Nginx 上游端口，默认 `8080` |
 
 注意：`MINIO_PUBLIC_ENDPOINT` 不能填 `localhost` 或 `127.0.0.1`，否则用户浏览器无法直接上传文件。
 
@@ -132,6 +135,7 @@ cd ..
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
+docker compose exec nginx nginx -t
 ```
 
 查看日志：
@@ -220,8 +224,9 @@ UPDATE users SET role = 1 WHERE username = '你的用户名';
 公网建议只开放：
 
 - `80`：HTTP 入口
-- `443`：HTTPS 入口
 - `9000`：MinIO 文件直传，仅在使用预签名 URL 直传时需要
+
+如果由云负载均衡或独立 TLS 网关终止 HTTPS，再按其部署方式开放 `443`；当前 Compose 中的 Nginx 默认只监听 `80`。
 
 以下端口不要对公网开放：
 
@@ -233,12 +238,35 @@ MinIO 控制台 `9001` 建议只允许办公 IP 或通过 SSH 隧道访问。
 
 ### 9. HTTPS 说明
 
-当前 Nginx 默认只启用 HTTP，HTTPS 配置位于 `deploy/nginx/nginx.conf` 的注释块中。生产环境建议：
+当前 Nginx 默认只启用 HTTP，并通过启动模板读取 `.env` 中的域名和上游地址，不在镜像中生成或保存固定自签证书。生产环境建议由云负载均衡、Ingress 或独立 TLS 配置终止 HTTPS：
 
 1. 将域名解析到服务器公网 IP。
 2. 使用 Certbot 申请证书。
-3. 将证书挂载到 Nginx 容器。
-4. 开启 `443 ssl` 配置。
+3. 将证书保存在专用密钥服务或只读挂载目录中，不要构建进镜像。
+4. 将 HTTPS 请求反向代理到本项目 Nginx 的 HTTP 入口。
+
+### 9.1 高并发 WebSocket 接入参数
+
+Nginx 已配置 `worker_connections 65535`、`worker_rlimit_nofile 65535` 和 `listen ... backlog=65535`。这些参数需要同时满足宿主机和容器限制；仅修改 `worker_connections` 不代表系统一定能接收同样数量的连接。
+
+在 Linux 云服务器上部署前，建议确认并持久化监听队列上限：
+
+```bash
+sysctl net.core.somaxconn
+sudo sysctl -w net.core.somaxconn=65535
+echo 'net.core.somaxconn=65535' | sudo tee /etc/sysctl.d/99-lan-im.conf
+sudo sysctl --system
+```
+
+检查实际生效值：
+
+```bash
+docker compose exec nginx nginx -T | grep -E 'worker_rlimit_nofile|worker_connections|listen .*backlog'
+docker compose exec nginx sh -c 'ulimit -n; cat /proc/1/limits | grep -i "open files"'
+docker inspect im-nginx --format '{{json .HostConfig.Ulimits}}'
+```
+
+如果压测仍在约 900～1000 连接处出现 20 秒级失败，应分别执行“直连 backend:8080”和“经 Nginx:80”的 A/B 测试，并检查云安全组、宿主机 `somaxconn`、SYN backlog 和 NAT/连接跟踪限制。`perf6` 中后端 CPU、DB、Redis、Kafka 和进程 fd 均未达到瓶颈，因此不能把该现象归因于 Go 接口或 Hub 任务池。
 
 ### 10. 升级部署
 
