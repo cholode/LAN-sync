@@ -3,17 +3,16 @@
 ## 当前架构概览
 
 - 接入层：Nginx 提供 HTTP/HTTPS 与 WebSocket 反向代理。
-- 业务层：Go `backend` 提供 REST API、WebSocket Hub、`IMService` gRPC 与 `AdminControlService` gRPC。
-- 管理端：`admin-service` 提供超级管理员后台 REST API。
+- 业务层：Go `backend` 提供用户端与管理端 REST API、WebSocket Hub 和 `IMService` gRPC。
+- 管理模块：管理业务保留独立模块边界，当前与 `backend` 合并部署；未来可通过 `cmd/admin` 和 `AdminControlService` gRPC 再次拆分。
 - AI 层：Python `agent-service` 基于 LangChain + LangGraph，通过 gRPC 对外服务。
 - 存储层：MySQL/MongoDB 存业务与消息，Redis 做在线状态/缓存/Pub-Sub，Elasticsearch 做消息检索，Qdrant 做向量检索，MinIO/OSS 做对象存储。
 
 ### 容器通信图
 nginx -> backend：HTTP REST + WebSocket，聊天前端入口；浏览器 WebSocket 消息载荷为 JSON。
-nginx -> admin-service：HTTP JSON，管理后台浏览器入口。
+nginx -> backend：`/api/v1/admin/*` 管理 API，与普通 API 共用容器但保留独立鉴权和限流路由组。
 backend -> agent-service：gRPC/protobuf，调用 Python 智能体服务。
 agent-service -> backend：gRPC/protobuf，调用 IMService 的 get_messages 等工具。
-admin-service -> backend：gRPC/protobuf，调用 AdminControlService 执行控制指令。
 backend -> MySQL：原生 MySQL 协议
 backend -> Redis：原生 RESP；im:broadcast:* 消息载荷已使用 protobuf。
 backend -> Kafka：原生 Kafka 协议；聊天消息 Value 已使用 protobuf。
@@ -22,7 +21,7 @@ backend -> Elasticsearch：HTTP JSON，ES 原生 API
 backend -> MinIO/OSS：S3 兼容 HTTP 协议
 backend -> Qdrant：Qdrant gRPC/protobuf
 agent-service -> Redis/Qdrant：原生协议
-admin-service -> MySQL/Redis/Mongo/Qdrant/MinIO：基础设施原生协议
+backend 管理模块 -> MySQL/Redis/Mongo/Qdrant/MinIO：基础设施原生协议
 
 ## 压测基线
 
@@ -139,7 +138,6 @@ docker compose ps
 
 ```bash
 docker compose logs -f backend
-docker compose logs -f admin-service
 docker compose logs -f nginx
 docker compose logs -f agent-service
 ```
@@ -228,7 +226,7 @@ UPDATE users SET role = 1 WHERE username = '你的用户名';
 以下端口不要对公网开放：
 
 ```text
-3000 3306 6379 9090 9092 9200 27017 6333 6334 8080 8081 6060 50051 50052 50053 9001
+3000 3306 6379 9090 9092 9200 27017 6333 6334 8080 6060 50051 50052 50053 9001
 ```
 
 MinIO 控制台 `9001` 建议只允许办公 IP 或通过 SSH 隧道访问。

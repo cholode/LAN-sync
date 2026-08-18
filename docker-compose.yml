@@ -157,6 +157,7 @@ services:
       - ES_INDEX_MESSAGES=${ES_INDEX_MESSAGES:-lan-im-messages}
       - QDRANT_HOST=qdrant
       - AGENT_GRPC_ADDR=agent-service:50051
+      - ADMIN_CONTROL_GRPC_ENABLED=${ADMIN_CONTROL_GRPC_ENABLED:-false}
       - ADMIN_CONTROL_GRPC_ADDR=0.0.0.0:50053
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
@@ -202,48 +203,6 @@ services:
       nofile:
         soft: 65535
         hard: 65535
-
-  # --- [4.5] 管理端服务：超级管理员后台 ---
-  admin-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.admin
-    container_name: im-admin
-    restart: unless-stopped
-    networks:
-      - lan-im-network
-    ports:
-      - "${ADMIN_HTTP_PORT:-8081}:8081"
-    environment:
-      - ADMIN_HTTP_PORT=8081
-      - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
-      - REDIS_ADDR=redis:6379
-      - MESSAGE_STORE=${MESSAGE_STORE:-mysql}
-      - MONGO_URI=mongodb://mongo:27017
-      - MONGO_DB=${MONGO_DB:-lan_im}
-      - QDRANT_HOST=qdrant
-      - JWT_SECRET=${JWT_SECRET}
-      - ADMIN_CONTROL_GRPC_ADDR=backend:50053
-      - ADMIN_CONTROL_TOKEN=${ADMIN_CONTROL_TOKEN:-change-me-admin-token}
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
-      - MINIO_BUCKET=${MINIO_BUCKET:-lan-im-files}
-      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
-    depends_on:
-      backend:
-        condition: service_started
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      mongo:
-        condition: service_healthy
-      qdrant:
-        condition: service_started
-      minio:
-        condition: service_healthy
 
   # --- [5] 向量数据库：Qdrant ---
   qdrant:

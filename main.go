@@ -4,12 +4,12 @@ import (
 	"context"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	adminapi "lan-im-go/admin-service/api"
 	"lan-im-go/agent"
 	"lan-im-go/api"
 	"lan-im-go/config"
 	"lan-im-go/core"
 	"lan-im-go/infrastructure"
-	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/internal/admincontrol"
 	"lan-im-go/internal/agentclient"
 	"lan-im-go/internal/archiver"
@@ -113,9 +113,6 @@ func main() {
 	hub := core.NewHub()
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
-	adminAuditService := adminservice.NewAuditService(infrastructure.DB)
-	adminErrorService := adminservice.NewErrorCenterService(infrastructure.DB)
-	api.InitAdminFileService(adminservice.NewFileService(infrastructure.DB, api.Storage, adminAuditService))
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// ================================
@@ -149,16 +146,29 @@ func main() {
 		Hub:          hub,
 		AgentManager: agentMgr,
 	}
-	adminControlAddr := os.Getenv("ADMIN_CONTROL_GRPC_ADDR")
-	if adminControlAddr == "" {
-		adminControlAddr = "0.0.0.0:50053"
-	}
-	adminControlServer := admincontrol.NewServer(localAdminRuntime)
-	go func() {
-		if err := adminControlServer.Start(ctx, adminControlAddr, os.Getenv("ADMIN_CONTROL_TOKEN")); err != nil {
-			pkg.Fatalf("[致命错误] AdminControl gRPC 服务启动失败: %v", err)
+	// 独立管理端重新拆分时再开启远程控制面；合并部署默认走本地调用。
+	if strings.EqualFold(os.Getenv("ADMIN_CONTROL_GRPC_ENABLED"), "true") {
+		adminControlAddr := os.Getenv("ADMIN_CONTROL_GRPC_ADDR")
+		if adminControlAddr == "" {
+			adminControlAddr = "0.0.0.0:50053"
 		}
-	}()
+		adminControlServer := admincontrol.NewServer(localAdminRuntime)
+		go func() {
+			if err := adminControlServer.Start(ctx, adminControlAddr, os.Getenv("ADMIN_CONTROL_TOKEN")); err != nil {
+				pkg.Fatalf("[致命错误] AdminControl gRPC 服务启动失败: %v", err)
+			}
+		}()
+	}
+
+	adminModule := adminapi.NewModule(adminapi.ModuleDependencies{
+		DB:                infrastructure.DB,
+		Redis:             config.RedisClient,
+		MessageCollection: infrastructure.MessageCollection,
+		MessageStore:      os.Getenv("MESSAGE_STORE"),
+		Storage:           api.Storage,
+		Runtime:           localAdminRuntime,
+	})
+	api.InitAdminFileService(adminModule.FileService)
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
@@ -167,7 +177,7 @@ func main() {
 
 	r := gin.New()
 	r.Use(middleware.RequestID())
-	r.Use(middleware.RecoveryWithErrorRecorder(adminErrorService))
+	r.Use(middleware.RecoveryWithErrorRecorder(adminModule.ErrorService))
 	r.Use(func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
@@ -216,6 +226,8 @@ func main() {
 		// Agent 管理路由
 		api.RegisterAgentRoutes(authorized, agentMgr, infrastructure.DB)
 	}
+
+	adminModule.RegisterRoutes(r)
 
 	// ================================
 	// 静态文件服务 - 前端 SPA

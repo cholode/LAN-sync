@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -230,6 +231,64 @@ func (r *mongoMessageRepo) CountMessagesAfterID(roomID int64, sinceID int64) (in
 		filter["_id"] = bson.M{"$gt": sinceID}
 	}
 	return r.collection.CountDocuments(ctx, filter)
+}
+
+func (r *mongoMessageRepo) SearchMessages(params MessageSearchParams) ([]*models.Message, int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := notDeletedFilter()
+	filter["room_id"] = params.RoomID
+	if params.Keyword != "" {
+		filter["content"] = bson.Regex{Pattern: regexp.QuoteMeta(params.Keyword), Options: "i"}
+	}
+	if params.SenderID > 0 {
+		filter["sender_id"] = params.SenderID
+	}
+	if !params.Start.IsZero() || !params.End.IsZero() {
+		createdAt := bson.M{}
+		if !params.Start.IsZero() {
+			createdAt["$gte"] = params.Start
+		}
+		if !params.End.IsZero() {
+			createdAt["$lt"] = params.End
+		}
+		filter["created_at"] = createdAt
+	}
+
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	limit := params.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	offset := params.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}, {Key: "_id", Value: -1}}).
+		SetSkip(int64(offset)).
+		SetLimit(int64(limit))
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []models.MessageDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, 0, err
+	}
+	messages := make([]*models.Message, 0, len(docs))
+	for i := range docs {
+		if msg := docs[i].ToMessage(); msg != nil {
+			messages = append(messages, msg)
+		}
+	}
+	return messages, total, nil
 }
 
 var _ MessageRepository = (*mongoMessageRepo)(nil)

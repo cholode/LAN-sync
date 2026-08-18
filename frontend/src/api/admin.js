@@ -245,6 +245,7 @@ export const adminApi = {
   async user(id) {
     return normalizeUser(await http.get(`/admin/users/${id}`))
   },
+  userAction: (id, action) => http.post(`/admin/users/${id}/action`, { action }),
   deleteUser: (id) => http.delete(`/admin/users/${id}`),
 
   async rooms(params = {}) {
@@ -256,6 +257,10 @@ export const adminApi = {
   async room(id) {
     return normalizeRoom(await http.get(`/admin/rooms/${id}`))
   },
+  roomAction: (id, action, targetUserId = 0) => http.post(`/admin/rooms/${id}/action`, {
+    action,
+    target_user_id: Number(targetUserId) || 0,
+  }),
   deleteRoom: (id) => http.delete(`/admin/rooms/${id}`),
 
   async moderation(params = {}) {
@@ -319,6 +324,28 @@ export const adminApi = {
       similarity_threshold: cfg.rag_similarity_threshold ?? cfg.similarity_threshold ?? 0.7,
     }
   },
+  agentConfigHistory: (params = {}) => http.get(`/admin/agent-config/history${query({ page: 1, page_size: 20, ...params })}`),
+  rollbackAgentConfig: () => http.post('/admin/agent-config/rollback', {}),
+  ragQueries: (params = {}) => http.get(`/admin/rag/queries${query({ page: 1, page_size: 20, ...params })}`),
+
+  connections: (params = {}) => http.get(`/admin/connections${query({ keyword: params.q || params.keyword })}`),
+  closeConnection: (connectionId) => http.post('/admin/connections/close', { connection_id: connectionId }),
+  forceOffline: (userId) => http.post('/admin/connections/force-offline', { user_id: Number(userId) }),
+
+  files: (params = {}) => http.get(`/admin/files${query({ page: 1, page_size: 100, ...params, keyword: params.q || params.keyword })}`),
+  file: (id) => http.get(`/admin/files/${id}`),
+  fileDownload: (id) => http.get(`/admin/files/${id}/download`),
+  deleteFile: (id) => http.delete(`/admin/files/${id}`),
+  scanFiles: () => http.get('/admin/files/scan'),
+  cleanupFiles: () => http.post('/admin/files/cleanup', {}),
+
+  errors: (params = {}) => http.get(`/admin/errors${query({ page: 1, page_size: 100, ...params })}`),
+  resolveError: (id) => http.post(`/admin/errors/${id}/resolve`, {}),
+  alerts: (params = {}) => http.get(`/admin/alerts${query({ page: 1, page_size: 100, ...params })}`),
+  unresolvedAlertCount: () => http.get('/admin/alerts/unresolved-count'),
+  evaluateAlerts: () => http.post('/admin/alerts/evaluate', {}),
+  resolveAlert: (id) => http.post(`/admin/alerts/${id}/resolve`, {}),
+  toolCalls: (params = {}) => http.get(`/admin/tool-calls${query({ page: 1, page_size: 100, ...params })}`),
 
   async systemOverview() {
     const [runtimeRes, healthRes] = await Promise.allSettled([

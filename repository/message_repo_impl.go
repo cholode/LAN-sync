@@ -93,6 +93,41 @@ func (r *messageRepoImpl) CountMessagesAfterID(roomID int64, sinceID int64) (int
 	return count, err
 }
 
+func (r *messageRepoImpl) SearchMessages(params MessageSearchParams) ([]*models.Message, int64, error) {
+	query := r.db.Model(&models.Message{}).Where("room_id = ?", params.RoomID)
+	if params.Keyword != "" {
+		// LOCATE treats %, _ and backslashes as plain user input instead of LIKE wildcards.
+		query = query.Where("LOCATE(?, content) > 0", params.Keyword)
+	}
+	if params.SenderID > 0 {
+		query = query.Where("sender_id = ?", params.SenderID)
+	}
+	if !params.Start.IsZero() {
+		query = query.Where("created_at >= ?", params.Start)
+	}
+	if !params.End.IsZero() {
+		query = query.Where("created_at < ?", params.End)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	limit := params.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	offset := params.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var messages []*models.Message
+	err := query.Order("created_at DESC, id DESC").Offset(offset).Limit(limit).Find(&messages).Error
+	return messages, total, err
+}
+
 func (r *messageRepoImpl) SoftDeleteUserMessagesInRoom(roomID int64, userID int64) error {
 	// 采用软删除而非物理删除：
 	// 1. 保留数据记录，满足数据追溯需求

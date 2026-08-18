@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"lan-im-go/internal/search"
+	"lan-im-go/pkg"
 	"lan-im-go/repository"
 )
 
@@ -16,11 +17,6 @@ import (
 // 路由: GET /api/v1/rooms/:id/messages/search?q=keyword&from=0&size=20
 func SearchMessages() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !search.Enabled() {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Elasticsearch search is not enabled"})
-			return
-		}
-
 		roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
@@ -67,12 +63,37 @@ func SearchMessages() gin.HandlerFunc {
 			params.Size = 20
 		}
 
-		result, err := search.SearchMessages(c.Request.Context(), roomID, params)
+		if search.Enabled() {
+			result, searchErr := search.SearchMessages(c.Request.Context(), roomID, params)
+			if searchErr == nil && result.Total > 0 {
+				c.JSON(http.StatusOK, result)
+				return
+			}
+			if searchErr != nil {
+				pkg.Warnf("[Search] Elasticsearch query failed, falling back to message store: %v", searchErr)
+			}
+		}
+
+		messages, total, err := repository.Message.SearchMessages(repository.MessageSearchParams{
+			RoomID: roomID, Keyword: keyword, SenderID: params.SenderID,
+			Start: params.Start, End: params.End, Offset: params.From, Limit: params.Size,
+		})
 		if err != nil {
+			pkg.Warnf("[Search] message store fallback failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "search failed"})
 			return
 		}
-
-		c.JSON(http.StatusOK, result)
+		hits := make([]search.MessageHit, 0, len(messages))
+		for _, message := range messages {
+			if message == nil {
+				continue
+			}
+			hits = append(hits, search.MessageHit{
+				ID: message.ID, RoomID: message.RoomID, SenderID: message.SenderID,
+				ClientMsgID: message.ClientMsgID, Type: message.Type,
+				Content: message.Content, CreatedAt: message.CreatedAt,
+			})
+		}
+		c.JSON(http.StatusOK, &search.SearchResult{Total: total, Hits: hits})
 	}
 }

@@ -11,7 +11,6 @@ import (
 	adminapi "lan-im-go/admin-service/api"
 	"lan-im-go/config"
 	"lan-im-go/infrastructure"
-	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/internal/admincontrol"
 	"lan-im-go/middleware"
 	"lan-im-go/pkg"
@@ -48,41 +47,18 @@ func main() {
 		pkg.Fatalf("创建 AdminControl gRPC 客户端失败: %v", err)
 	}
 	defer runtimeClient.Close()
-	adminapi.InitRuntimeController(runtimeClient)
-
-	adminAuditService := adminservice.NewAuditService(infrastructure.DB)
-	adminMessageStore := adminservice.NewMessageStatsStore(infrastructure.DB, infrastructure.MessageCollection, os.Getenv("MESSAGE_STORE"))
-	ragService := adminservice.NewRAGService(infrastructure.DB)
-	moderationService := adminservice.NewModerationService(infrastructure.DB, adminAuditService)
-	adminHealthService := adminservice.NewHealthService(infrastructure.DB, config.RedisClient, adminapi.Storage, runtimeClient)
-	dashboardService := adminservice.NewDashboardService(
-		infrastructure.DB,
-		infrastructure.MessageCollection,
-		os.Getenv("MESSAGE_STORE"),
-		runtimeClient,
-		moderationService,
-		ragService,
-		adminHealthService,
-	)
-	adminErrorService := adminservice.NewErrorCenterService(infrastructure.DB)
-
-	adminapi.InitAdminDashboardService(dashboardService)
-	adminapi.InitAdminRAGService(ragService)
-	adminapi.InitAdminModerationService(moderationService)
-	adminapi.InitAdminHealthService(adminHealthService)
-	adminapi.InitAdminUserService(adminservice.NewUserService(infrastructure.DB, adminMessageStore, runtimeClient, adminAuditService))
-	adminapi.InitAdminConnectionService(adminservice.NewConnectionService(runtimeClient, adminAuditService))
-	adminapi.InitAdminFileServiceVar(adminservice.NewFileService(infrastructure.DB, adminapi.Storage, adminAuditService))
-	adminapi.InitAdminAgentConfigService(adminservice.NewAgentConfigService(infrastructure.DB, adminAuditService))
-	adminapi.InitAdminToolCallService(adminservice.NewToolCallService(infrastructure.DB))
-	adminapi.InitAdminErrorService(adminErrorService)
-	adminapi.InitAdminAuditService(adminAuditService)
-	adminapi.InitAdminAlertService(adminservice.NewAlertService(infrastructure.DB, adminHealthService, runtimeClient))
-	adminapi.InitAdminRoomService(adminservice.NewRoomService(infrastructure.DB, adminMessageStore, runtimeClient, adminAuditService))
+	adminModule := adminapi.NewModule(adminapi.ModuleDependencies{
+		DB:                infrastructure.DB,
+		Redis:             config.RedisClient,
+		MessageCollection: infrastructure.MessageCollection,
+		MessageStore:      os.Getenv("MESSAGE_STORE"),
+		Storage:           adminapi.Storage,
+		Runtime:           runtimeClient,
+	})
 
 	router := gin.New()
 	router.Use(middleware.RequestID())
-	router.Use(middleware.RecoveryWithErrorRecorder(adminErrorService))
+	router.Use(middleware.RecoveryWithErrorRecorder(adminModule.ErrorService))
 	router.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -92,16 +68,7 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	admin := router.Group("/api/v1/admin")
-	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin(), middleware.AdminRateLimit(10, 30))
-	adminapi.RegisterAdminRoutes(admin)
-
-	router.GET("/admin", func(c *gin.Context) {
-		c.File("./admin-service/web/dist/admin.html")
-	})
-	router.GET("/admin/*path", func(c *gin.Context) {
-		c.File("./admin-service/web/dist/admin.html")
-	})
+	adminModule.RegisterRoutes(router)
 
 	port := os.Getenv("ADMIN_HTTP_PORT")
 	if port == "" {

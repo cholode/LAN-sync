@@ -94,7 +94,7 @@ func Enabled() bool {
 func Init(ctx context.Context) error {
 	enabled = strings.EqualFold(os.Getenv("ES_ENABLED"), "true")
 	if !enabled {
-		pkg.Infoln("[Elasticsearch] disabled, message search will return 503")
+		pkg.Infoln("[Elasticsearch] disabled, message search will use the primary message store")
 		return nil
 	}
 

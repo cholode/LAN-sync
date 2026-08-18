@@ -18,11 +18,11 @@ var (
 )
 
 // Init 初始化全局协程池，应在 main 中尽早调用
-// workerSize: 工作协程数，0 表示使用默认值（CPU 核数的 2 倍）
+// workerSize: 工作协程数，0 表示使用默认值
 func Init(workerSize int) {
 	globalPoolOnce.Do(func() {
 		if workerSize <= 0 {
-			workerSize = 256
+			workerSize = 512
 		}
 
 		opts := []ants.Option{

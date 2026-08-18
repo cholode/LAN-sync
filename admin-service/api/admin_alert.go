@@ -52,20 +52,20 @@ func AdminAlertEvaluate(c *gin.Context) {
 	items, err := adminAlertService.Evaluate(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "告警评估失败"})
-		if adminAuditServiceVar != nil {
-			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
-				AdminUserID:   c.GetInt64("user_id"),
-				AdminUsername: c.GetString("admin_username"),
-				Action:        "alert.evaluate",
-				TargetType:    "alert",
-				TargetID:      "all",
-				RequestID:     c.GetString("request_id"),
-				RemoteIP:      c.ClientIP(),
-				UserAgent:     c.Request.UserAgent(),
-				Result:        "success",
-			})
-		}
 		return
+	}
+	if adminAuditServiceVar != nil {
+		_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
+			AdminUserID:   c.GetInt64("user_id"),
+			AdminUsername: c.GetString("admin_username"),
+			Action:        "alert.evaluate",
+			TargetType:    "alert",
+			TargetID:      "all",
+			RequestID:     c.GetString("request_id"),
+			RemoteIP:      c.ClientIP(),
+			UserAgent:     c.Request.UserAgent(),
+			Result:        "success",
+		})
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
@@ -84,19 +84,19 @@ func AdminAlertResolve(c *gin.Context) {
 	if err := adminAlertService.Resolve(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "处理告警失败"})
 		return
-		if adminAuditServiceVar != nil {
-			_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
-				AdminUserID:   c.GetInt64("user_id"),
-				AdminUsername: c.GetString("admin_username"),
-				Action:        "alert.resolve",
-				TargetType:    "alert",
-				TargetID:      strconv.FormatInt(id, 10),
-				RequestID:     c.GetString("request_id"),
-				RemoteIP:      c.ClientIP(),
-				UserAgent:     c.Request.UserAgent(),
-				Result:        "success",
-			})
-		}
+	}
+	if adminAuditServiceVar != nil {
+		_ = adminAuditServiceVar.Log(c.Request.Context(), adminservice.AuditEntry{
+			AdminUserID:   c.GetInt64("user_id"),
+			AdminUsername: c.GetString("admin_username"),
+			Action:        "alert.resolve",
+			TargetType:    "alert",
+			TargetID:      strconv.FormatInt(id, 10),
+			RequestID:     c.GetString("request_id"),
+			RemoteIP:      c.ClientIP(),
+			UserAgent:     c.Request.UserAgent(),
+			Result:        "success",
+		})
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "已标记为已处理"})
 }
