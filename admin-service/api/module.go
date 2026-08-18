@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/qdrant/go-client/qdrant"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gorm.io/gorm"
 
@@ -21,6 +22,7 @@ type ModuleDependencies struct {
 	MessageStore      string
 	Storage           storage.Provider
 	Runtime           adminservice.RuntimeController
+	QdrantClient      *qdrant.Client
 }
 
 // Module is the deployable boundary of the admin control plane.
@@ -43,9 +45,9 @@ func NewModule(deps ModuleDependencies) *Module {
 	auditService := adminservice.NewAuditService(deps.DB)
 	errorService := adminservice.NewErrorCenterService(deps.DB)
 	messageStats := adminservice.NewMessageStatsStore(deps.DB, deps.MessageCollection, deps.MessageStore)
-	ragService := adminservice.NewRAGService(deps.DB)
+	ragService := adminservice.NewRAGService(deps.DB, deps.QdrantClient)
 	moderationService := adminservice.NewModerationService(deps.DB, auditService)
-	healthService := adminservice.NewHealthService(deps.DB, deps.Redis, provider, deps.Runtime)
+	healthService := adminservice.NewHealthService(deps.DB, deps.Redis, provider, deps.Runtime, deps.QdrantClient)
 	dashboardService := adminservice.NewDashboardService(
 		deps.DB,
 		deps.MessageCollection,

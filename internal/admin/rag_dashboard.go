@@ -2,36 +2,29 @@ package admin
 
 import (
 	"context"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/qdrant/go-client/qdrant"
 	"gorm.io/gorm"
 
+	"lan-im-go/internal/metrics"
 	"lan-im-go/models"
 )
 
 // RAGService 提供 RAG/Qdrant 运行看板数据。
 type RAGService struct {
-	db         *gorm.DB
-	qdrantHost string
-	qdrantPort int
+	db     *gorm.DB
+	qdrant *qdrant.Client
 }
 
 // NewRAGService 创建 RAG 看板服务。
-func NewRAGService(db *gorm.DB) *RAGService {
-	port := 6334
-	if raw := os.Getenv("QDRANT_PORT"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
-			port = parsed
-		}
+
+func NewRAGService(db *gorm.DB, qdrantClients ...*qdrant.Client) *RAGService {
+	var qdrantClient *qdrant.Client
+	if len(qdrantClients) > 0 {
+		qdrantClient = qdrantClients[0]
 	}
-	host := os.Getenv("QDRANT_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	return &RAGService{db: db, qdrantHost: host, qdrantPort: port}
+	return &RAGService{db: db, qdrant: qdrantClient}
 }
 
 // RAGDashboard 表示 RAG/Qdrant 看板数据。
@@ -72,12 +65,13 @@ func (s *RAGService) Dashboard(ctx context.Context) (*RAGDashboard, error) {
 		GeneratedAt:     time.Now(),
 	}
 
-	client, err := qdrant.NewClient(&qdrant.Config{Host: s.qdrantHost, Port: s.qdrantPort})
-	if err != nil {
+	if s.qdrant == nil {
 		return out, nil
 	}
 
-	collections, err := client.ListCollections(ctx)
+	requestStart := time.Now()
+	collections, err := s.qdrant.ListCollections(ctx)
+	metrics.ObserveQdrantRequest("list_collections", requestStart, err)
 	if err != nil {
 		return out, nil
 	}
@@ -85,7 +79,9 @@ func (s *RAGService) Dashboard(ctx context.Context) (*RAGDashboard, error) {
 	out.CollectionCount = len(collections)
 
 	for _, name := range collections {
-		info, err := client.GetCollectionInfo(ctx, name)
+		requestStart = time.Now()
+		info, err := s.qdrant.GetCollectionInfo(ctx, name)
+		metrics.ObserveQdrantRequest("get_collection_info", requestStart, err)
 		if err != nil {
 			continue
 		}

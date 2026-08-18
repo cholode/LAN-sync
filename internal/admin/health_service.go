@@ -4,13 +4,13 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/qdrant/go-client/qdrant"
 	"gorm.io/gorm"
 
+	"lan-im-go/internal/metrics"
 	"lan-im-go/internal/storage"
 )
 
@@ -20,10 +20,15 @@ type HealthService struct {
 	redis   *redis.Client
 	storage storage.Provider
 	runtime RuntimeController
+	qdrant  *qdrant.Client
 }
 
-func NewHealthService(db *gorm.DB, redisClient *redis.Client, provider storage.Provider, runtime RuntimeController) *HealthService {
-	return &HealthService{db: db, redis: redisClient, storage: provider, runtime: runtime}
+func NewHealthService(db *gorm.DB, redisClient *redis.Client, provider storage.Provider, runtime RuntimeController, qdrantClients ...*qdrant.Client) *HealthService {
+	var qdrantClient *qdrant.Client
+	if len(qdrantClients) > 0 {
+		qdrantClient = qdrantClients[0]
+	}
+	return &HealthService{db: db, redis: redisClient, storage: provider, runtime: runtime, qdrant: qdrantClient}
 }
 
 // HealthItem 单个下游服务的健康结果。
@@ -107,22 +112,17 @@ func (s *HealthService) checkRedis(ctx context.Context) HealthItem {
 func (s *HealthService) checkQdrant(ctx context.Context) HealthItem {
 	start := time.Now()
 	item := HealthItem{Name: "qdrant", CheckedAt: time.Now(), Status: HealthDown}
-	host := os.Getenv("QDRANT_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := 6334
-	if raw := os.Getenv("QDRANT_PORT"); raw != "" {
-		if value, err := strconv.Atoi(raw); err == nil && value > 0 {
-			port = value
-		}
-	}
-	client, err := qdrant.NewClient(&qdrant.Config{Host: host, Port: port})
-	if err != nil {
-		item.Error = err.Error()
+	if s.qdrant == nil {
+		item.Error = "Qdrant 客户端未配置"
 		return item
 	}
-	if _, err := client.ListCollections(ctx); err != nil {
+	err := func() error {
+		startRequest := time.Now()
+		_, err := s.qdrant.ListCollections(ctx)
+		metrics.ObserveQdrantRequest("list_collections", startRequest, err)
+		return err
+	}()
+	if err != nil {
 		item.Error = err.Error()
 		return item
 	}

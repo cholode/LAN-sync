@@ -142,14 +142,19 @@ func (p *MinioProvider) ListObjects(ctx context.Context, prefix string, limit in
 	if limit <= 0 {
 		limit = 1000
 	}
-	ch := p.client.ListObjects(ctx, p.bucket, minio.ListObjectsOptions{
+	listCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := p.client.ListObjects(listCtx, p.bucket, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: true,
 	})
 	out := make([]ObjectStat, 0)
+	var listErr error
 	for obj := range ch {
 		if obj.Err != nil {
-			return out, obj.Err
+			listErr = obj.Err
+			cancel()
+			break
 		}
 		out = append(out, ObjectStat{
 			Key:          obj.Key,
@@ -159,10 +164,19 @@ func (p *MinioProvider) ListObjects(ctx context.Context, prefix string, limit in
 			Exists:       true,
 		})
 		if len(out) >= limit {
+			// Stop the producer as soon as the requested page is full. This is
+			// important for health checks, which intentionally request one item.
+			cancel()
 			break
 		}
 	}
-	return out, nil
+	// minio-go requires the channel to be drained after cancellation. Otherwise
+	// its listObjectsV2 producer can remain blocked and leak a goroutine.
+	if listErr != nil || len(out) >= limit {
+		for range ch {
+		}
+	}
+	return out, listErr
 }
 
 func (p *MinioProvider) BackendType() Backend {
