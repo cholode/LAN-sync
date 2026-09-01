@@ -10,8 +10,8 @@ import (
 	"github.com/qdrant/go-client/qdrant"
 	"gorm.io/gorm"
 
+	"lan-im-go/files/storage"
 	"lan-im-go/internal/metrics"
-	"lan-im-go/internal/storage"
 )
 
 // HealthService 提供带超时的下游服务健康检测，避免 Dashboard 被单个服务拖死。

@@ -12,6 +12,7 @@ import (
 	"lan-im-go/config"
 	"lan-im-go/infrastructure"
 	"lan-im-go/internal/admincontrol"
+	"lan-im-go/messages"
 	"lan-im-go/middleware"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
@@ -29,11 +30,11 @@ func main() {
 	defer config.RedisClient.Close()
 
 	infrastructure.InitDatabase(dsn)
-	messageRepo := repository.NewMessageRepoImpl(infrastructure.DB)
+	messageRepo := messages.NewMySQLRepository(infrastructure.DB)
 	if os.Getenv("MESSAGE_STORE") == "mongo" {
 		infrastructure.InitMongo()
 		defer infrastructure.CloseMongo()
-		messageRepo = repository.NewMongoMessageRepo(infrastructure.MessageCollection)
+		messageRepo = messages.NewMongoRepository(infrastructure.MessageCollection)
 	}
 	repository.InitRepositories(infrastructure.DB, messageRepo)
 	adminapi.InitFileStorage()

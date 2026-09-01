@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/internal/storage"
+	"lan-im-go/files/storage"
 	"lan-im-go/models"
 )
 

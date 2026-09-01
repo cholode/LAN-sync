@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 	adminapi "lan-im-go/admin-service/api"
 	"lan-im-go/agent"
-	"lan-im-go/api"
 	"lan-im-go/config"
 	"lan-im-go/core"
+	"lan-im-go/files"
+	"lan-im-go/files/storage"
+	"lan-im-go/gateways"
 	"lan-im-go/infrastructure"
 	"lan-im-go/internal/admincontrol"
 	"lan-im-go/internal/agentclient"
@@ -17,14 +17,13 @@ import (
 	"lan-im-go/internal/metrics"
 	"lan-im-go/internal/search"
 	"lan-im-go/internal/taskpool"
-	"lan-im-go/middleware"
+	"lan-im-go/messages"
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"strings"
-	"time"
 )
 
 // main 程序入口函数
@@ -68,11 +67,11 @@ func main() {
 	defer config.KafkaProducer.Close()
 
 	infrastructure.InitDatabase(dsn)
-	messageRepo := repository.NewMessageRepoImpl(infrastructure.DB)
+	messageRepo := messages.NewMySQLRepository(infrastructure.DB)
 	if os.Getenv("MESSAGE_STORE") == "mongo" {
 		infrastructure.InitMongo()
 		defer infrastructure.CloseMongo()
-		messageRepo = repository.NewMongoMessageRepo(infrastructure.MessageCollection)
+		messageRepo = messages.NewMongoRepository(infrastructure.MessageCollection)
 	}
 	taskpool.Init(0) // 0=default workers(CPU*2)
 	metrics.RegisterTaskPoolMetrics()
@@ -81,7 +80,7 @@ func main() {
 	}
 	defer search.Close()
 
-	api.InitFileStorage()
+	fileStorage := storage.New()
 
 	// ================================
 	// 阶段2：数据访问层初始化
@@ -165,80 +164,17 @@ func main() {
 		Redis:             config.RedisClient,
 		MessageCollection: infrastructure.MessageCollection,
 		MessageStore:      os.Getenv("MESSAGE_STORE"),
-		Storage:           api.Storage,
+		Storage:           fileStorage,
 		Runtime:           localAdminRuntime,
 	})
-	api.InitAdminFileService(adminModule.FileService)
+	fileModule := files.NewModule(fileStorage, adminModule.FileService)
+	messageModule := messages.NewModule(messageRepo, repository.RoomMember)
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
 	// ================================
-	gin.SetMode(gin.DebugMode)
-
-	r := gin.New()
-	r.Use(middleware.RequestID())
-	r.Use(middleware.RecoveryWithErrorRecorder(adminModule.ErrorService))
-	r.Use(func(c *gin.Context) {
-		start := time.Now()
-		c.Next()
-		metrics.ObserveAPIRequest(c.Writer.Status(), time.Since(start))
-	})
-
-	r.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true,
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
-
-	// 公开路由
-	public := r.Group("/api/v1")
-	{
-		public.POST("/register", api.RegisterHandler)
-		public.POST("/login", api.LoginHandler)
-		public.GET("/download/*filepath", api.DownloadFile)
-	}
-
-	// 授权路由
-	authorized := r.Group("/api/v1")
-	authorized.Use(middleware.JWTAuth())
-	{
-		pkg.Infof("进入WebSocket连接配置\n")
-		authorized.GET("/ws", func(c *gin.Context) {
-			api.WsEndpoint(hub)(c)
-		})
-
-		authorized.POST("/files/presign", api.PreSignUploadHandler)
-		authorized.POST("/files/complete", api.CompleteUploadHandler)
-
-		authorized.GET("/rooms/:id/messages", api.GetChatHistory())
-		authorized.GET("/rooms/:id/messages/search", api.SearchMessages())
-		authorized.POST("/rooms/:id/join", api.JoinRoom(hub))
-		authorized.GET("/rooms/:id/members", api.GetRoomMembers())
-		authorized.DELETE("/rooms/:id/members/:user_id", api.RemoveRoomMember(hub))
-		authorized.DELETE("/rooms/:id/disband", api.OwnerDisbandRoom(hub))
-
-		authorized.POST("/rooms", api.CreateRoom(hub))
-		authorized.GET("/my_rooms", api.GetMyRooms())
-
-		// Agent 管理路由
-		api.RegisterAgentRoutes(authorized, agentMgr, infrastructure.DB)
-	}
-
-	adminModule.RegisterRoutes(r)
-
-	// ================================
-	// 静态文件服务 - 前端 SPA
-	// ================================
-	r.Static("/assets", "./frontend/dist/assets")
-	r.GET("/", func(c *gin.Context) {
-		c.File("./frontend/dist/index.html")
-	})
-	r.NoRoute(func(c *gin.Context) {
-		c.File("./frontend/dist/index.html")
-	})
+	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, Agent: agentMgr, DB: infrastructure.DB,
+		Files: fileModule, Messages: messageModule, Admin: adminModule, FrontendDir: "./frontend/dist"})
 
 	// ================================
 	// 阶段7：启动 HTTP 服务
@@ -248,14 +184,7 @@ func main() {
 		port = "8080"
 	}
 
-	srv := &http.Server{
-		Addr:              ":" + port,
-		Handler:           r,
-		ReadTimeout:       5 * time.Second,
-		ReadHeaderTimeout: 3 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       15 * time.Second,
-	}
+	srv := gateways.NewServer(":"+port, r)
 
 	pkg.Infof("[系统启动] LAN-IM 服务端启动成功，监听端口 :%s", port)
 

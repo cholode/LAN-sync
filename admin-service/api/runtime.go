@@ -1,8 +1,8 @@
 package api
 
 import (
+	"lan-im-go/files/storage"
 	"lan-im-go/internal/admin"
-	"lan-im-go/internal/storage"
 )
 
 var (

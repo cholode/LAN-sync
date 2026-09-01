@@ -7,8 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gorm.io/gorm"
 
+	"lan-im-go/files/storage"
 	adminservice "lan-im-go/internal/admin"
-	"lan-im-go/internal/storage"
 	"lan-im-go/middleware"
 )
 
