@@ -137,7 +137,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: services/gateway/Dockerfile.monolith
     container_name: im-backend
     restart: unless-stopped
     networks:
@@ -218,7 +218,7 @@ services:
   admin-service:
     build:
       context: .
-      dockerfile: Dockerfile.admin
+      dockerfile: services/admin/Dockerfile
     container_name: im-admin
     restart: unless-stopped
     networks:
@@ -302,7 +302,7 @@ services:
   # --- [5.6] AI Agent Service: LangChain + LangGraph (gRPC) ---
   agent-service:
     build:
-      context: ./agent-service
+      context: ./services/agent/runtime
     container_name: im-agent
     restart: unless-stopped
     networks:
@@ -310,7 +310,7 @@ services:
     ports:
       - "${AGENT_GRPC_PORT:-50051}:50051"
     volumes:
-      - ./agent-service/config.yaml:/app/config.yaml:ro
+      - ./services/agent/runtime/config.yaml:/app/config.yaml:ro
     environment:
       - AGENT_CONFIG_PATH=/app/config.yaml
       - LLM_API_KEY=${LLM_API_KEY}

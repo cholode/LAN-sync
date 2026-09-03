@@ -80,7 +80,7 @@ graph TB
 
 ## 核心模块
 
-### WebSocket Hub（`core/`）
+### WebSocket Hub（`services/gateway/websocket`）
 
 Hub 按用户和房间两个维度分片，默认 `64` 个分片，可通过 `HUB_SHARD_COUNT` 调整。每个分片使用 `sync.RWMutex + map` 维护用户和房间映射，并通过分片级 Channel 串行处理转发和踢人事件，避免单把全局锁成为扇出瓶颈。
 
@@ -90,7 +90,7 @@ Hub 按用户和房间两个维度分片，默认 `64` 个分片，可通过 `HU
 - **Publish**：将消息投递到房间对应分片的 `forward` Channel。
 - **Kick / CloseConnection**：按用户或连接 ID 强制断开连接。
 
-房间成员数小于 `100` 时，分片内同步遍历投递；达到或超过 `100` 时，改用 `internal/taskpool`（ANTS）异步扇出，防止单房间大群阻塞分片循环。慢客户端写入队列满时会被记录并主动摘除。
+房间成员数小于 `100` 时，分片内同步遍历投递；达到或超过 `100` 时，改用 `shared/concurrency/taskpool`（ANTS）异步扇出，防止单房间大群阻塞分片循环。慢客户端写入队列满时会被记录并主动摘除。
 
 ### 消息链路
 
@@ -115,13 +115,13 @@ Hub 按用户和房间两个维度分片，默认 `64` 个分片，可通过 `HU
 - Kafka 按 `room_id` 哈希分区，保证同群消息顺序。
 - `ClientMsgID` 用于客户端幂等和防重。
 
-### JWT 鉴权（`middleware/`）
+### JWT 鉴权（`shared/http/middleware`）
 
 - Bearer Token 标准头，或 WebSocket URL Query 参数。
 - HMAC-SHA256 签名，默认 24 小时过期。
 - 普通用户与超级管理员通过角色隔离；管理接口另经 `RequireAdmin` 与限流中间件。
 
-### 对象存储（`internal/storage`）
+### 对象存储（`services/files/api/storage`）
 
 - 通过 `STORAGE_BACKEND=minio|oss` 选择 MinIO 或阿里云 OSS。
 - 后端只签发预签名上传/下载 URL，不代理文件字节流。
@@ -130,7 +130,7 @@ Hub 按用户和房间两个维度分片，默认 `64` 个分片，可通过 `HU
 
 ### LLM Agent（`agent-service`）
 
-Agent 管理仍由 Go 侧 `agent.AgentManager` / `agent.RoomAgent` 负责：加载已启用房间、监听 Redis 群消息、判断触发条件和冷却；LLM/RAG/tools 处理链委托给 Python `agent-service`。Go 侧通过 `internal/agentclient` 调用其 gRPC 接口，`agent/` 目录中的旧 RAG/LLM 实现仅保留兼容结构。
+Agent 管理仍由 Go 侧 `services/agent/application` 负责：加载已启用房间、监听 Redis 群消息、判断触发条件和冷却；LLM/RAG/tools 处理链委托给 Python `agent-service`。Go 侧通过 `services/gateway/clients` 调用其 gRPC 接口，Python runtime 位于 `services/agent/runtime`。
 
 ```text
 Go backend AgentManager / RoomAgent（触发判断、冷却）

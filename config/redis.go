@@ -3,8 +3,8 @@ package config
 import (
 	"context"
 
-	"lan-im-go/internal/metrics"
 	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/metrics"
 
 	"github.com/go-redis/redis/v8"
 )

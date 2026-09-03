@@ -1,8 +1,8 @@
 package config
 
 import (
-	"lan-im-go/internal/producer"
 	"lan-im-go/pkg"
+	"lan-im-go/services/messages/producer"
 )
 
 var KafkaProducer *producer.MessageClient

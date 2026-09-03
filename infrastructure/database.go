@@ -4,7 +4,7 @@ import (
 	"os"
 	"time"
 
-	"lan-im-go/internal/metrics"
+	"lan-im-go/shared/observability/metrics"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
 

@@ -7,7 +7,7 @@
 - `/metrics`：Prometheus 抓取端点
 - `/debug/pprof/`：Go pprof 性能分析端点
 
-指标代码统一放在 `internal/metrics`，业务模块只调用埋点函数。当前 backend 的 Hub 使用 64 分片，并在房间成员数达到 100 时通过 `internal/taskpool`（ANTS）异步扇出；`Hub` 与任务池指标可直接反映该路径。
+指标代码统一放在 `shared/observability/metrics`，业务模块只调用埋点函数。当前 backend 的 Hub 使用 64 分片，并在房间成员数达到 100 时通过 `shared/concurrency/taskpool`（ANTS）异步扇出；`Hub` 与任务池指标可直接反映该路径。
 
 最新压测中，500/1000 人群广播时 `im_hub_task_pool_running` 峰值 256、`im_hub_task_pool_waiting` 为 0，`im_kafka_consumer_lag` 全程为 0；完整结果见 `perf4/`。
 

@@ -4,7 +4,7 @@
 
 - 接入层：Nginx 提供 HTTP 与 WebSocket 反向代理；生产 HTTPS 建议由云负载均衡、Ingress 或独立 TLS 网关终止。
 - 业务层：Go `backend` 提供用户端与管理端 REST API、WebSocket Hub 和 `IMService` gRPC。
-- 管理模块：管理业务保留独立模块边界，当前与 `backend` 合并部署；未来可通过 `cmd/admin` 和 `AdminControlService` gRPC 再次拆分。
+- 管理模块：管理业务位于 `services/admin`，可通过其独立命令和 `AdminControlService` gRPC 单独部署。
 - AI 层：Python `agent-service` 基于 LangChain + LangGraph，通过 gRPC 对外服务。
 - 存储层：MySQL/MongoDB 存业务与消息，Redis 做在线状态/缓存/Pub-Sub，Elasticsearch 做消息检索，Qdrant 做向量检索，MinIO/OSS 做对象存储。
 

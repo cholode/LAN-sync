@@ -5,7 +5,7 @@
 ## 技术栈
 
 - **后端**: Go 1.26+, Gin, WebSocket (gorilla/websocket), GORM, gRPC/protobuf, Kafka, Redis
-- **并发**: ANTS taskpool（`internal/taskpool`）
+- **并发**: ANTS taskpool（`shared/concurrency/taskpool`）
 - **存储**: MySQL 8.0, MongoDB, Redis, Elasticsearch, Qdrant, MinIO/OSS
 - **AI 服务**: Python, LangChain, LangGraph, gRPC
 - **前端**: 原生 JavaScript ES Module + Vite
@@ -27,7 +27,7 @@ docker compose up -d db redis kafka qdrant mongo elasticsearch minio
 go run main.go
 
 # 运行 Python Agent 服务（另一个终端）
-cd agent-service
+cd services/agent/runtime
 python -m pip install -r requirements.txt
 python -m app.main
 
@@ -53,32 +53,17 @@ cd frontend && npm install && npm run dev
 ## 目录结构
 
 ```
-├── api/             # HTTP 接口处理层
-├── admin-service/   # 独立的管理端 HTTP 服务
-├── agent/           # Go 侧 Agent 兼容结构与历史实现
-├── agent-service/   # Python LangChain/LangGraph Agent 服务
 ├── cache/           # Redis 缓存层
-├── cmd/             # 命令行工具
 ├── config/          # Redis/Kafka 等基础设施初始化
-├── core/            # WebSocket 核心引擎（Hub + Client）
+├── contracts/       # 跨服务 Kafka/protobuf 事件契约
 ├── deploy/          # Nginx 与部署配置
 ├── docs/            # 项目文档
-├── infrastructure/  # 数据库初始化
-├── internal/        # 内部组件
-│   ├── admin/       # 管理端业务逻辑
-│   ├── agentclient/ # Agent gRPC 客户端
-│   ├── archiver/    # Kafka 归档消费者
-│   ├── imservice/   # IMService gRPC 服务
-│   ├── metrics/     # Prometheus 指标
-│   ├── producer/    # Kafka 生产者
-│   ├── protocol/    # protobuf 消息封装
-│   ├── search/      # Elasticsearch 检索
-│   ├── storage/     # MinIO/OSS 对象存储
-│   └── taskpool/    # ANTS 协程池封装
-├── middleware/      # HTTP 中间件（JWT 鉴权）
-├── models/          # 数据模型（GORM）
+├── infrastructure/  # 过渡期数据库初始化
+├── models/          # 过渡期共享数据模型
 ├── pkg/             # 公共工具（JWT、日志）
 ├── proto/           # protobuf 定义
-├── repository/      # 数据访问层接口与实现
+├── repository/      # 过渡期共享数据访问层
+├── services/        # Gateway、Messages、Files、Admin、Agent、Users
+├── shared/          # 指标、任务池和 HTTP 中间件
 └── frontend/        # 前端 SPA
 ```
