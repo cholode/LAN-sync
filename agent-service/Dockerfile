@@ -1,4 +1,5 @@
-FROM docker.m.daocloud.io/python:3.11-slim
+ARG DOCKER_HUB_MIRROR=dockerproxy.net
+FROM ${DOCKER_HUB_MIRROR}/library/python:3.11-slim
 
 WORKDIR /app
 

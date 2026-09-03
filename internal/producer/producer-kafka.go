@@ -20,13 +20,13 @@ type MessageClient struct {
 	topic       string
 }
 
-func NewMessageClient(brokers []string, topic string, redisClient *redis.Client) *MessageClient {
+func NewMessageClient(brokers []string, topic string, async bool, redisClient *redis.Client) *MessageClient {
 	return &MessageClient{
 		writer: &kafka.Writer{
 			Addr:     kafka.TCP(brokers...),
 			Topic:    topic,
 			Balancer: &kafka.Hash{},
-			Async:    true,
+			Async:    async,
 		},
 		redisClient: redisClient,
 		topic:       topic,

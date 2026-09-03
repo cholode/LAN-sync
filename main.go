@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	adminapi "lan-im-go/admin-service/api"
 	"lan-im-go/agent"
 	"lan-im-go/config"
 	"lan-im-go/core"
@@ -10,6 +9,7 @@ import (
 	"lan-im-go/files/storage"
 	"lan-im-go/gateways"
 	"lan-im-go/infrastructure"
+	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/internal/admincontrol"
 	"lan-im-go/internal/agentclient"
 	"lan-im-go/internal/archiver"
@@ -91,13 +91,13 @@ func main() {
 	// ================================
 	// 阶段3：Kafka 离线消息归档消费服务
 	// ================================
-	kafkaAddrStr := os.Getenv("KAFKA_ADDR")
-	if kafkaAddrStr == "" {
-		kafkaAddrStr = "127.0.0.1:9092"
-		pkg.Infoln("[警告] 未检测到KAFKA_ADDR环境变量，使用本地默认配置连接Kafka")
-	}
-
-	worker := archiver.NewWorker([]string{kafkaAddrStr}, "im_chat_messages", "mysql_archiver_group", config.RedisClient)
+	messagingCfg := config.Messaging()
+	worker := archiver.NewWorker(
+		messagingCfg.Kafka.Brokers,
+		messagingCfg.Kafka.Topic,
+		messagingCfg.Kafka.ArchiverGroup,
+		config.RedisClient,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -159,22 +159,18 @@ func main() {
 		}()
 	}
 
-	adminModule := adminapi.NewModule(adminapi.ModuleDependencies{
-		DB:                infrastructure.DB,
-		Redis:             config.RedisClient,
-		MessageCollection: infrastructure.MessageCollection,
-		MessageStore:      os.Getenv("MESSAGE_STORE"),
-		Storage:           fileStorage,
-		Runtime:           localAdminRuntime,
-	})
-	fileModule := files.NewModule(fileStorage, adminModule.FileService)
+	// 主服务只保留运行所需的错误记录和上传元数据能力；管理 API 由独立 admin-service 提供。
+	auditService := adminservice.NewAuditService(infrastructure.DB)
+	errorService := adminservice.NewErrorCenterService(infrastructure.DB)
+	fileService := adminservice.NewFileService(infrastructure.DB, fileStorage, auditService)
+	fileModule := files.NewModule(fileStorage, fileService)
 	messageModule := messages.NewModule(messageRepo, repository.RoomMember)
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
 	// ================================
 	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, Agent: agentMgr, DB: infrastructure.DB,
-		Files: fileModule, Messages: messageModule, Admin: adminModule, FrontendDir: "./frontend/dist"})
+		Files: fileModule, Messages: messageModule, ErrorService: errorService, FrontendDir: "./frontend/dist"})
 
 	// ================================
 	// 阶段7：启动 HTTP 服务

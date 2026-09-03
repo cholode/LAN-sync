@@ -10,11 +10,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	adminapi "lan-im-go/admin-service/api"
 	"lan-im-go/agent"
 	"lan-im-go/api"
 	"lan-im-go/core"
 	"lan-im-go/files"
+	adminservice "lan-im-go/internal/admin"
 	"lan-im-go/internal/metrics"
 	"lan-im-go/messages"
 	"lan-im-go/middleware"
@@ -24,13 +24,13 @@ import (
 // Dependencies are the runtime capabilities needed by the HTTP gateway.
 // This explicit boundary makes the gateway independently replaceable later.
 type Dependencies struct {
-	Hub         *core.Hub
-	Agent       *agent.AgentManager
-	DB          *gorm.DB
-	Files       *files.Module
-	Messages    *messages.Module
-	Admin       *adminapi.Module
-	FrontendDir string
+	Hub          *core.Hub
+	Agent        *agent.AgentManager
+	DB           *gorm.DB
+	Files        *files.Module
+	Messages     *messages.Module
+	ErrorService *adminservice.ErrorCenterService
+	FrontendDir  string
 }
 
 // NewRouter constructs the public HTTP gateway without starting a listener.
@@ -38,7 +38,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	gin.SetMode(gin.DebugMode)
 	r := gin.New()
 	r.Use(middleware.RequestID())
-	r.Use(middleware.RecoveryWithErrorRecorder(deps.Admin.ErrorService))
+	r.Use(middleware.RecoveryWithErrorRecorder(deps.ErrorService))
 	r.Use(func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
@@ -62,8 +62,6 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	deps.Messages.RegisterRoutes(authorized)
 	registerRoomRoutes(authorized, deps.Hub)
 	api.RegisterAgentRoutes(authorized, deps.Agent, deps.DB)
-	deps.Admin.RegisterRoutes(r)
-
 	frontend := deps.FrontendDir
 	if frontend == "" {
 		frontend = "./frontend/dist"

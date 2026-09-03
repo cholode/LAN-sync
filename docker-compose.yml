@@ -16,7 +16,7 @@ volumes:
 services:
   # --- [1] 持久层：MySQL ---
   db:
-    image: docker.m.daocloud.io/mysql:8.0
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/library/mysql:8.0
     container_name: im-mysql
     restart: unless-stopped
     networks:
@@ -43,7 +43,7 @@ services:
 
   # --- [2] 缓存层：Redis ---
   redis:
-    image: docker.m.daocloud.io/redis:7.0-alpine
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/library/redis:7.0-alpine
     container_name: im-redis
     restart: unless-stopped
     networks:
@@ -61,7 +61,7 @@ services:
 
   # --- [2.3] Search: Elasticsearch ---
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    image: ${ELASTIC_IMAGE:-dockerproxy.net/library/elasticsearch:8.17.0}
     container_name: im-elasticsearch
     restart: unless-stopped
     networks:
@@ -89,7 +89,7 @@ services:
 
   # --- [2.5] Message Storage: MongoDB ---
   mongo:
-    image: docker.m.daocloud.io/mongo:7.0
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/library/mongo:7.0
     container_name: im-mongo
     restart: unless-stopped
     networks:
@@ -107,7 +107,7 @@ services:
 
   # --- [3] 消息中间件：Kafka (KRaft 模式) ---
   kafka:
-    image: docker.m.daocloud.io/apache/kafka:latest
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/apache/kafka:latest
     container_name: kafka
     restart: always
     networks:
@@ -148,7 +148,17 @@ services:
     environment:
       - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
       - REDIS_ADDR=redis:6379
-      - KAFKA_ADDR=kafka:9092
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_POOL_SIZE=${REDIS_POOL_SIZE:-0}
+      - REDIS_MIN_IDLE_CONNS=${REDIS_MIN_IDLE_CONNS:-0}
+      - REDIS_DIAL_TIMEOUT=${REDIS_DIAL_TIMEOUT:-5s}
+      - REDIS_READ_TIMEOUT=${REDIS_READ_TIMEOUT:-3s}
+      - REDIS_WRITE_TIMEOUT=${REDIS_WRITE_TIMEOUT:-3s}
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
+      - KAFKA_ARCHIVER_GROUP=${KAFKA_ARCHIVER_GROUP:-im_archiver_group}
+      - KAFKA_PRODUCER_ASYNC=${KAFKA_PRODUCER_ASYNC:-true}
       - MESSAGE_STORE=${MESSAGE_STORE:-mysql}
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB=${MONGO_DB:-lan_im}
@@ -157,7 +167,7 @@ services:
       - ES_INDEX_MESSAGES=${ES_INDEX_MESSAGES:-lan-im-messages}
       - QDRANT_HOST=qdrant
       - AGENT_GRPC_ADDR=agent-service:50051
-      - ADMIN_CONTROL_GRPC_ENABLED=${ADMIN_CONTROL_GRPC_ENABLED:-false}
+      - ADMIN_CONTROL_GRPC_ENABLED=${ADMIN_CONTROL_GRPC_ENABLED:-true}
       - ADMIN_CONTROL_GRPC_ADDR=0.0.0.0:50053
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
@@ -204,9 +214,48 @@ services:
         soft: 65535
         hard: 65535
 
+  # --- [4.5] 独立管理控制面服务 ---
+  admin-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+    container_name: im-admin
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "${ADMIN_HTTP_PORT:-8081}:8081"
+    environment:
+      - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
+      - REDIS_ADDR=redis:6379
+      - MESSAGE_STORE=${MESSAGE_STORE:-mongo}
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB=${MONGO_DB:-lan_im}
+      - ADMIN_HTTP_PORT=8081
+      - ADMIN_CONTROL_GRPC_ADDR=backend:50053
+      - ADMIN_CONTROL_TOKEN=${ADMIN_CONTROL_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-lan-im-files}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mongo:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
   # --- [5] 向量数据库：Qdrant ---
   qdrant:
-    image: docker.m.daocloud.io/qdrant/qdrant:latest
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/qdrant/qdrant:latest
     container_name: im-qdrant
     restart: unless-stopped
     networks:
@@ -224,7 +273,7 @@ services:
 
   # --- [5.5] 对象存储：MinIO ---
   minio:
-    image: docker.m.daocloud.io/minio/minio:latest
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/minio/minio:latest
     container_name: im-minio
     restart: unless-stopped
     networks:
@@ -276,7 +325,7 @@ services:
 
   # --- [5.7] 可观测性：Prometheus 指标采集与存储 ---
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/prom/prometheus:v2.55.1
     container_name: im-prometheus
     restart: unless-stopped
     networks:
@@ -302,7 +351,7 @@ services:
 
   # --- [5.8] 可观测性：Grafana 指标看板 ---
   grafana:
-    image: grafana/grafana:11.2.2
+    image: ${DOCKER_HUB_MIRROR:-dockerproxy.net}/grafana/grafana:11.2.2
     container_name: im-grafana
     restart: unless-stopped
     networks:
@@ -339,10 +388,12 @@ services:
       - "80:80"
     environment:
       # 只替换以下部署变量，避免误替换模板中的 $host、$uri 等 Nginx 变量。
-      - NGINX_ENVSUBST_FILTER=^(NGINX_SERVER_NAME|BACKEND_HOST|BACKEND_PORT)$$
+      - NGINX_ENVSUBST_FILTER=^(NGINX_SERVER_NAME|BACKEND_HOST|BACKEND_PORT|ADMIN_HOST|ADMIN_PORT)$$
       - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-_}
       - BACKEND_HOST=${NGINX_BACKEND_HOST:-backend}
       - BACKEND_PORT=${NGINX_BACKEND_PORT:-8080}
+      - ADMIN_HOST=${NGINX_ADMIN_HOST:-admin-service}
+      - ADMIN_PORT=${NGINX_ADMIN_PORT:-8081}
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
     ulimits:
@@ -351,3 +402,4 @@ services:
         hard: 65535
     depends_on:
       - backend
+      - admin-service

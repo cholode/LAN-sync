@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"os"
 
 	"lan-im-go/internal/metrics"
 	"lan-im-go/pkg"
@@ -13,15 +12,17 @@ import (
 var RedisClient *redis.Client
 
 func InitRedis() {
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
-	}
+	cfg := Messaging().Redis
 
 	RedisClient = redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
-		Password: "",
-		DB:       0,
+		Addr:         cfg.Addr,
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		PoolSize:     cfg.PoolSize,
+		MinIdleConns: cfg.MinIdleConns,
+		DialTimeout:  cfg.DialTimeout,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
 	})
 
 	RedisClient.AddHook(metrics.NewRedisHook())
