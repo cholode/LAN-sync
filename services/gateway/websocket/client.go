@@ -318,7 +318,7 @@ func (c *Client) WritePump() {
 
 			//刷新redis中用户登录失效时间
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			_ = cache.RenewUserOnline(ctx, c.UserID)
+			_ = cache.RenewUserConnectionOnline(ctx, c.UserID, CurrentGatewayNodeID, c.ConnID)
 			cancel()
 		}
 	}

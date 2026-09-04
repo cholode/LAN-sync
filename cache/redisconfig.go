@@ -21,10 +21,31 @@ const (
 	roomLatestMax       = 100
 )
 
+var renewOwnedOnlineScript = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`)
+
+var deleteOwnedOnlineScript = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`)
+
 // SetUserOnline 用户建立连接时写入 Redis
 func SetUserOnline(ctx context.Context, userID int64, nodeID string) error {
 	key := fmt.Sprintf("%s%d", onlineKeyPrefix, userID)
 	return config.RedisClient.Set(ctx, key, nodeID, onlineTTL).Err()
+}
+
+// SetUserConnectionOnline 记录当前连接的唯一归属。连接 ID 用于防止旧连接
+// 断开时误删同一用户刚刚建立的新连接状态。
+func SetUserConnectionOnline(ctx context.Context, userID int64, nodeID, connectionID string) error {
+	key := fmt.Sprintf("%s%d", onlineKeyPrefix, userID)
+	return config.RedisClient.Set(ctx, key, onlineOwner(nodeID, connectionID), onlineTTL).Err()
 }
 
 // SetUserOffline 用户主动断开时从 Redis 抹除
@@ -33,10 +54,27 @@ func SetUserOffline(ctx context.Context, userID int64) error {
 	return config.RedisClient.Del(ctx, key).Err()
 }
 
+// SetUserConnectionOffline 仅在 Redis 中仍由该连接持有在线状态时删除。
+func SetUserConnectionOffline(ctx context.Context, userID int64, nodeID, connectionID string) error {
+	key := fmt.Sprintf("%s%d", onlineKeyPrefix, userID)
+	return deleteOwnedOnlineScript.Run(ctx, config.RedisClient, []string{key}, onlineOwner(nodeID, connectionID)).Err()
+}
+
 // RenewUserOnline 心跳续期防线：仅重置 TTL，不修改 Value
 func RenewUserOnline(ctx context.Context, userID int64) error {
 	key := fmt.Sprintf("%s%d", onlineKeyPrefix, userID)
 	return config.RedisClient.Expire(ctx, key, onlineTTL).Err()
+}
+
+// RenewUserConnectionOnline 仅续期当前连接持有的在线状态，避免旧连接
+// 的心跳覆盖或延长新连接的状态。
+func RenewUserConnectionOnline(ctx context.Context, userID int64, nodeID, connectionID string) error {
+	key := fmt.Sprintf("%s%d", onlineKeyPrefix, userID)
+	return renewOwnedOnlineScript.Run(ctx, config.RedisClient, []string{key}, onlineOwner(nodeID, connectionID), int64(onlineTTL/time.Second)).Err()
+}
+
+func onlineOwner(nodeID, connectionID string) string {
+	return nodeID + ":" + connectionID
 }
 
 // CheckUserOnline 鉴权：判断用户是否在全局任意节点存活

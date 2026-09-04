@@ -45,6 +45,12 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			return
 		}
 		realUserID := userID.(int64)
+		roomIDs, err := repository.RoomMember.GetUserRoomIDs(realUserID)
+		if err != nil {
+			pkg.Infof("[connection failed] load rooms failed UID:%d Err:%v", realUserID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load joined rooms"})
+			return
+		}
 
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
@@ -67,24 +73,15 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			ConnectedAt:   time.Now(),
 		}
 
-		hub.Register(client, []int64{})
+		// 注册时一次性挂到该用户已经加入的全部房间，避免先注册空连接、
+		// 再异步补房间期间漏掉群消息。
+		hub.Register(client, roomIDs)
 
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := cache.SetUserOnline(ctx, realUserID, CurrentNodeID); err != nil {
-				pkg.Infof("[online warn] UID:%d Redis online state failed: %v", realUserID, err)
-			}
-		}()
-
-		go func() {
-			roomIDs, err := repository.RoomMember.GetUserRoomIDs(realUserID)
-			if err != nil {
-				pkg.Infof("[connect warn] load rooms failed UID:%d: %v", realUserID, err)
-				return
-			}
-			hub.UpdateRooms(client, roomIDs)
-		}()
+		ctxOnline, cancelOnline := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := cache.SetUserConnectionOnline(ctxOnline, realUserID, CurrentNodeID, client.ConnID); err != nil {
+			pkg.Infof("[online warn] UID:%d Redis online state failed: %v", realUserID, err)
+		}
+		cancelOnline()
 
 		go func() {
 			if user, err := repository.User.GetByID(realUserID); err == nil && user != nil {
@@ -99,7 +96,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 
 			ctxDel, cancelDel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancelDel()
-			if err := cache.SetUserOffline(ctxDel, realUserID); err != nil {
+			if err := cache.SetUserConnectionOffline(ctxDel, realUserID, CurrentNodeID, client.ConnID); err != nil {
 				pkg.Infof("[offline warn] UID:%d Redis offline state failed: %v", realUserID, err)
 			}
 		}()
