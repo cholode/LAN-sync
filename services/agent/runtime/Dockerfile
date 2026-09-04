@@ -15,6 +15,6 @@ COPY proto ./proto
 RUN python -m grpc_tools.protoc -I./proto --python_out=. ./proto/im/v1/message.proto \
     && touch ./im/__init__.py ./im/v1/__init__.py
 
-EXPOSE 50051 8000
+EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

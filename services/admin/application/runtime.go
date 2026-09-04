@@ -8,7 +8,7 @@ import (
 )
 
 // RuntimeController 抽象管理端依赖的 IM 主服务运行时控制能力。
-// 主服务进程使用本地 Hub/AgentManager 实现，独立管理端进程使用 HTTP 客户端实现。
+// 主服务进程使用本地 Hub 实现，独立管理端进程使用 gRPC 客户端实现。
 type RuntimeController interface {
 	// ListConnections 获取当前节点 WebSocket 连接快照。
 	ListConnections(ctx context.Context) ([]core.ConnectionSnapshot, error)
@@ -24,8 +24,4 @@ type RuntimeController interface {
 	HubStats(ctx context.Context) (core.HubStats, error)
 	// RuntimeSnapshots 获取运行时与 Agent 指标快照。
 	RuntimeSnapshots(ctx context.Context) (metrics.RuntimeSnapshot, metrics.AgentRuntimeSnapshot, error)
-	// AddAgent 为群聊启用 Agent。
-	AddAgent(ctx context.Context, roomID int64) error
-	// PauseAgent 暂停群聊 Agent。
-	PauseAgent(ctx context.Context, roomID int64) error
 }

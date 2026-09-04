@@ -166,7 +166,6 @@ services:
       - ES_ADDR=http://elasticsearch:9200
       - ES_INDEX_MESSAGES=${ES_INDEX_MESSAGES:-lan-im-messages}
       - QDRANT_HOST=qdrant
-      - AGENT_GRPC_ADDR=agent-service:50051
       - ADMIN_CONTROL_GRPC_ENABLED=${ADMIN_CONTROL_GRPC_ENABLED:-true}
       - ADMIN_CONTROL_GRPC_ADDR=0.0.0.0:50053
       - LLM_BASE_URL=${LLM_BASE_URL}
@@ -308,7 +307,6 @@ services:
     networks:
       - lan-im-network
     ports:
-      - "${AGENT_GRPC_PORT:-50051}:50051"
       - "${AGENT_HTTP_PORT:-8000}:8000"
     volumes:
       - ./services/agent/runtime/config.yaml:/app/config.yaml:ro

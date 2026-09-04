@@ -8,10 +8,8 @@ import (
 	"lan-im-go/repository"
 	adminservice "lan-im-go/services/admin/application"
 	"lan-im-go/services/admin/control"
-	"lan-im-go/services/agent/application"
 	"lan-im-go/services/files/api"
 	"lan-im-go/services/files/api/storage"
-	"lan-im-go/services/gateway/clients"
 	"lan-im-go/services/gateway/grpc"
 	"lan-im-go/services/gateway/http"
 	"lan-im-go/services/gateway/websocket"
@@ -114,19 +112,7 @@ func main() {
 	go core.StartGlobalListener(ctx, hub)
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
-	// ================================
-	// 阶段5：Agent 管理系统启动
-	// ================================
-	agentAddr := os.Getenv("AGENT_GRPC_ADDR")
-	if agentAddr == "" {
-		agentAddr = "127.0.0.1:50051"
-	}
-	agentClient, err := agentclient.New(agentAddr)
-	if err != nil {
-		pkg.Fatalf("[致命错误] 创建 Agent gRPC 客户端失败: %v", err)
-	}
-	defer agentClient.Close()
-
+	// Python Agent 服务通过 Kafka 独立消费消息。Go 侧只保留其调用的 IMService。
 	imGRPCAddr := os.Getenv("IM_GRPC_ADDR")
 	if imGRPCAddr == "" {
 		imGRPCAddr = "0.0.0.0:50052"
@@ -138,12 +124,8 @@ func main() {
 		}
 	}()
 
-	agentMgr := agent.NewAgentManager(infrastructure.DB, agentClient, hub)
-	go agentMgr.Start(ctx)
-
 	localAdminRuntime := &admincontrol.LocalRuntimeController{
-		Hub:          hub,
-		AgentManager: agentMgr,
+		Hub: hub,
 	}
 	// 独立管理端重新拆分时再开启远程控制面；合并部署默认走本地调用。
 	if strings.EqualFold(os.Getenv("ADMIN_CONTROL_GRPC_ENABLED"), "true") {
@@ -169,7 +151,7 @@ func main() {
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
 	// ================================
-	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, Agent: agentMgr, DB: infrastructure.DB,
+	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, DB: infrastructure.DB,
 		Files: fileModule, Messages: messageModule, ErrorService: errorService, FrontendDir: "./frontend/dist"})
 
 	// ================================

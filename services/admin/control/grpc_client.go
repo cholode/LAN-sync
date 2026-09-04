@@ -96,13 +96,3 @@ func (c *GRPCClient) RuntimeSnapshots(ctx context.Context) (metrics.RuntimeSnaps
 	}
 	return protoToRuntimeSnapshot(resp.GetRuntime()), protoToAgentSnapshot(resp.GetAgent()), nil
 }
-
-func (c *GRPCClient) AddAgent(ctx context.Context, roomID int64) error {
-	_, err := c.client.AddAgent(c.withToken(ctx), &admincontrolv1.AddAgentRequest{RoomId: roomID})
-	return err
-}
-
-func (c *GRPCClient) PauseAgent(ctx context.Context, roomID int64) error {
-	_, err := c.client.PauseAgent(c.withToken(ctx), &admincontrolv1.PauseAgentRequest{RoomId: roomID})
-	return err
-}

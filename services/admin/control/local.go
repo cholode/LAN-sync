@@ -4,15 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"lan-im-go/services/agent/application"
 	"lan-im-go/services/gateway/websocket"
 	"lan-im-go/shared/observability/metrics"
 )
 
-// LocalRuntimeController 在主 IM 服务进程内直接操作 Hub 与 AgentManager。
+// LocalRuntimeController 在主 IM 服务进程内直接操作 Hub。
 type LocalRuntimeController struct {
-	Hub          *core.Hub
-	AgentManager *agent.AgentManager
+	Hub *core.Hub
 }
 
 func (c *LocalRuntimeController) ListConnections(_ context.Context) ([]core.ConnectionSnapshot, error) {
@@ -63,18 +61,4 @@ func (c *LocalRuntimeController) HubStats(_ context.Context) (core.HubStats, err
 
 func (c *LocalRuntimeController) RuntimeSnapshots(_ context.Context) (metrics.RuntimeSnapshot, metrics.AgentRuntimeSnapshot, error) {
 	return metrics.RuntimeSnapshotNow(), metrics.AgentRuntimeSnapshotNow(), nil
-}
-
-func (c *LocalRuntimeController) AddAgent(ctx context.Context, roomID int64) error {
-	if c.AgentManager == nil {
-		return fmt.Errorf("AgentManager 未初始化")
-	}
-	return c.AgentManager.AddAgent(ctx, roomID)
-}
-
-func (c *LocalRuntimeController) PauseAgent(ctx context.Context, roomID int64) error {
-	if c.AgentManager == nil {
-		return fmt.Errorf("AgentManager 未初始化")
-	}
-	return c.AgentManager.PauseAgent(ctx, roomID)
 }

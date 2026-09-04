@@ -12,7 +12,6 @@ import (
 
 	"lan-im-go/pkg"
 	adminservice "lan-im-go/services/admin/application"
-	"lan-im-go/services/agent/application"
 	"lan-im-go/services/files/api"
 	"lan-im-go/services/gateway/handlers"
 	"lan-im-go/services/gateway/websocket"
@@ -25,7 +24,6 @@ import (
 // This explicit boundary makes the gateway independently replaceable later.
 type Dependencies struct {
 	Hub          *core.Hub
-	Agent        *agent.AgentManager
 	DB           *gorm.DB
 	Files        *files.Module
 	Messages     *messages.Module
@@ -61,7 +59,6 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	deps.Files.RegisterAuthorizedRoutes(authorized)
 	deps.Messages.RegisterRoutes(authorized)
 	registerRoomRoutes(authorized, deps.Hub)
-	api.RegisterAgentRoutes(authorized, deps.Agent, deps.DB)
 	frontend := deps.FrontendDir
 	if frontend == "" {
 		frontend = "./frontend/dist"

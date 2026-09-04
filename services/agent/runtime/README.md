@@ -11,7 +11,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 python -m app.workers.main
 ```
 
-FastAPI 默认监听 `8000`。迁移期间 API 进程还会监听旧 `50051` gRPC 端口，保证 Go backend 可以继续调用；完成 Go 编排移除后可删除该兼容入口。
+FastAPI 默认监听 `8000`。后台 Worker 通过 Kafka 接收群聊消息；Python 调用 Go IMService 的 `50052` gRPC 内部端口查询原始消息和发送回复。
 
 ## 处理链路
 
@@ -42,7 +42,7 @@ GET    /api/v1/removal-requests
 数据库表会在 API 或 Worker 启动时创建；正式发布仍可按 `migrations/` 中的 SQL 纳入部署迁移流程。
 
 - `app/graph.py`：LangGraph 状态图
-- `app/prompt.py`：与 Go 语言 `services/agent/application/prompt.go` 对应的提示词模板
+- `app/prompt.py`：群聊对话提示词模板
 - `app/rag.py`：Qdrant 向量检索
 - `app/embeddings.py`：Doubao 多模态 embedding HTTP 客户端
 - `app/tools.py`：基于 Go `IMService` 的 `get_messages` 工具
@@ -53,11 +53,6 @@ GET    /api/v1/removal-requests
 服务默认从当前目录的 `config.yaml` 读取配置。可以通过环境变量 `AGENT_CONFIG_PATH` 覆盖路径。
 
 ```yaml
-grpc:
-  host: "[::]"
-  port: 50051
-  max_workers: 10
-
 llm:
   base_url: "https://api.deepseek.com/v1"
   api_key: "${LLM_API_KEY}"

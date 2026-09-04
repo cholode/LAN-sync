@@ -27,7 +27,7 @@ graph TB
     end
 
     subgraph AI 层
-        I[agent-service Python gRPC :50051]
+        I[agent-service FastAPI :8000]
         J[LangChain / LangGraph]
         K[LLM / Embedding]
     end
@@ -130,17 +130,15 @@ Hub 按用户和房间两个维度分片，默认 `64` 个分片，可通过 `HU
 
 ### LLM Agent（`agent-service`）
 
-Agent 管理仍由 Go 侧 `services/agent/application` 负责：加载已启用房间、监听 Redis 群消息、判断触发条件和冷却；LLM/RAG/tools 处理链委托给 Python `agent-service`。Go 侧通过 `services/gateway/clients` 调用其 gRPC 接口，Python runtime 位于 `services/agent/runtime`。
+Agent 管理和执行全部位于 Python `agent-service`。FastAPI 提供 Bot、群绑定和配置管理接口，独立 Worker 从 Kafka 消费群消息并完成审核、关键词对话、分块和向量化。Go backend 不再运行 Agent 编排，仅通过 IMService 向 Python 提供原始消息查询和回复写入能力。
 
 ```text
-Go backend AgentManager / RoomAgent（触发判断、冷却）
-  → gRPC agent-service :50051
-  → LangGraph 状态图
-  → RAG 检索（Qdrant）
-  → 构建提示词
-  → LLM / Embedding
-  → 调用 backend IMService get_messages
-  → 回复消息
+Kafka 群聊消息
+  → Python Inbox Worker
+  → 审核 Agent
+  → 关键词对话 / RAG 检索 / 回复
+  → 审核通过的消息进入 Chunk Agent
+  → Embedding / Qdrant
 ```
 
 触发模式：
@@ -162,7 +160,8 @@ docker compose up -d
 │                :50052 (IMService gRPC)          │
 │                :50053 (AdminControlService gRPC)│
 │ admin-service  :8081 (HTTP API)                 │
-│ agent-service  :50051 (gRPC)                    │
+│ agent-service  :8000 (FastAPI)                  │
+│ agent-worker   Kafka / LLM / Embedding worker   │
 │ mysql          :3306                             │
 │ mongo          :27017                            │
 │ elasticsearch  :9200                             │

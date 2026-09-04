@@ -139,7 +139,7 @@ Docker Compose 已自动将上述变量注入 `backend` 服务，并在宿主机
 
 | 指标 | 类型 | 说明 |
 |---|---|---|
-| `im_agent_rooms_enabled` | Gauge | 启用 Agent 的房间数（当前由 Go 侧 agentclient 管理 Python 服务运行时状态） |
+| `im_agent_rooms_enabled` | Gauge | 旧版 Go Agent 指标；Python Worker 指标接入后删除 |
 | `im_agent_inflight_requests` | Gauge | 处理中 Agent 请求数 |
 | `im_agent_messages_received_total` | Counter | Agent 收到消息数 |
 | `im_agent_messages_triggered_total` | Counter | Agent 触发回复数 |
@@ -176,7 +176,7 @@ scrape_configs:
 - `DB_DSN`：MySQL 地址
 - `MONGO_URI`：MongoDB 地址
 - `ES_ADDR`：Elasticsearch 地址
-- `AGENT_GRPC_ADDR`：Agent gRPC 地址
+- `AGENT_HTTP_PORT`：Python Agent FastAPI 端口
 - `MINIO_ENDPOINT`：MinIO 地址
 - `MINIO_PUBLIC_ENDPOINT`：浏览器访问 MinIO 的地址
 - `STORAGE_BACKEND`：对象存储类型，`minio` 或 `oss`

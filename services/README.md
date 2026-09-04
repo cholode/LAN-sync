@@ -10,7 +10,7 @@ own service instead of the repository-level `internal` directory.
 | `messages` | message API, Kafka producer/consumer, persistence cache and search indexing | API plus independently scalable processor/dispatcher/indexer workers |
 | `files` | upload API and MinIO/OSS adapters | Independent file service |
 | `admin` | admin HTTP API and runtime control plane | Independent admin container |
-| `agent` | Go orchestration plus Python gRPC runtime | Independent agent runtime |
+| `agent` | Python FastAPI management plane plus Kafka Agent workers | Independent agent runtime |
 | `users` | migration target for users, friendships, rooms and memberships | Independent users service |
 
 ## Transitional boundaries

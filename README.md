@@ -5,13 +5,13 @@
 - 接入层：Nginx 提供 HTTP 与 WebSocket 反向代理；生产 HTTPS 建议由云负载均衡、Ingress 或独立 TLS 网关终止。
 - 业务层：Go `backend` 提供用户端与管理端 REST API、WebSocket Hub 和 `IMService` gRPC。
 - 管理模块：管理业务位于 `services/admin`，可通过其独立命令和 `AdminControlService` gRPC 单独部署。
-- AI 层：Python `agent-service` 基于 LangChain + LangGraph，通过 gRPC 对外服务。
+- AI 层：Python `agent-service` 通过 FastAPI 提供管理接口，并由独立 Worker 消费 Kafka 执行审核、对话和分块。
 - 存储层：MySQL/MongoDB 存业务与消息，Redis 做在线状态/缓存/Pub-Sub，Elasticsearch 做消息检索，Qdrant 做向量检索，MinIO/OSS 做对象存储。
 
 ### 容器通信图
 nginx -> backend：HTTP REST + WebSocket，聊天前端入口；浏览器 WebSocket 消息载荷为 JSON。
 nginx -> backend：`/api/v1/admin/*` 管理 API，与普通 API 共用容器但保留独立鉴权和限流路由组。
-backend -> agent-service：gRPC/protobuf，调用 Python 智能体服务。
+backend -> Kafka -> agent-service：群聊消息事件。
 agent-service -> backend：gRPC/protobuf，调用 IMService 的 get_messages 等工具。
 backend -> MySQL：原生 MySQL 协议
 backend -> Redis：原生 RESP；im:broadcast:* 消息载荷已使用 protobuf。
@@ -111,7 +111,7 @@ vim .env
 | `ES_ADDR` | Elasticsearch 地址 |
 | `NODE_ID` | 当前节点标识，单机可保持默认值 |
 | `STORAGE_BACKEND` | 对象存储类型，`minio` 或 `oss` |
-| `AGENT_GRPC_ADDR` | Python Agent 服务 gRPC 地址 |
+| `AGENT_HTTP_PORT` | Python Agent 服务 FastAPI 端口，默认 `8000` |
 | `NGINX_SERVER_NAME` | Nginx 接收的域名，本地/局域网可使用 `_` |
 | `NGINX_BACKEND_HOST` | Nginx 上游服务名，Docker Compose 默认使用 `backend` |
 | `NGINX_BACKEND_PORT` | Nginx 上游端口，默认 `8080` |
@@ -231,7 +231,7 @@ UPDATE users SET role = 1 WHERE username = '你的用户名';
 以下端口不要对公网开放：
 
 ```text
-3000 3306 6379 9090 9092 9200 27017 6333 6334 8080 6060 50051 50052 50053 9001
+3000 3306 6379 8000 9090 9092 9200 27017 6333 6334 8080 6060 50052 50053 9001
 ```
 
 MinIO 控制台 `9001` 建议只允许办公 IP 或通过 SSH 隧道访问。

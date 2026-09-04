@@ -238,19 +238,9 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 		}
 		return s.writeRoomAudit(ctx, before, room, action)
 	case "agent_enable":
-		if s.runtime != nil {
-			if err := s.runtime.AddAgent(ctx, roomID); err != nil {
-				return err
-			}
-		}
-		room.AgentEnabled = true
+		return fmt.Errorf("群聊 Agent 已迁移到 Python Agent 服务，请通过绑定接口启用")
 	case "agent_disable":
-		if s.runtime != nil {
-			if err := s.runtime.PauseAgent(ctx, roomID); err != nil {
-				return err
-			}
-		}
-		room.AgentEnabled = false
+		return fmt.Errorf("群聊 Agent 已迁移到 Python Agent 服务，请通过绑定接口停用")
 	case "moderation_enable":
 		room.ModerationEnabled = true
 	case "moderation_disable":

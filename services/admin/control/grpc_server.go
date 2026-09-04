@@ -120,17 +120,3 @@ func (s *Server) RuntimeSnapshots(ctx context.Context, _ *emptypb.Empty) (*admin
 		Agent:   agentSnapshotToProto(agentSnap),
 	}, nil
 }
-
-func (s *Server) AddAgent(ctx context.Context, req *admincontrolv1.AddAgentRequest) (*admincontrolv1.AddAgentResponse, error) {
-	if err := s.controller.AddAgent(ctx, req.GetRoomId()); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	return &admincontrolv1.AddAgentResponse{}, nil
-}
-
-func (s *Server) PauseAgent(ctx context.Context, req *admincontrolv1.PauseAgentRequest) (*admincontrolv1.PauseAgentResponse, error) {
-	if err := s.controller.PauseAgent(ctx, req.GetRoomId()); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	return &admincontrolv1.PauseAgentResponse{}, nil
-}
