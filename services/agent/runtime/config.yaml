@@ -28,8 +28,24 @@ qdrant:
 redis:
   addr: "redis:6379"
 
+kafka:
+  brokers: "${KAFKA_BROKERS:-kafka:9092}"
+  topic: "${KAFKA_TOPIC:-im_chat_messages}"
+  group_id: "${AGENT_KAFKA_GROUP:-agent_service}"
+  batch_size: 50
+  batch_window_seconds: 60
+  poll_interval_seconds: 1
+  auto_offset_reset: "latest"
+
 im_service:
   grpc_addr: "backend:50052"
+
+database:
+  url: "${AGENT_DATABASE_URL}"
+  pool_size: 10
+  max_overflow: 20
+  pool_recycle_seconds: 3600
+  echo: false
 
 agent:
   cooldown_seconds: 5.0

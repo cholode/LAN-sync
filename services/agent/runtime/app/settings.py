@@ -50,8 +50,28 @@ class RedisSettings:
 
 
 @dataclass(frozen=True)
+class KafkaSettings:
+    brokers: list[str] = field(default_factory=lambda: ["kafka:9092"])
+    topic: str = "im_chat_messages"
+    group_id: str = "agent_service"
+    batch_size: int = 50
+    batch_window_seconds: float = 60.0
+    poll_interval_seconds: float = 1.0
+    auto_offset_reset: str = "latest"
+
+
+@dataclass(frozen=True)
 class IMServiceSettings:
     grpc_addr: str = "backend:50052"
+
+
+@dataclass(frozen=True)
+class DatabaseSettings:
+    url: str
+    pool_size: int = 10
+    max_overflow: int = 20
+    pool_recycle_seconds: int = 3600
+    echo: bool = False
 
 
 @dataclass(frozen=True)
@@ -79,7 +99,9 @@ class Settings:
     embedding: EmbeddingSettings
     qdrant: QdrantSettings
     redis: RedisSettings
+    kafka: KafkaSettings
     im_service: IMServiceSettings
+    database: DatabaseSettings
     agent: AgentSettings
 
 
@@ -134,6 +156,15 @@ def _bool(value: Any, default: bool) -> bool:
     return default
 
 
+def _database_url(value: Any) -> str:
+    configured = str(value or "").strip()
+    if configured:
+        return configured
+    password = os.getenv("DB_PASSWORD", "")
+    database = os.getenv("DB_NAME", "lan_im")
+    return f"mysql+aiomysql://root:{password}@db:3306/{database}?charset=utf8mb4"
+
+
 def _load_settings() -> Settings:
     path = _default_config_path()
     raw_text = path.read_text(encoding="utf-8")
@@ -145,7 +176,9 @@ def _load_settings() -> Settings:
     embedding = _section(data, "embedding")
     qdrant = _section(data, "qdrant")
     redis = _section(data, "redis")
+    kafka = _section(data, "kafka")
     im_service = _section(data, "im_service")
+    database = _section(data, "database")
     agent = _section(data, "agent")
 
     return Settings(
@@ -174,7 +207,23 @@ def _load_settings() -> Settings:
             vector_size=_int(qdrant.get("vector_size"), 1024),
         ),
         redis=RedisSettings(addr=str(redis.get("addr") or "redis:6379")),
+        kafka=KafkaSettings(
+            brokers=[item.strip() for item in str(kafka.get("brokers") or "kafka:9092").split(",") if item.strip()],
+            topic=str(kafka.get("topic") or "im_chat_messages"),
+            group_id=str(kafka.get("group_id") or "agent_service"),
+            batch_size=_int(kafka.get("batch_size"), 50),
+            batch_window_seconds=_float(kafka.get("batch_window_seconds"), 60.0),
+            poll_interval_seconds=_float(kafka.get("poll_interval_seconds"), 1.0),
+            auto_offset_reset=str(kafka.get("auto_offset_reset") or "latest"),
+        ),
         im_service=IMServiceSettings(grpc_addr=str(im_service.get("grpc_addr") or "backend:50052")),
+        database=DatabaseSettings(
+            url=_database_url(database.get("url")),
+            pool_size=_int(database.get("pool_size"), 10),
+            max_overflow=_int(database.get("max_overflow"), 20),
+            pool_recycle_seconds=_int(database.get("pool_recycle_seconds"), 3600),
+            echo=_bool(database.get("echo"), False),
+        ),
         agent=AgentSettings(
             cooldown_seconds=_float(agent.get("cooldown_seconds"), 5.0),
             system_prompt=str(agent.get("system_prompt") or ""),
