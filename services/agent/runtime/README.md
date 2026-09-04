@@ -1,22 +1,45 @@
 # Agent 服务
 
-基于 LangChain + LangGraph 构建的 Python 服务。它对外暴露 `AgentService` gRPC API，是当前项目实际运行的 Agent 主服务；Go backend 通过 `services/gateway/clients` 调用该服务，Go 侧编排代码位于 `services/agent/application`。
+基于 FastAPI、LangChain 和 LangGraph 构建的 Python Agent 微服务。FastAPI 提供 Bot、群绑定、配置和移除申请管理接口；独立 Worker 从 Kafka 可靠写入 Inbox，然后执行审核、关键词对话、话题分块和 Qdrant 向量化。
 
 ## 运行
 
 ```bash
 cd services/agent/runtime
 python -m pip install -r requirements.txt
-python -m app.main
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m app.workers.main
 ```
 
-服务默认监听 `50051` 端口。
+FastAPI 默认监听 `8000`。迁移期间 API 进程还会监听旧 `50051` gRPC 端口，保证 Go backend 可以继续调用；完成 Go 编排移除后可删除该兼容入口。
 
 ## 处理链路
 
 ```text
-trigger -> RAG 检索 -> 构建提示词 -> LLM -> get_messages 工具 -> 回复
+Kafka -> MySQL Inbox -> 审核 Agent
+  -> rejected/needs_review -> 禁止向量化，必要时创建移除申请
+  -> approved -> 关键词对话 Agent -> 回复
+              -> Chunk Agent -> Embedding -> Qdrant
 ```
+
+Kafka offset 在 Inbox 事务提交后才提交。一个 Partition 可以包含多个群聊，后续处理按 `room_id` 从 Inbox 独立聚合。
+
+## 管理接口
+
+```text
+GET    /api/v1/health/live
+GET    /api/v1/health/ready
+POST   /api/v1/bots
+GET    /api/v1/bots
+POST   /api/v1/room-agent-bindings
+GET    /api/v1/rooms/{room_id}/agents
+GET    /api/v1/room-agent-bindings/{binding_id}/config
+PUT    /api/v1/room-agent-bindings/{binding_id}/config
+DELETE /api/v1/room-agent-bindings/{binding_id}/config
+GET    /api/v1/removal-requests
+```
+
+数据库表会在 API 或 Worker 启动时创建；正式发布仍可按 `migrations/` 中的 SQL 纳入部署迁移流程。
 
 - `app/graph.py`：LangGraph 状态图
 - `app/prompt.py`：与 Go 语言 `services/agent/application/prompt.go` 对应的提示词模板

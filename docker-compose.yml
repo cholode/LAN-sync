@@ -309,16 +309,54 @@ services:
       - lan-im-network
     ports:
       - "${AGENT_GRPC_PORT:-50051}:50051"
+      - "${AGENT_HTTP_PORT:-8000}:8000"
     volumes:
       - ./services/agent/runtime/config.yaml:/app/config.yaml:ro
     environment:
       - AGENT_CONFIG_PATH=/app/config.yaml
       - LLM_API_KEY=${LLM_API_KEY}
       - EMBED_API_KEY=${EMBED_API_KEY}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
     depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
       qdrant:
         condition: service_started
       redis:
+        condition: service_started
+      backend:
+        condition: service_started
+
+  agent-worker:
+    build:
+      context: ./services/agent/runtime
+    container_name: im-agent-worker
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.main"]
+    networks:
+      - lan-im-network
+    volumes:
+      - ./services/agent/runtime/config.yaml:/app/config.yaml:ro
+    environment:
+      - AGENT_CONFIG_PATH=/app/config.yaml
+      - LLM_API_KEY=${LLM_API_KEY}
+      - EMBED_API_KEY=${EMBED_API_KEY}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
+      - AGENT_KAFKA_GROUP=${AGENT_KAFKA_GROUP:-agent_service}
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      qdrant:
         condition: service_started
       backend:
         condition: service_started
