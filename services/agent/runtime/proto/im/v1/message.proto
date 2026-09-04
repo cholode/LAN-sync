@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package lan_im.im.v1;
+
+message ChatMessage {
+  int64 room_id = 1;
+  int64 sender_id = 2;
+  string client_msg_id = 3;
+  int32 type = 4;
+  string content = 5;
+  int64 created_at_ns = 6;
+}

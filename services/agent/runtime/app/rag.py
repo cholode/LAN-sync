@@ -5,7 +5,16 @@ from datetime import datetime
 from typing import Any
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, VectorParams
+from qdrant_client.models import (
+    DatetimeRange,
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PayloadSchemaType,
+    PointStruct,
+    VectorParams,
+)
 
 from app.embeddings import Embedder, get_embedder
 from app.settings import get_settings
@@ -27,7 +36,7 @@ class QdrantVectorStore:
         settings = get_settings()
         host = host or settings.qdrant.host
         port = port or settings.qdrant.grpc_port
-        self.client = QdrantClient(host=host, port=port)
+        self.client = QdrantClient(host=host, grpc_port=port, prefer_grpc=True)
 
     @staticmethod
     def collection_name(room_id: int) -> str:
@@ -37,17 +46,61 @@ class QdrantVectorStore:
         if vector_size is None:
             vector_size = get_settings().qdrant.vector_size
         name = self.collection_name(room_id)
-        if self.client.collection_exists(name):
-            return
-
-        self.client.create_collection(
-            collection_name=name,
-            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-        )
+        if not self.client.collection_exists(name):
+            self.client.create_collection(
+                collection_name=name,
+                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+            )
         self.client.create_payload_index(
             collection_name=name,
             field_name="chunk_type",
             field_schema="keyword",
+        )
+        for field_name in ("room_id", "binding_id"):
+            self.client.create_payload_index(
+                collection_name=name,
+                field_name=field_name,
+                field_schema=PayloadSchemaType.INTEGER,
+            )
+        for field_name in ("start_time", "end_time"):
+            self.client.create_payload_index(
+                collection_name=name,
+                field_name=field_name,
+                field_schema=PayloadSchemaType.DATETIME,
+            )
+
+    def upsert_chunk(
+        self,
+        *,
+        point_id: str,
+        vector: list[float],
+        room_id: int,
+        binding_id: int,
+        topic_name: str,
+        content: str,
+        message_ids: list[str],
+        start_time: datetime,
+        end_time: datetime,
+    ) -> None:
+        self.ensure_collection(room_id, len(vector))
+        self.client.upsert(
+            collection_name=self.collection_name(room_id),
+            wait=True,
+            points=[PointStruct(
+                id=point_id,
+                vector=vector,
+                payload={
+                    "room_id": room_id,
+                    "binding_id": binding_id,
+                    "chunk_type": "topic",
+                    "topic_name": topic_name,
+                    "content": content,
+                    "message_ids": message_ids,
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "moderation_status": "approved",
+                },
+            )],
         )
 
     def search(
@@ -81,21 +134,63 @@ class QdrantVectorStore:
         results: list[ChunkResult] = []
         for point in response.points:
             payload = point.payload or {}
-            start_ms = int(payload.get("start_time") or 0)
-            end_ms = int(payload.get("end_time") or 0)
+            start_value = payload.get("start_time")
+            end_value = payload.get("end_time")
+
+            def parse_time(value: Any) -> datetime:
+                if isinstance(value, str):
+                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                if value:
+                    return datetime.fromtimestamp(int(value) / 1000)
+                return datetime.now()
 
             results.append(
                 ChunkResult(
                     id=point.id or 0,
                     content=str(payload.get("content") or ""),
                     topic_name=str(payload.get("topic_name") or ""),
-                    start_time=datetime.fromtimestamp(start_ms / 1000) if start_ms else datetime.now(),
-                    end_time=datetime.fromtimestamp(end_ms / 1000) if end_ms else datetime.now(),
+                    start_time=parse_time(start_value),
+                    end_time=parse_time(end_value),
                     similarity=float(point.score or 0.0),
                     score=float(point.score or 0.0),
                 )
             )
 
+        return results
+
+    def search_time_range(
+        self,
+        *,
+        query_vector: list[float],
+        room_id: int,
+        binding_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        top_k: int = 5,
+    ) -> list[ChunkResult]:
+        response = self.client.query_points(
+            collection_name=self.collection_name(room_id),
+            query=query_vector,
+            limit=top_k,
+            query_filter=Filter(must=[
+                FieldCondition(key="binding_id", match=MatchValue(value=binding_id)),
+                FieldCondition(key="start_time", range=DatetimeRange(lte=end_time)),
+                FieldCondition(key="end_time", range=DatetimeRange(gte=start_time)),
+            ]),
+            with_payload=True,
+        )
+        results: list[ChunkResult] = []
+        for point in response.points:
+            payload = point.payload or {}
+            results.append(ChunkResult(
+                id=0,
+                content=str(payload.get("content") or ""),
+                topic_name=str(payload.get("topic_name") or ""),
+                start_time=datetime.fromisoformat(str(payload["start_time"])),
+                end_time=datetime.fromisoformat(str(payload["end_time"])),
+                similarity=float(point.score or 0.0),
+                score=float(point.score or 0.0),
+            ))
         return results
 
     def delete_by_room(self, room_id: int) -> None:
