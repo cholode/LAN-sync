@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"lan-im-go/models"
 )
@@ -21,8 +22,12 @@ func (r *userRepoImpl) CreateUser(user *models.User) error {
 }
 
 func (r *userRepoImpl) GetByUsername(username string) (*models.User, error) {
+	return r.GetByUsernameContext(context.Background(), username)
+}
+
+func (r *userRepoImpl) GetByUsernameContext(ctx context.Context, username string) (*models.User, error) {
 	var user models.User
-	err := r.db.Where("username = ?", username).Take(&user).Error
+	err := r.db.WithContext(ctx).Where("username = ?", username).Take(&user).Error
 	if err != nil {
 		return nil, err
 	}

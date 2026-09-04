@@ -58,6 +58,19 @@ Docker Compose 已自动将上述变量注入 `backend` 服务，并在宿主机
 | `go_memstats_sys_bytes` | Gauge | Go runtime 向操作系统申请的总内存 |
 | `go_gc_duration_seconds` | Summary | GC 暂停耗时分布 |
 
+### 登录认证
+
+| 指标 | 类型 | 说明 |
+|---|---|---|
+| `im_auth_login_attempts_total{result}` | Counter | 按结果统计登录请求，可用于计算失败率与限流比例 |
+| `im_auth_login_duration_seconds` | Histogram | 登录端到端耗时 |
+| `im_auth_bcrypt_active` | Gauge | 当前正在执行的 bcrypt 校验数 |
+
+登录保护默认限制单 IP 每分钟 200 次、单个 IP 与用户名组合每分钟 5 次，避免共享公网 IP
+误伤和仅按用户名锁定造成的拒绝服务。可通过 `LOGIN_IP_LIMIT_PER_MINUTE`、
+`LOGIN_IP_USERNAME_LIMIT_PER_MINUTE`、`LOGIN_BCRYPT_CONCURRENCY` 和
+`LOGIN_TIMEOUT_SECONDS` 调整；多实例部署时每个实例独立计数。
+
 ### WebSocket
 
 | 指标 | 类型 | 说明 |

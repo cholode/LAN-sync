@@ -18,6 +18,8 @@ func TestRegistryIncludesRuntimeAndProcessMetrics(t *testing.T) {
 		"process_resident_memory_bytes",
 		"go_goroutines",
 		"go_memstats_heap_alloc_bytes",
+		"im_auth_login_duration_seconds",
+		"im_auth_bcrypt_active",
 	} {
 		if !found[name] {
 			t.Errorf("expected metric %q to be registered", name)
