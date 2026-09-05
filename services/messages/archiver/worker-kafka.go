@@ -35,7 +35,7 @@ func nextID() int64 {
 
 	now := time.Now().UnixMilli()
 	if now == idLastMs {
-		idSequence = (idSequence + 1) & 0x3FF // 10 bits, 0-1023
+		idSequence = (idSequence + 1) & 0x3FF // 10 位，可用范围为 0–1023
 		if idSequence == 0 {
 			for now <= idLastMs {
 				now = time.Now().UnixMilli()

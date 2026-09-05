@@ -12,9 +12,8 @@ import (
 	"lan-im-go/shared/http/middleware"
 )
 
-// ModuleDependencies contains the infrastructure required by the admin HTTP
-// module. Runtime can be a local controller in the monolith or a gRPC client
-// when the admin process is split out again.
+// ModuleDependencies 包含管理端 HTTP 模块所需的基础设施。
+// Runtime 在单体模式下可以是本地控制器，再次拆分管理服务后也可以替换为 gRPC 客户端。
 type ModuleDependencies struct {
 	DB                *gorm.DB
 	Redis             *redis.Client
@@ -25,14 +24,13 @@ type ModuleDependencies struct {
 	QdrantClient      *qdrant.Client
 }
 
-// Module is the deployable boundary of the admin control plane.
+// Module 是管理控制面的可部署边界。
 type Module struct {
 	ErrorService *adminservice.ErrorCenterService
 	FileService  *adminservice.FileService
 }
 
-// NewModule wires all admin services without deciding whether they run in the
-// main process or in a standalone admin process.
+// NewModule 组装全部管理服务，但不限定它们运行在主进程还是独立管理进程中。
 func NewModule(deps ModuleDependencies) *Module {
 	provider := deps.Storage
 	if provider == nil {
@@ -76,8 +74,7 @@ func NewModule(deps ModuleDependencies) *Module {
 	return &Module{ErrorService: errorService, FileService: fileService}
 }
 
-// RegisterRoutes mounts the admin API with its authentication, authorization,
-// and rate-limit boundary intact.
+// RegisterRoutes 挂载管理 API，并保持认证、授权和限流边界完整。
 func (m *Module) RegisterRoutes(router *gin.Engine) {
 	// 登录接口属于 Admin Service 的公开入口，不能套用 JWT 中间件。
 	router.POST("/api/v1/admin/login", AdminLogin)

@@ -27,7 +27,7 @@ var (
 	agentRecentFailures    []AgentFailureEvent
 )
 
-// AgentFailureEvent ???? Agent ???????? API Key?
+// AgentFailureEvent 记录近期 Agent 失败信息，不保存提示词或 API Key。
 type AgentFailureEvent struct {
 	Time       time.Time `json:"time"`
 	Model      string    `json:"model"`
@@ -38,7 +38,7 @@ type AgentFailureEvent struct {
 	Retries    int       `json:"retries"`
 }
 
-// AgentRuntimeSnapshot Agent Dashboard ?????
+// AgentRuntimeSnapshot 汇总 Agent 管理面板所需的运行指标。
 type AgentRuntimeSnapshot struct {
 	CallsToday           int64               `json:"calls_today"`
 	CurrentRequests      int64               `json:"current_requests"`
@@ -96,7 +96,7 @@ func appendAgentFailure(event AgentFailureEvent) {
 	agentRecentFailures = append(agentRecentFailures, event)
 }
 
-// RecordAgentToolCall ?? Tool Calling ???
+// RecordAgentToolCall 记录一次工具调用及其结果。
 func RecordAgentToolCall(success bool) {
 	atomic.AddInt64(&agentToolCalls, 1)
 	if success {
@@ -104,22 +104,22 @@ func RecordAgentToolCall(success bool) {
 	}
 }
 
-// RecordAgentRAGCall ?? RAG ?????
+// RecordAgentRAGCall 记录一次 RAG 检索调用。
 func RecordAgentRAGCall() {
 	atomic.AddInt64(&agentRAGCalls, 1)
 }
 
-// RecordAgentTimeToolCall ?????? Tool ???
+// RecordAgentTimeToolCall 记录一次时间工具调用。
 func RecordAgentTimeToolCall() {
 	atomic.AddInt64(&agentTimeToolCalls, 1)
 }
 
-// RecordAgentModerationCall ???????????
+// RecordAgentModerationCall 记录一次内容审核调用。
 func RecordAgentModerationCall() {
 	atomic.AddInt64(&agentModerationCalls, 1)
 }
 
-// RecordEmbeddingCall ?? Embedding ?????
+// RecordEmbeddingCall 记录一次向量化调用及其结果。
 func RecordEmbeddingCall(success bool) {
 	atomic.AddInt64(&agentEmbeddingCalls, 1)
 	if !success {
@@ -127,13 +127,13 @@ func RecordEmbeddingCall(success bool) {
 	}
 }
 
-// RecordAgentTokenUsage ?? Token ????
+// RecordAgentTokenUsage 累计 Agent 的 Token 用量。
 func RecordAgentTokenUsage(inputTokens, outputTokens int64) {
 	atomic.AddInt64(&agentInputTokens, inputTokens)
 	atomic.AddInt64(&agentOutputTokens, outputTokens)
 }
 
-// AgentRuntimeSnapshotNow ?? Agent ?????
+// AgentRuntimeSnapshotNow 返回当前 Agent 运行指标快照。
 func AgentRuntimeSnapshotNow() AgentRuntimeSnapshot {
 	total := atomic.LoadInt64(&agentTotal)
 	var successRate, failureRate float64

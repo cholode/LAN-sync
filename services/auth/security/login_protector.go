@@ -28,8 +28,8 @@ type windowEntry struct {
 	count       int
 }
 
-// LoginProtector contains process-local login abuse protection. Cluster-wide
-// limits can later use Redis without changing the handler's protection flow.
+// LoginProtector 提供进程内的登录防滥用保护。后续可使用 Redis 实现集群级限流，
+// 无需改变处理器的保护流程。
 type LoginProtector struct {
 	mu     sync.Mutex
 	ips    map[string]windowEntry
@@ -89,8 +89,8 @@ func (p *LoginProtector) Allow(ip, username string) error {
 	return nil
 }
 
-// Compare runs one password comparison in the bounded CPU-intensive pool.
-// If bcrypt has already started, its slot remains occupied until it finishes.
+// Compare 在有界的 CPU 密集型任务池中执行一次密码比较。
+// bcrypt 一旦开始执行，就会持续占用槽位直至结束。
 func (p *LoginProtector) Compare(ctx context.Context, compare func() error) error {
 	select {
 	case p.slots <- struct{}{}:

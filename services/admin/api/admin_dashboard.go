@@ -17,7 +17,7 @@ func InitAdminDashboardService(svc *adminservice.DashboardService) {
 }
 
 // AdminDashboardOverview 返回管理员首页聚合数据。
-// GET /api/v1/admin/dashboard/overview
+// 路由：GET /api/v1/admin/dashboard/overview
 func AdminDashboardOverview(c *gin.Context) {
 	if adminDashboardService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard 服务未初始化"})
@@ -34,7 +34,7 @@ func AdminDashboardOverview(c *gin.Context) {
 }
 
 // AdminDashboardRuntime 返回 Go 运行时运行状态。
-// GET /api/v1/admin/dashboard/runtime
+// 路由：GET /api/v1/admin/dashboard/runtime
 func AdminDashboardRuntime(c *gin.Context) {
 	if adminRuntime != nil {
 		runtimeSnap, _, err := adminRuntime.RuntimeSnapshots(c.Request.Context())
@@ -47,7 +47,7 @@ func AdminDashboardRuntime(c *gin.Context) {
 }
 
 // AdminDashboardMessageTraffic 返回消息流量图表数据。
-// GET /api/v1/admin/dashboard/message-traffic
+// 路由：GET /api/v1/admin/dashboard/message-traffic
 func AdminDashboardMessageTraffic(c *gin.Context) {
 	if adminDashboardService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard 服务未初始化"})
@@ -62,7 +62,7 @@ func AdminDashboardMessageTraffic(c *gin.Context) {
 }
 
 // AdminAgentDashboard 返回 Agent 运行概览。
-// GET /api/v1/admin/dashboard/agent
+// 路由：GET /api/v1/admin/dashboard/agent
 func AdminAgentDashboard(c *gin.Context) {
 	if adminRuntime != nil {
 		_, agentSnap, err := adminRuntime.RuntimeSnapshots(c.Request.Context())
@@ -75,7 +75,7 @@ func AdminAgentDashboard(c *gin.Context) {
 }
 
 // AdminDashboardTimeSeries 返回首页图表需要的时间序列数据。
-// GET /api/v1/admin/dashboard/timeseries?metric=messages&period=24h
+// 路由：GET /api/v1/admin/dashboard/timeseries?metric=messages&period=24h
 func AdminDashboardTimeSeries(c *gin.Context) {
 	if adminDashboardService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Dashboard 服务未初始化"})

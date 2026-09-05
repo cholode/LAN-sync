@@ -15,15 +15,15 @@ import (
 	adminservice "lan-im-go/services/admin/application"
 )
 
-// PreSignUploadRequest is the presigned upload request body.
+// PreSignUploadRequest 是预签名上传的请求体。
 type PreSignUploadRequest struct {
 	FileName string `json:"filename" binding:"required"`
-	FileType string `json:"file_type"` // e.g. png, jpg, pdf
+	FileType string `json:"file_type"` // 例如 png、jpg、pdf
 	FileSize int64  `json:"file_size"`
 }
 
-// PreSignUploadHandler generates a presigned upload URL.
-// POST /api/v1/files/presign
+// PreSignUploadHandler 生成预签名上传 URL。
+// 路由：POST /api/v1/files/presign
 func (m *Module) PreSignUploadHandler(c *gin.Context) {
 	var req PreSignUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -34,8 +34,8 @@ func (m *Module) PreSignUploadHandler(c *gin.Context) {
 	now := time.Now()
 	userID := c.GetInt64("user_id")
 
-	// Object key: {date}/{userID}/{timestamp}_{safeFilename}
-	// path.Base prevents path traversal and keeps S3/OSS slash semantics.
+	// 对象键格式：{date}/{userID}/{timestamp}_{safeFilename}
+	// path.Base 用于防止路径穿越，同时保留 S3/OSS 的斜杠语义。
 	safeName := path.Base(strings.TrimSpace(req.FileName))
 	if safeName == "." || safeName == "/" || safeName == "" {
 		safeName = "file"
@@ -65,7 +65,7 @@ func (m *Module) PreSignUploadHandler(c *gin.Context) {
 }
 
 // CompleteUploadHandler 记录客户端直传完成后的文件元数据，供超级管理员后台管理。
-// POST /api/v1/files/complete
+// 路由：POST /api/v1/files/complete
 func (m *Module) CompleteUploadHandler(c *gin.Context) {
 	var req struct {
 		ObjectKey    string `json:"object_key" binding:"required"`
@@ -118,8 +118,8 @@ func downloadSegmentFromRequest(c *gin.Context) string {
 	return raw
 }
 
-// DownloadFile generates a presigned object-storage URL and redirects.
-// GET /api/v1/download/{object_key}
+// DownloadFile 生成对象存储的预签名 URL 并执行重定向。
+// 路由：GET /api/v1/download/{object_key}
 func (m *Module) DownloadFile(c *gin.Context) {
 	raw := downloadSegmentFromRequest(c)
 	if raw == "" || raw == "." || raw == "/" {

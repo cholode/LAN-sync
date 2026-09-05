@@ -164,14 +164,12 @@ func (p *MinioProvider) ListObjects(ctx context.Context, prefix string, limit in
 			Exists:       true,
 		})
 		if len(out) >= limit {
-			// Stop the producer as soon as the requested page is full. This is
-			// important for health checks, which intentionally request one item.
+			// 请求页达到上限后立即停止生产者。这对只请求一条记录的健康检查很重要。
 			cancel()
 			break
 		}
 	}
-	// minio-go requires the channel to be drained after cancellation. Otherwise
-	// its listObjectsV2 producer can remain blocked and leak a goroutine.
+	// minio-go 要求取消后继续排空通道，否则 listObjectsV2 生产者可能一直阻塞并泄漏协程。
 	if listErr != nil || len(out) >= limit {
 		for range ch {
 		}

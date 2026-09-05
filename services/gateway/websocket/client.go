@@ -78,14 +78,14 @@ func (c *Client) LastWriteAt() time.Time {
 	return c.ConnectedAt
 }
 
-// SetUsername updates the username for this connection.
+// SetUsername 更新当前连接的用户名。
 func (c *Client) SetUsername(name string) {
 	c.usernameMu.Lock()
 	c.username = name
 	c.usernameMu.Unlock()
 }
 
-// Username returns the username for this connection.
+// Username 返回当前连接的用户名。
 func (c *Client) Username() string {
 	c.usernameMu.RLock()
 	defer c.usernameMu.RUnlock()

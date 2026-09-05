@@ -18,7 +18,7 @@ func InitAdminModerationService(svc *adminservice.ModerationService) {
 }
 
 // AdminModerationDashboard 获取审核看板数据。
-// GET /api/v1/admin/dashboard/moderation
+// 路由：GET /api/v1/admin/dashboard/moderation
 func AdminModerationDashboard(c *gin.Context) {
 	if adminModerationService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "审核服务未初始化"})
@@ -33,7 +33,7 @@ func AdminModerationDashboard(c *gin.Context) {
 }
 
 // AdminModerationList 分页查询审核事件。
-// GET /api/v1/admin/moderation
+// 路由：GET /api/v1/admin/moderation
 func AdminModerationList(c *gin.Context) {
 	if adminModerationService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "审核服务未初始化"})
@@ -72,7 +72,7 @@ func AdminModerationList(c *gin.Context) {
 }
 
 // AdminModerationDetail 查询单条审核事件。
-// GET /api/v1/admin/moderation/:id
+// 路由：GET /api/v1/admin/moderation/:id
 func AdminModerationDetail(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -92,7 +92,7 @@ func AdminModerationDetail(c *gin.Context) {
 }
 
 // AdminModerationAction 审核通过或驳回。
-// POST /api/v1/admin/moderation/:id/action
+// 路由：POST /api/v1/admin/moderation/:id/action
 func AdminModerationAction(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {

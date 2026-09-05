@@ -43,7 +43,7 @@ const messageIndexMapping = `{
   }
 }`
 
-// messageDoc is the Elasticsearch representation of a chat message.
+// messageDoc 是聊天消息在 Elasticsearch 中的表示形式。
 type messageDoc struct {
 	ID          int64     `json:"id"`
 	RoomID      int64     `json:"room_id"`
@@ -55,7 +55,7 @@ type messageDoc struct {
 	DeletedAt   int64     `json:"deleted_at,omitempty"`
 }
 
-// SearchParams defines filters for a message search request.
+// SearchParams 定义消息搜索请求的过滤条件。
 type SearchParams struct {
 	Query    string
 	SenderID int64
@@ -65,7 +65,7 @@ type SearchParams struct {
 	Size     int
 }
 
-// MessageHit is one matched message returned by Elasticsearch.
+// MessageHit 表示 Elasticsearch 返回的一条匹配消息。
 type MessageHit struct {
 	ID          int64     `json:"id,string"`
 	RoomID      int64     `json:"room_id,string"`
@@ -77,20 +77,19 @@ type MessageHit struct {
 	Highlight   []string  `json:"highlight,omitempty"`
 }
 
-// SearchResult is the API-facing search response payload.
+// SearchResult 是面向 API 的搜索响应数据。
 type SearchResult struct {
 	Total int64        `json:"total"`
 	Hits  []MessageHit `json:"messages"`
 }
 
-// Enabled reports whether Elasticsearch indexing and search are active.
+// Enabled 表示 Elasticsearch 索引和搜索功能是否启用。
 func Enabled() bool {
 	return enabled
 }
 
-// Init connects to Elasticsearch and creates the message index if needed.
-// It is a no-op when ES_ENABLED is not "true", so the rest of the system
-// can still run without Elasticsearch.
+// Init 连接 Elasticsearch，并在需要时创建消息索引。
+// 当 ES_ENABLED 不为 "true" 时不执行任何操作，因此系统其他部分仍可在没有 Elasticsearch 时运行。
 func Init(ctx context.Context) error {
 	enabled = strings.EqualFold(os.Getenv("ES_ENABLED"), "true")
 	if !enabled {
@@ -137,7 +136,7 @@ func Init(ctx context.Context) error {
 	return nil
 }
 
-// Close releases the Elasticsearch client.
+// Close 释放 Elasticsearch 客户端。
 func Close() {
 	esClient = nil
 	enabled = false
@@ -171,8 +170,8 @@ func ensureMessageIndex(ctx context.Context) error {
 	return checkResponse(createRes)
 }
 
-// IndexMessages bulk-indexes archived messages asynchronously from the caller's
-// perspective. The Kafka archiver should call this after messages are persisted.
+// IndexMessages 从调用方视角异步批量索引归档消息。
+// Kafka 归档器应在消息持久化后调用此函数。
 func IndexMessages(ctx context.Context, msgs []*models.Message) error {
 	if !enabled || esClient == nil || len(msgs) == 0 {
 		return nil
@@ -221,8 +220,7 @@ func IndexMessages(ctx context.Context, msgs []*models.Message) error {
 	return checkResponse(res)
 }
 
-// SearchMessages queries room messages. Callers must already verify that the
-// current user is a member of the target room.
+// SearchMessages 查询群聊消息。调用方必须事先确认当前用户属于目标群聊。
 func SearchMessages(ctx context.Context, roomID int64, params SearchParams) (*SearchResult, error) {
 	if !enabled || esClient == nil {
 		return nil, fmt.Errorf("elasticsearch is not enabled")

@@ -18,7 +18,7 @@ func InitAdminRoomService(svc *adminservice.RoomService) {
 }
 
 // AdminRoomList 分页查询群聊。
-// GET /api/v1/admin/rooms
+// 路由：GET /api/v1/admin/rooms
 func AdminRoomList(c *gin.Context) {
 	if adminRoomService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "房间服务未初始化"})
@@ -70,7 +70,7 @@ func AdminRoomList(c *gin.Context) {
 }
 
 // AdminRoomDetail 查询房间详情。
-// GET /api/v1/admin/rooms/:id
+// 路由：GET /api/v1/admin/rooms/:id
 func AdminRoomDetail(c *gin.Context) {
 	roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -90,7 +90,7 @@ func AdminRoomDetail(c *gin.Context) {
 }
 
 // AdminRoomAction 执行房间管理动作。
-// POST /api/v1/admin/rooms/:id/action
+// 路由：POST /api/v1/admin/rooms/:id/action
 func AdminRoomAction(c *gin.Context) {
 	roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {

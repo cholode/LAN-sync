@@ -17,7 +17,7 @@ func InitAdminConnectionService(svc *adminservice.ConnectionService) {
 }
 
 // AdminConnectionList 查询 WebSocket 连接列表。
-// GET /api/v1/admin/connections
+// 路由：GET /api/v1/admin/connections
 func AdminConnectionList(c *gin.Context) {
 	if adminConnectionService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "连接管理服务未初始化"})
@@ -28,7 +28,7 @@ func AdminConnectionList(c *gin.Context) {
 }
 
 // AdminConnectionClose 关闭指定连接。
-// POST /api/v1/admin/connections/close
+// 路由：POST /api/v1/admin/connections/close
 func AdminConnectionClose(c *gin.Context) {
 	var req struct {
 		ConnectionID string `json:"connection_id" binding:"required"`
@@ -61,7 +61,7 @@ func AdminConnectionClose(c *gin.Context) {
 }
 
 // AdminUserForceOffline 强制用户下线。
-// POST /api/v1/admin/connections/force-offline
+// 路由：POST /api/v1/admin/connections/force-offline
 func AdminUserForceOffline(c *gin.Context) {
 	var req struct {
 		UserID int64 `json:"user_id" binding:"required"`

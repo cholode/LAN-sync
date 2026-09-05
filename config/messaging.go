@@ -15,9 +15,8 @@ const (
 	defaultKafkaArchiverGroup = "im_archiver_group"
 )
 
-// MessagingConfig is the single source of truth for Redis and Kafka settings.
-// KAFKA_ADDR remains supported for backwards compatibility; new deployments
-// should use the clearer KAFKA_BROKERS name.
+// MessagingConfig 是 Redis 和 Kafka 配置的唯一权威来源。
+// 为保持向后兼容，仍支持 KAFKA_ADDR；新部署应使用更清晰的名称 KAFKA_BROKERS。
 type MessagingConfig struct {
 	Redis RedisConfig
 	Kafka KafkaConfig

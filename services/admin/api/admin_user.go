@@ -18,7 +18,7 @@ func InitAdminUserService(svc *adminservice.UserService) {
 }
 
 // AdminUserList 分页查询用户。
-// GET /api/v1/admin/users
+// 路由：GET /api/v1/admin/users
 func AdminUserList(c *gin.Context) {
 	if adminUserService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "用户服务未初始化"})
@@ -64,7 +64,7 @@ func AdminUserList(c *gin.Context) {
 }
 
 // AdminUserDetail 查询用户详情。
-// GET /api/v1/admin/users/:id
+// 路由：GET /api/v1/admin/users/:id
 func AdminUserDetail(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -84,7 +84,7 @@ func AdminUserDetail(c *gin.Context) {
 }
 
 // AdminUserAction 执行用户管理动作。
-// POST /api/v1/admin/users/:id/action
+// 路由：POST /api/v1/admin/users/:id/action
 func AdminUserAction(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {

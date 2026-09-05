@@ -17,7 +17,7 @@ func InitAdminRAGService(svc *adminservice.RAGService) {
 }
 
 // AdminRAGDashboard 获取 RAG/Qdrant 看板数据。
-// GET /api/v1/admin/dashboard/rag
+// 路由：GET /api/v1/admin/dashboard/rag
 func AdminRAGDashboard(c *gin.Context) {
 	if adminRAGService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "RAG 服务未初始化"})
@@ -32,7 +32,7 @@ func AdminRAGDashboard(c *gin.Context) {
 }
 
 // AdminRAGQueries 查询 RAG 查询记录。
-// GET /api/v1/admin/rag/queries
+// 路由：GET /api/v1/admin/rag/queries
 func AdminRAGQueries(c *gin.Context) {
 	if adminRAGService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "RAG 服务未初始化"})

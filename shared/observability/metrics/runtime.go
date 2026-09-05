@@ -33,7 +33,7 @@ var (
 	apiLatencyCount       int64
 )
 
-// RuntimeSnapshot ?????????????????? Prometheus ?????
+// RuntimeSnapshot 汇总运行时指标，供管理端和 Prometheus 使用。
 type RuntimeSnapshot struct {
 	WebSocket WebSocketRuntime `json:"websocket"`
 	Golang    GoRuntime        `json:"golang"`
@@ -75,13 +75,13 @@ type APIRuntime struct {
 	ErrorRate        float64 `json:"error_rate"`
 }
 
-// RecordWSConnected ? WSConnected ??????????????????
+// RecordWSConnected 记录一次 WebSocket 建立并增加当前连接数。
 func RecordWSConnected() {
 	atomic.AddInt64(&wsCurrent, 1)
 	atomic.AddInt64(&wsEstablishedTotal, 1)
 }
 
-// RecordWSDisconnected ? WSDisconnected ???
+// RecordWSDisconnected 记录一次 WebSocket 断开。
 func RecordWSDisconnected(duration time.Duration, abnormal bool) {
 	if atomic.AddInt64(&wsCurrent, -1) < 0 {
 		atomic.StoreInt64(&wsCurrent, 0)
@@ -95,27 +95,27 @@ func RecordWSDisconnected(duration time.Duration, abnormal bool) {
 	atomic.AddInt64(&wsDurationCount, 1)
 }
 
-// RecordWSReadMessage ??????????????????????
+// RecordWSReadMessage 记录一条从 WebSocket 读取的消息。
 func RecordWSReadMessage() {
 	wsReadWindow.Add(time.Now().Unix())
 }
 
-// RecordWSWriteMessage ??????????????????????
+// RecordWSWriteMessage 记录一条写入 WebSocket 的消息。
 func RecordWSWriteMessage() {
 	wsWriteWindow.Add(time.Now().Unix())
 }
 
-// SetWSSendQueueBacklog ????????????
+// SetWSSendQueueBacklog 更新发送队列积压量。
 func SetWSSendQueueBacklog(backlog int) {
 	atomic.StoreInt64(&wsSendQueueBacklog, int64(backlog))
 }
 
-// RecordWSSlowClient ? Hub ???????????
+// RecordWSSlowClient 记录一次 Hub 慢客户端事件。
 func RecordWSSlowClient() {
 	atomic.AddInt64(&wsSlowClients, 1)
 }
 
-// ObserveAPIRequest ?? HTTP API ??????????? QPS/???????
+// ObserveAPIRequest 记录 HTTP API 请求，用于计算 QPS、延迟和错误率。
 func ObserveAPIRequest(status int, duration time.Duration) {
 	now := time.Now().Unix()
 	apiRequestsWindow.Add(now)
@@ -131,7 +131,7 @@ func ObserveAPIRequest(status int, duration time.Duration) {
 	}
 }
 
-// RuntimeSnapshotNow ??????????
+// RuntimeSnapshotNow 返回当前运行时指标快照。
 func RuntimeSnapshotNow() RuntimeSnapshot {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
@@ -212,7 +212,7 @@ func (w *secondWindow) Add(now int64) {
 		return
 	}
 	if now > w.lastSec {
-		// ???????
+		// 清空时间跳跃期间已经过期的桶。
 		steps := int(now - w.lastSec)
 		if steps > len(w.buckets) {
 			steps = len(w.buckets)

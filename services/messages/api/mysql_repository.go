@@ -97,7 +97,7 @@ func (r *messageRepoImpl) CountMessagesAfterID(roomID int64, sinceID int64) (int
 func (r *messageRepoImpl) SearchMessages(params repository.MessageSearchParams) ([]*models.Message, int64, error) {
 	query := r.db.Model(&models.Message{}).Where("room_id = ?", params.RoomID)
 	if params.Keyword != "" {
-		// LOCATE treats %, _ and backslashes as plain user input instead of LIKE wildcards.
+		// LOCATE 会把 %、_ 和反斜杠视为普通用户输入，而不是 LIKE 通配符。
 		query = query.Where("LOCATE(?, content) > 0", params.Keyword)
 	}
 	if params.SenderID > 0 {

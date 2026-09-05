@@ -18,20 +18,20 @@ import (
 	"lan-im-go/services/gateway/websocket"
 )
 
-// Server is the Go-side IMService that the Python agent service calls back
-// into when a tool needs to read messages, kick a user, or post a reply.
+// Server 是 Go 侧的 IMService，供 Python Agent 工具回调，
+// 用于读取消息、移除用户或发送回复。
 type Server struct {
 	agentv1.UnimplementedIMServiceServer
 
 	hub *core.Hub
 }
 
-// NewServer creates an IMService gRPC server implementation.
+// NewServer 创建 IMService 的 gRPC 服务端实现。
 func NewServer(hub *core.Hub) *Server {
 	return &Server{hub: hub}
 }
 
-// Start listens on addr until ctx is cancelled.
+// Start 在 addr 上监听，直至 ctx 被取消。
 func (s *Server) Start(ctx context.Context, addr string) error {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -50,7 +50,7 @@ func (s *Server) Start(ctx context.Context, addr string) error {
 	return grpcServer.Serve(lis)
 }
 
-// FetchMessages returns messages in [start, end) ordered ascending.
+// FetchMessages 按升序返回 [start, end) 时间范围内的消息。
 func (s *Server) FetchMessages(ctx context.Context, req *agentv1.FetchMessagesRequest) (*agentv1.FetchMessagesResponse, error) {
 	limit := int(req.GetLimit())
 	if limit <= 0 || limit > 500 {
@@ -83,7 +83,7 @@ func (s *Server) FetchMessages(ctx context.Context, req *agentv1.FetchMessagesRe
 	return &agentv1.FetchMessagesResponse{Messages: out}, nil
 }
 
-// KickUser removes a member from a room and forces its live connection closed.
+// KickUser 将成员移出群聊并强制关闭其实时连接。
 func (s *Server) KickUser(ctx context.Context, req *agentv1.KickUserRequest) (*agentv1.KickUserResponse, error) {
 	if err := repository.RoomMember.RemoveMember(req.GetRoomId(), req.GetUserId()); err != nil {
 		return &agentv1.KickUserResponse{
@@ -101,7 +101,7 @@ func (s *Server) KickUser(ctx context.Context, req *agentv1.KickUserRequest) (*a
 	}, nil
 }
 
-// SendReply publishes a message as the bot user.
+// SendReply 以机器人用户身份发布消息。
 func (s *Server) SendReply(ctx context.Context, req *agentv1.SendReplyRequest) (*agentv1.SendReplyResponse, error) {
 	messageID := req.GetMessageId()
 	if messageID == "" {
