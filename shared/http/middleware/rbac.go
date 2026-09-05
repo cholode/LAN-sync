@@ -12,7 +12,7 @@ import (
 func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, ok := getUserRole(c)
-		if !ok || !models.HasPermission(role, models.PermDashboardRead) {
+		if !ok || !models.IsAdminRole(role) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，无法访问管理后台"})
 			c.Abort()
 			return

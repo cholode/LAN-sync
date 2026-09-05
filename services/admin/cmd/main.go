@@ -53,7 +53,6 @@ func main() {
 	defer runtimeClient.Close()
 	adminModule := adminapi.NewModule(adminapi.ModuleDependencies{
 		DB:                infrastructure.DB,
-		Redis:             config.RedisClient,
 		MessageCollection: infrastructure.MessageCollection,
 		MessageStore:      os.Getenv("MESSAGE_STORE"),
 		Storage:           adminapi.Storage,

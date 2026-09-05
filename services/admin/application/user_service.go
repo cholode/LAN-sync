@@ -214,15 +214,6 @@ func (s *UserService) ApplyAction(ctx context.Context, userID int64, action User
 		user.Role = models.RoleOperator
 	case "role_user":
 		user.Role = models.RoleUser
-	case "force_offline":
-		if s.runtime != nil {
-			if err := s.runtime.KickUser(ctx, userID); err != nil {
-				return err
-			}
-		}
-		_ = cache.SetUserOffline(ctx, userID)
-		after := user
-		return s.writeUserAudit(ctx, before, after, action)
 	default:
 		return fmt.Errorf("不支持的用户操作: %s", action.Action)
 	}

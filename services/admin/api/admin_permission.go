@@ -35,8 +35,6 @@ func userActionPermission(action string) string {
 	switch action {
 	case "ban", "unban":
 		return models.PermUserBan
-	case "force_offline":
-		return models.PermUserKick
 	case "role_super_admin", "role_moderator", "role_operator", "role_user":
 		return models.PermUserRoleUpdate
 	default:

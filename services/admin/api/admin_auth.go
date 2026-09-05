@@ -77,7 +77,7 @@ func AdminLogin(c *gin.Context) {
 		return
 	}
 
-	if !models.HasPermission(user.Role, models.PermDashboardRead) {
+	if !models.IsAdminRole(user.Role) {
 		result = "forbidden"
 		c.JSON(http.StatusForbidden, gin.H{"error": "该账号无权登录管理后台"})
 		return

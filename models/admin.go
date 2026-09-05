@@ -84,6 +84,11 @@ func RoleName(role int8) string {
 	}
 }
 
+// IsAdminRole 判断角色是否可以进入治理后台。
+func IsAdminRole(role int8) bool {
+	return role == RoleSuperAdmin || role == RoleModerator || role == RoleOperator
+}
+
 // HasPermission 检查指定角色是否拥有某项权限。
 // 超级管理员默认拥有所有权限。
 func HasPermission(role int8, permission string) bool {
