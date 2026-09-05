@@ -1,14 +1,19 @@
 # 此文件由 nginx 官方 entrypoint 在容器启动时通过 envsubst 渲染。
 # NGINX_ENVSUBST_FILTER 会限制只替换部署变量，保留 $host、$uri 等 Nginx 变量。
 upstream backend_api {
-    server ${BACKEND_HOST}:${BACKEND_PORT} max_fails=3 fail_timeout=10s;
+    zone backend_api 64k;
+    server ${BACKEND_HOST}:${BACKEND_PORT} resolve max_fails=3 fail_timeout=10s;
     keepalive 32;
 }
 
 upstream admin_api {
-    server ${ADMIN_HOST}:${ADMIN_PORT} max_fails=3 fail_timeout=10s;
+    zone admin_api 64k;
+    server ${ADMIN_HOST}:${ADMIN_PORT} resolve max_fails=3 fail_timeout=10s;
     keepalive 16;
 }
+
+# Docker 内置 DNS 会在服务容器重建、更换 IP 后刷新上游地址。
+resolver 127.0.0.11 valid=5s ipv6=off;
 
 server {
     listen 80 default_server backlog=65535;
