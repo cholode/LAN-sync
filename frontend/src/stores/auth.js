@@ -19,6 +19,7 @@ export const useAuthStore = defineStore('auth', () => {
     const roleValue = String(role.value ?? '').toLowerCase()
     return Number(role.value) === 1 || ['1', 'super_admin', 'superadmin', 'admin'].includes(roleValue)
   })
+  const isAdmin = computed(() => [1, 2, 3].includes(Number(role.value)))
   const isLoggedIn = computed(() => !!token.value)
 
   function persist(nextToken, nextUser) {
@@ -36,7 +37,15 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
+  async function adminLogin(form) {
+    const data = await authApi.adminLogin(form)
+    const nextToken = data?.token || data?.access_token || data?.jwt || data?.data?.token
+    if (!nextToken) throw new Error('登录成功但响应中没有找到 JWT token')
+    persist(nextToken, data?.user || data?.data?.user || { username: form.username })
+    return data
+  }
+
   async function register(form) { return authApi.register(form) }
   function logout() { persist('', null) }
-  return { token, user, role, isSuperAdmin, isLoggedIn, login, register, logout }
+  return { token, user, role, isSuperAdmin, isAdmin, isLoggedIn, login, adminLogin, register, logout }
 })

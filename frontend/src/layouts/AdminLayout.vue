@@ -10,7 +10,7 @@
         <div class="nav-group">平台与安全</div>
         <RouterLink v-for="item in ops" :key="item.to" :to="item.to" class="nav-item"><component :is="item.icon" :size="17" /><span>{{ item.label }}</span></RouterLink>
       </nav>
-      <div class="sidebar-foot"><RouterLink to="/chat" class="nav-item"><MessageSquareText :size="17" /><span>返回聊天</span></RouterLink></div>
+	  <div v-if="!standalone" class="sidebar-foot"><RouterLink to="/chat" class="nav-item"><MessageSquareText :size="17" /><span>返回聊天</span></RouterLink></div>
     </aside>
     <div class="main" :class="{collapsed:ui.sidebarCollapsed}">
       <header class="topbar">
@@ -26,6 +26,7 @@ import { computed, onMounted, ref } from 'vue'
 import { Users, LayoutDashboard, MessagesSquare, ShieldCheck, Bot, Activity, ScrollText, MessageSquareText, PanelLeftClose, PanelLeftOpen, Search, Moon, Sun, Bell, Network, FolderOpen, Siren } from 'lucide-vue-next'
 import AppLogo from '../components/common/AppLogo.vue'; import StatusBadge from '../components/common/StatusBadge.vue'; import { useUiStore } from '../stores/ui.js'; import { useAuthStore } from '../stores/auth.js'; import { adminApi } from '../api/admin.js'
 const ui=useUiStore(), auth=useAuthStore(), alertCount=ref(0); const initial=computed(()=>String(auth.user?.username||'A').slice(0,1).toUpperCase());onMounted(async()=>{try{alertCount.value=Number((await adminApi.unresolvedAlertCount())?.count)||0}catch{alertCount.value=0}})
+const standalone = import.meta.env.VITE_ADMIN_STANDALONE === 'true'
 const primary=[{to:'/admin/dashboard',label:'总览 Dashboard',icon:LayoutDashboard},{to:'/admin/users',label:'用户管理',icon:Users},{to:'/admin/rooms',label:'群聊管理',icon:MessagesSquare}]
 const ai=[{to:'/admin/moderation',label:'内容治理',icon:ShieldCheck},{to:'/admin/agent',label:'Agent & RAG',icon:Bot}]
 const ops=[{to:'/admin/connections',label:'连接管理',icon:Network},{to:'/admin/files',label:'文件管理',icon:FolderOpen},{to:'/admin/operations',label:'运维事件',icon:Siren},{to:'/admin/system',label:'系统运行',icon:Activity},{to:'/admin/audit',label:'审计日志',icon:ScrollText}]

@@ -2,6 +2,40 @@
 
 本文档描述 `admin-service` 提供的超级管理员后台接口。
 
+## 管理端登录与端口
+
+- 管理 API 默认端口：`8081`，通过 `ADMIN_SERVER_PORT` 配置。
+- 独立管理前端默认端口：`5174`，通过 `ADMIN_FRONTEND_PORT` 配置。
+- 普通用户 Backend 默认端口：`8080`。
+
+### POST /api/v1/admin/login
+
+该接口不需要 JWT，但只允许超级管理员、审核员或运营人员登录。
+
+```json
+{
+  "username": "admin",
+  "password": "example-password"
+}
+```
+
+成功响应：
+
+```json
+{
+  "msg": "管理员登录成功",
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "role": 1,
+    "avatar": ""
+  }
+}
+```
+
+普通用户账号返回 `403`，密码错误返回 `401`，频率超限返回 `429`。
+
 ## 服务信息
 
 - 服务地址：`http://<host>:8081`

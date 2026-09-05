@@ -1,0 +1,13 @@
+ARG DOCKER_HUB_MIRROR=dockerproxy.net
+FROM ${DOCKER_HUB_MIRROR}/library/node:22-alpine AS builder
+
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build:admin
+
+FROM ${DOCKER_HUB_MIRROR}/library/nginx:alpine
+COPY deploy/nginx/admin-frontend.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=builder /build/admin-dist /usr/share/nginx/html
+EXPOSE 80

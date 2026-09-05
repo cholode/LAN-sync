@@ -111,6 +111,11 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 	// 密码校验：使用bcrypt对比加密密码，禁止明文验证
+	if user.Role != models.RoleUser {
+		result = "admin_login_required"
+		c.JSON(http.StatusForbidden, gin.H{"error": "管理员账号请使用管理后台登录"})
+		return
+	}
 
 	// 生成JWT身份令牌
 	token, err := pkg.GenerateToken(user.ID, user.Role)

@@ -74,7 +74,7 @@ func main() {
 
 	adminModule.RegisterRoutes(router)
 
-	port := os.Getenv("ADMIN_HTTP_PORT")
+	port := os.Getenv("ADMIN_SERVER_PORT")
 	if port == "" {
 		port = "8081"
 	}

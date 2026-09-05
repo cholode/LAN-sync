@@ -79,6 +79,9 @@ func NewModule(deps ModuleDependencies) *Module {
 // RegisterRoutes mounts the admin API with its authentication, authorization,
 // and rate-limit boundary intact.
 func (m *Module) RegisterRoutes(router *gin.Engine) {
+	// 登录接口属于 Admin Service 的公开入口，不能套用 JWT 中间件。
+	router.POST("/api/v1/admin/login", AdminLogin)
+
 	admin := router.Group("/api/v1/admin")
 	admin.Use(middleware.JWTAuth(), middleware.RequireAdmin(), middleware.AdminRateLimit(10, 30))
 	RegisterAdminRoutes(admin)
