@@ -17,6 +17,7 @@ from qdrant_client.models import (
 )
 
 from app.embeddings import Embedder, get_embedder
+from app.metrics import observe_qdrant
 from app.settings import get_settings
 from app.time_utils import utc_from_timestamp, utc_now
 
@@ -47,11 +48,12 @@ class QdrantVectorStore:
         if vector_size is None:
             vector_size = get_settings().qdrant.vector_size
         name = self.collection_name(room_id)
-        if not self.client.collection_exists(name):
-            self.client.create_collection(
-                collection_name=name,
-                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-            )
+        with observe_qdrant("ensure_collection"):
+            if not self.client.collection_exists(name):
+                self.client.create_collection(
+                    collection_name=name,
+                    vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+                )
         self.client.create_payload_index(
             collection_name=name,
             field_name="chunk_type",
@@ -84,25 +86,26 @@ class QdrantVectorStore:
         end_time: datetime,
     ) -> None:
         self.ensure_collection(room_id, len(vector))
-        self.client.upsert(
-            collection_name=self.collection_name(room_id),
-            wait=True,
-            points=[PointStruct(
-                id=point_id,
-                vector=vector,
-                payload={
-                    "room_id": room_id,
-                    "binding_id": binding_id,
-                    "chunk_type": "topic",
-                    "topic_name": topic_name,
-                    "content": content,
-                    "message_ids": message_ids,
-                    "start_time": start_time.isoformat(),
-                    "end_time": end_time.isoformat(),
-                    "moderation_status": "approved",
-                },
-            )],
-        )
+        with observe_qdrant("upsert"):
+            self.client.upsert(
+                collection_name=self.collection_name(room_id),
+                wait=True,
+                points=[PointStruct(
+                    id=point_id,
+                    vector=vector,
+                    payload={
+                        "room_id": room_id,
+                        "binding_id": binding_id,
+                        "chunk_type": "topic",
+                        "topic_name": topic_name,
+                        "content": content,
+                        "message_ids": message_ids,
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat(),
+                        "moderation_status": "approved",
+                    },
+                )],
+            )
 
     def search(
         self,
@@ -124,13 +127,14 @@ class QdrantVectorStore:
                 ]
             )
 
-        response = self.client.query_points(
-            collection_name=name,
-            query=query_vector,
-            limit=top_k,
-            query_filter=query_filter,
-            with_payload=True,
-        )
+        with observe_qdrant("search"):
+            response = self.client.query_points(
+                collection_name=name,
+                query=query_vector,
+                limit=top_k,
+                query_filter=query_filter,
+                with_payload=True,
+            )
 
         results: list[ChunkResult] = []
         for point in response.points:
@@ -169,17 +173,18 @@ class QdrantVectorStore:
         end_time: datetime,
         top_k: int = 5,
     ) -> list[ChunkResult]:
-        response = self.client.query_points(
-            collection_name=self.collection_name(room_id),
-            query=query_vector,
-            limit=top_k,
-            query_filter=Filter(must=[
-                FieldCondition(key="binding_id", match=MatchValue(value=binding_id)),
-                FieldCondition(key="start_time", range=DatetimeRange(lte=end_time)),
-                FieldCondition(key="end_time", range=DatetimeRange(gte=start_time)),
-            ]),
-            with_payload=True,
-        )
+        with observe_qdrant("search_time_range"):
+            response = self.client.query_points(
+                collection_name=self.collection_name(room_id),
+                query=query_vector,
+                limit=top_k,
+                query_filter=Filter(must=[
+                    FieldCondition(key="binding_id", match=MatchValue(value=binding_id)),
+                    FieldCondition(key="start_time", range=DatetimeRange(lte=end_time)),
+                    FieldCondition(key="end_time", range=DatetimeRange(gte=start_time)),
+                ]),
+                with_payload=True,
+            )
         results: list[ChunkResult] = []
         for point in response.points:
             payload = point.payload or {}
@@ -195,7 +200,8 @@ class QdrantVectorStore:
         return results
 
     def delete_by_room(self, room_id: int) -> None:
-        self.client.delete_collection(self.collection_name(room_id))
+        with observe_qdrant("delete_room"):
+            self.client.delete_collection(self.collection_name(room_id))
 
 
 class Retriever:

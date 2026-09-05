@@ -10,6 +10,7 @@ from sqlalchemy import func, select, update
 
 from app.embeddings import get_embedder
 from app.im_client import get_im_client
+from app.metrics import CHUNKS, MODERATION_MESSAGES, REMOVAL_REQUESTS, observe_stage
 from app.rag import get_retriever
 from app.settings import get_settings
 from app.storage.database import session_factory
@@ -179,7 +180,8 @@ class AgentPipeline:
             "created_at": item.message_time.isoformat(),
         } for item in messages]
         try:
-            result = await asyncio.to_thread(moderate_messages, payload)
+            with observe_stage("moderation"):
+                result = await asyncio.to_thread(moderate_messages, payload)
             return {item.message_id: item.model_dump() for item in result.results}
         except Exception as exc:
             logger.exception("moderation agent failed")
@@ -203,6 +205,10 @@ class AgentPipeline:
                     "reason": "moderation result missing", "confidence": 0.0,
                 }
                 status = item.get("status", "needs_review")
+                MODERATION_MESSAGES.labels(
+                    status=status,
+                    rule_code=item.get("rule_code") or "none",
+                ).inc()
                 record = ModerationRecord(
                     inbox_id=source.id,
                     room_id=source.room_id,
@@ -222,6 +228,7 @@ class AgentPipeline:
                 if status == "approved":
                     approved_ids.add(source.id)
                 elif status == "rejected" and item.get("request_removal"):
+                    REMOVAL_REQUESTS.inc()
                     session.add(RemovalRequest(
                         room_id=source.room_id,
                         target_user_id=source.sender_id,
@@ -252,19 +259,21 @@ class AgentPipeline:
                 context = ""
                 if config.rag_enabled:
                     try:
-                        chunks = await asyncio.to_thread(
-                            get_retriever().retrieve, message.content, room_id, self.settings.agent.top_k
-                        )
+                        with observe_stage("conversation_retrieval"):
+                            chunks = await asyncio.to_thread(
+                                get_retriever().retrieve, message.content, room_id, self.settings.agent.top_k
+                            )
                         context = "\n\n".join(chunk.content for chunk in chunks)
                     except Exception:
                         logger.exception("conversation retrieval failed")
-                reply = await asyncio.to_thread(
-                    answer_question,
-                    system_prompt=config.system_prompt or "",
-                    question=message.content,
-                    context=context,
-                    room_id=room_id,
-                )
+                with observe_stage("conversation"):
+                    reply = await asyncio.to_thread(
+                        answer_question,
+                        system_prompt=config.system_prompt or "",
+                        question=message.content,
+                        context=context,
+                        room_id=room_id,
+                    )
                 if reply:
                     await asyncio.to_thread(
                         get_im_client().send_reply,
@@ -293,27 +302,31 @@ class AgentPipeline:
             return
 
         try:
-            result = await asyncio.to_thread(chunk_messages, payload)
+            with observe_stage("chunk_agent"):
+                result = await asyncio.to_thread(chunk_messages, payload)
             chunks = [item for item in result.chunks if item.message_ids and set(item.message_ids) <= allowed_ids]
             if not chunks:
                 raise ValueError("chunk agent returned no valid chunks")
             for binding in rag_bindings:
                 for chunk in chunks:
                     selected = [item for item in messages if item.message_id in chunk.message_ids]
-                    vector = await asyncio.to_thread(get_embedder().embed, chunk.content)
+                    with observe_stage("embedding"):
+                        vector = await asyncio.to_thread(get_embedder().embed, chunk.content)
                     point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{binding.id}:{','.join(chunk.message_ids)}"))
-                    await asyncio.to_thread(
-                        get_retriever().vector_store.upsert_chunk,
-                        point_id=point_id,
-                        vector=vector,
-                        room_id=room_id,
-                        binding_id=binding.id,
-                        topic_name=chunk.topic_name,
-                        content=chunk.content,
-                        message_ids=chunk.message_ids,
-                        start_time=min(item.message_time for item in selected),
-                        end_time=max(item.message_time for item in selected),
-                    )
+                    with observe_stage("qdrant_upsert"):
+                        await asyncio.to_thread(
+                            get_retriever().vector_store.upsert_chunk,
+                            point_id=point_id,
+                            vector=vector,
+                            room_id=room_id,
+                            binding_id=binding.id,
+                            topic_name=chunk.topic_name,
+                            content=chunk.content,
+                            message_ids=chunk.message_ids,
+                            start_time=min(item.message_time for item in selected),
+                            end_time=max(item.message_time for item in selected),
+                        )
+                    CHUNKS.labels(result="success").inc()
                     async with session_factory() as session:
                         session.add(AgentChunk(
                             room_id=room_id,
@@ -328,6 +341,7 @@ class AgentPipeline:
                         await session.commit()
             await self._mark_chunked(messages)
         except Exception as exc:
+            CHUNKS.labels(result="error").inc()
             logger.exception("chunk pipeline failed")
             async with session_factory() as session:
                 for item in messages:

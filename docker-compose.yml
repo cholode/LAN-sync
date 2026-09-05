@@ -392,6 +392,8 @@ services:
     command: ["python", "-m", "app.workers.main"]
     networks:
       - lan-im-network
+    expose:
+      - "8001"
     volumes:
       - ./services/agent/runtime/config.yaml:/app/config.yaml:ro
     environment:
