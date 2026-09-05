@@ -33,7 +33,7 @@ async function submit() {
   loading.value = true
   try {
     await auth.adminLogin(form)
-	await router.replace('/admin/dashboard')
+	await router.replace('/admin/users')
   } catch (e) {
     error.value = e.message
   } finally {

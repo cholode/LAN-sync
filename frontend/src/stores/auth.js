@@ -19,7 +19,10 @@ export const useAuthStore = defineStore('auth', () => {
     const roleValue = String(role.value ?? '').toLowerCase()
     return Number(role.value) === 1 || ['1', 'super_admin', 'superadmin', 'admin'].includes(roleValue)
   })
-  const isAdmin = computed(() => [1, 2, 3].includes(Number(role.value)))
+  const isAdmin = computed(() => {
+    const roleValue = String(role.value ?? '').toLowerCase()
+    return [1, 2, 3].includes(Number(role.value)) || ['super_admin', 'superadmin', 'admin', 'moderator', 'operator'].includes(roleValue)
+  })
   const isLoggedIn = computed(() => !!token.value)
 
   function persist(nextToken, nextUser) {

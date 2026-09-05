@@ -220,7 +220,7 @@ docker compose exec db mysql -uroot -p lan_im
 UPDATE users SET role = 1 WHERE username = '你的用户名';
 ```
 
-重新登录后访问 `http://你的公网IP/admin/dashboard` 即可进入管理后台。
+重新登录后访问 `http://你的公网IP/admin/users` 即可进入治理后台。运行监控统一从 Grafana 查看。
 
 ### 8. 云服务器安全组
 

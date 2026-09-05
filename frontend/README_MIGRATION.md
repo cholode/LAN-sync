@@ -50,19 +50,19 @@ DELETE /api/v1/upload/cancel
 前端 `src/api/admin.js` 已全部改成真实请求，不再使用 demo fallback：
 
 ```text
-GET    /api/v1/admin/dashboard/overview
 GET    /api/v1/admin/users
 GET    /api/v1/admin/users/:id
-DELETE /api/v1/admin/users/:id
+POST   /api/v1/admin/users/:id/action
 GET    /api/v1/admin/rooms
 GET    /api/v1/admin/rooms/:id
 DELETE /api/v1/admin/rooms/:id
 GET    /api/v1/admin/moderation
-POST   /api/v1/admin/moderation/:id/review
-GET    /api/v1/admin/agent/overview
-GET    /api/v1/admin/agent/config
-PUT    /api/v1/admin/agent/config
-GET    /api/v1/admin/system/overview
+POST   /api/v1/admin/moderation/:id/action
+GET    /api/v1/admin/agent-config
+PUT    /api/v1/admin/agent-config
+GET    /api/v1/admin/rag/queries
+GET    /api/v1/admin/files
+DELETE /api/v1/admin/files/:id
 GET    /api/v1/admin/audit-logs
 ```
 
@@ -88,17 +88,10 @@ VITE_WS_AUTH_MODE=query
 VITE_WS_AUTH_MODE=protocol
 ```
 
-## Admin Dashboard 数据来源
+## Admin 与 Grafana 的职责边界
 
-- MySQL：用户、群聊、消息、24h 趋势、消息构成。
-- `core.Hub`：当前 WebSocket 在线连接。
-- Go Runtime：Goroutine / Heap。
-- 内存 Metrics Middleware：HTTP QPS、P95、5xx Error Rate。
-- MySQL / Redis / Kafka / Qdrant / Storage / LLM：服务健康度。
-- AgentManager：当前活动 Agent 实例。
-- `rag_chunks`：向量记录数量。
-- `admin_audit_logs`：管理员敏感操作审计。
-- `admin_moderation_events`：标准化内容治理事件。
+- Admin：用户封禁与解封、权限、群聊、文件、内容治理、Agent/RAG 配置和审计日志。
+- Grafana：WebSocket、Gateway、TaskPool、Kafka、Redis、数据库、Python Agent、Qdrant 和系统运行指标。
 
 ## Agent 配置热更新
 

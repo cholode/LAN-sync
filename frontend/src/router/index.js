@@ -10,16 +10,12 @@ const router = createRouter({
     {
       path: '/admin', component: () => import('../layouts/AdminLayout.vue'), meta: { auth: true, admin: true },
       children: [
-        { path: '', redirect: '/admin/dashboard' },
-        { path: 'dashboard', component: () => import('../views/admin/DashboardView.vue') },
+        { path: '', redirect: '/admin/users' },
         { path: 'users', component: () => import('../views/admin/UsersView.vue') },
         { path: 'rooms', component: () => import('../views/admin/RoomsView.vue') },
         { path: 'moderation', component: () => import('../views/admin/ModerationView.vue') },
         { path: 'agent', component: () => import('../views/admin/AgentOpsView.vue') },
-        { path: 'connections', component: () => import('../views/admin/ConnectionsView.vue') },
         { path: 'files', component: () => import('../views/admin/FilesView.vue') },
-        { path: 'operations', component: () => import('../views/admin/OperationsView.vue') },
-        { path: 'system', component: () => import('../views/admin/SystemView.vue') },
         { path: 'audit', component: () => import('../views/admin/AuditView.vue') },
       ],
     },
@@ -31,8 +27,8 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
   if (to.meta.auth && !auth.isLoggedIn) return { path: '/login', query: { redirect: to.fullPath } }
-  if (to.meta.admin && !auth.isSuperAdmin) return '/chat'
-  if (to.path === '/login' && auth.isLoggedIn) return auth.isSuperAdmin ? '/admin/dashboard' : '/chat'
+  if (to.meta.admin && !auth.isAdmin) return '/chat'
+  if (to.path === '/login' && auth.isLoggedIn) return auth.isAdmin ? '/admin/users' : '/chat'
 })
 
 export default router

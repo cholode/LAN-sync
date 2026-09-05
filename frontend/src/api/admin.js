@@ -76,132 +76,8 @@ function normalizeModerationItem(item = {}) {
   }
 }
 
-function normalizeRuntime(runtime = {}) {
-  const ws = runtime.websocket || {}
-  const go = runtime.golang || {}
-  const api = runtime.api || {}
-  return {
-    ws_connections: ws.current_connections ?? 0,
-    goroutines: go.goroutines ?? 0,
-    api_p95_ms: api.p95_latency_ms ?? 0,
-    heap_mb: go.heap_alloc ? Number((go.heap_alloc / 1024 / 1024).toFixed(1)) : 0,
-    error_rate: api.error_rate ?? 0,
-  }
-}
-
-function normalizeAgentRuntime(agent = {}) {
-  return {
-    calls_today: agent.calls_today ?? 0,
-    calls: agent.calls_today ?? 0,
-    success_rate: Number(((agent.success_rate ?? 0) * 100).toFixed(1)),
-    p95_ms: agent.p95_response_ms ?? 0,
-    tokens: agent.total_tokens ?? 0,
-    tool_calls: agent.tool_calls ?? 0,
-    rag_calls: agent.rag_calls ?? 0,
-    qdrant_p95_ms: agent.qdrant_query_avg_ms ?? 0,
-    current_requests: agent.current_requests ?? 0,
-    failure_rate: agent.failure_rate ?? 0,
-  }
-}
-
-function normalizeHealth(items = []) {
-  return items.map((item) => ({
-    name: item.name,
-    status: item.status,
-    latency_ms: item.latency_ms ?? 0,
-    error: item.error || '',
-  }))
-}
-
-function normalizeAlerts(items = []) {
-  return items.map((item) => ({
-    id: item.id,
-    level: item.level || 'info',
-    title: item.name || item.title || '系统告警',
-    detail: item.message || item.detail || '',
-    time: item.created_at || item.updated_at || '',
-  }))
-}
-
-function trafficTrend(traffic = {}) {
-  const hourly = Array.isArray(traffic.hourly) ? traffic.hourly : []
-  return hourly.map((point) => ({
-    time: point.time || '',
-    messages: point.count ?? 0,
-    agent: 0,
-  }))
-}
-
-function messageTypes(traffic = {}) {
-  const map = traffic.type_distribution || {}
-  const privateGroup = traffic.private_group || {}
-  return [
-    { name: '群聊文本', value: Number(privateGroup.group ?? map.text ?? 0) },
-    { name: '私聊文本', value: Number(privateGroup.private ?? 0) },
-    { name: '文件消息', value: Number(map.file || 0) },
-    { name: 'Agent 消息', value: Number(map.agent || 0) },
-  ]
-}
-
 function allSettledValue(result, fallback = {}) {
   return result.status === 'fulfilled' ? result.value : fallback
-}
-
-async function fetchOverview() {
-  const [overviewRes, runtimeRes, trafficRes, healthRes, alertsRes] = await Promise.allSettled([
-    http.get('/admin/dashboard/overview'),
-    http.get('/admin/dashboard/runtime'),
-    http.get('/admin/dashboard/message-traffic'),
-    http.get('/admin/health'),
-    http.get('/admin/alerts?page=1&page_size=20'),
-  ])
-
-  const overview = allSettledValue(overviewRes)
-  if (overviewRes.status === 'rejected') throw overviewRes.reason
-
-  const runtime = normalizeRuntime(allSettledValue(runtimeRes))
-  const traffic = allSettledValue(trafficRes)
-  const healthPayload = allSettledValue(healthRes)
-  const alertPayload = allSettledValue(alertsRes)
-  const sections = overview.sections || {}
-  const moderation = overview.moderation || {}
-  const agent = normalizeAgentRuntime(overview.agent || {})
-
-  return {
-    users: {
-      total: sections.users?.total ?? 0,
-      online: sections.users?.online ?? 0,
-      active_today: sections.users?.active_today ?? 0,
-      new_today: sections.users?.new_today ?? 0,
-    },
-    rooms: {
-      total: sections.rooms?.total ?? 0,
-      active: sections.rooms?.total ?? 0,
-      new_today: sections.rooms?.new_today ?? 0,
-    },
-    messages: {
-      today: sections.messages?.today ?? 0,
-      per_minute: runtime.ws_connections > 0 ? 0 : 0,
-      private_today: sections.messages?.private_today ?? 0,
-      group_today: sections.messages?.group_today ?? 0,
-      file_today: sections.messages?.file_today ?? 0,
-      agent_today: sections.messages?.agent_today ?? 0,
-    },
-    moderation: {
-      violations: moderation.today_violations ?? 0,
-      violation_rate: Number(((moderation.violation_rate ?? 0) * 100).toFixed(2)),
-      reviewed: moderation.today_reviewed ?? 0,
-      pending_reviews: moderation.pending_reviews ?? 0,
-    },
-    runtime,
-    agent,
-    rag: overview.rag || {},
-    system: overview.system || [],
-    message_trend: trafficTrend(traffic),
-    message_types: messageTypes(traffic),
-    health: normalizeHealth(healthPayload.items || overview.system || []),
-    alerts: normalizeAlerts(alertPayload.items || []),
-  }
 }
 
 function filterUsers(items, status) {
@@ -234,8 +110,6 @@ function filterModerationItems(items, q, risk) {
 }
 
 export const adminApi = {
-  overview: fetchOverview,
-
   async users(params = {}) {
     const d = await http.get(`/admin/users${query({ page: 1, page_size: 100, keyword: params.q || params.keyword })}`)
     const items = (d?.items || d?.users || []).map(normalizeUser)
@@ -246,7 +120,6 @@ export const adminApi = {
     return normalizeUser(await http.get(`/admin/users/${id}`))
   },
   userAction: (id, action) => http.post(`/admin/users/${id}/action`, { action }),
-  deleteUser: (id) => http.delete(`/admin/users/${id}`),
 
   async rooms(params = {}) {
     const d = await http.get(`/admin/rooms${query({ page: 1, page_size: 100, keyword: params.q || params.keyword })}`)
@@ -290,21 +163,6 @@ export const adminApi = {
     return { event: { review_status: decision } }
   },
 
-  async agentOverview() {
-    const [agentRes, ragRes] = await Promise.allSettled([
-      http.get('/admin/dashboard/agent'),
-      http.get('/admin/dashboard/rag'),
-    ])
-    const agent = normalizeAgentRuntime(allSettledValue(agentRes))
-    const rag = allSettledValue(ragRes, {})
-    return {
-      ...agent,
-      vector_count: rag.vector_count ?? 0,
-      embedding_queue: rag.embedding_queue ?? 0,
-      qdrant_p95_ms: rag.qdrant_query_avg_ms ?? agent.qdrant_p95_ms ?? 0,
-      qdrant_online: rag.qdrant_online ?? false,
-    }
-  },
   async agentConfig() {
     const cfg = await http.get('/admin/agent-config')
     return {
@@ -328,10 +186,6 @@ export const adminApi = {
   rollbackAgentConfig: () => http.post('/admin/agent-config/rollback', {}),
   ragQueries: (params = {}) => http.get(`/admin/rag/queries${query({ page: 1, page_size: 20, ...params })}`),
 
-  connections: (params = {}) => http.get(`/admin/connections${query({ keyword: params.q || params.keyword })}`),
-  closeConnection: (connectionId) => http.post('/admin/connections/close', { connection_id: connectionId }),
-  forceOffline: (userId) => http.post('/admin/connections/force-offline', { user_id: Number(userId) }),
-
   files: (params = {}) => http.get(`/admin/files${query({ page: 1, page_size: 100, ...params, keyword: params.q || params.keyword })}`),
   file: (id) => http.get(`/admin/files/${id}`),
   fileDownload: (id) => http.get(`/admin/files/${id}/download`),
@@ -339,22 +193,6 @@ export const adminApi = {
   scanFiles: () => http.get('/admin/files/scan'),
   cleanupFiles: () => http.post('/admin/files/cleanup', {}),
 
-  errors: (params = {}) => http.get(`/admin/errors${query({ page: 1, page_size: 100, ...params })}`),
-  resolveError: (id) => http.post(`/admin/errors/${id}/resolve`, {}),
-  alerts: (params = {}) => http.get(`/admin/alerts${query({ page: 1, page_size: 100, ...params })}`),
-  unresolvedAlertCount: () => http.get('/admin/alerts/unresolved-count'),
-  evaluateAlerts: () => http.post('/admin/alerts/evaluate', {}),
-  resolveAlert: (id) => http.post(`/admin/alerts/${id}/resolve`, {}),
   toolCalls: (params = {}) => http.get(`/admin/tool-calls${query({ page: 1, page_size: 100, ...params })}`),
-
-  async systemOverview() {
-    const [runtimeRes, healthRes] = await Promise.allSettled([
-      http.get('/admin/dashboard/runtime'),
-      http.get('/admin/health'),
-    ])
-    const runtime = normalizeRuntime(allSettledValue(runtimeRes))
-    const healthPayload = allSettledValue(healthRes, { items: [] })
-    return { runtime, health: normalizeHealth(healthPayload.items || []) }
-  },
   audits: (params = {}) => http.get(`/admin/audit-logs${query({ page: 1, page_size: params.page_size || 100, keyword: params.q, action: params.action })}`),
 }

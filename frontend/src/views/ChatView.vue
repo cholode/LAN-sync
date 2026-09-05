@@ -3,7 +3,7 @@
     <aside class="rail">
       <AppLogo compact />
       <button class="rail-btn active"><MessageSquareText :size="19" /></button>
-      <RouterLink v-if="auth.isSuperAdmin" to="/admin/dashboard" class="rail-btn"><Gauge :size="19" /></RouterLink>
+      <RouterLink v-if="auth.isAdmin" to="/admin/users" class="rail-btn"><ShieldCheck :size="19" /></RouterLink>
       <div class="grow"></div>
       <button class="rail-btn" @click="logout"><LogOut :size="19" /></button>
     </aside>
@@ -185,7 +185,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   MessageSquareText,
-  Gauge,
+  ShieldCheck,
   LogOut,
   Plus,
   Search,
