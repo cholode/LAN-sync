@@ -37,6 +37,8 @@ type RoomRepository interface {
 	GetRoomByExactName(exactName string) (*models.Room, error)
 	// 查询用户加入的群组及当前用户在该群的角色，避免循环查询角色造成 N+1
 	GetJoinedRoomsWithRole(userID int64) ([]JoinedRoom, error)
+	// SearchRooms 按名称搜索可加入的普通群聊。
+	SearchRooms(keyword string, offset, limit int) ([]*models.Room, int64, error)
 }
 
 // JoinedRoom 表示用户加入的群组及其在该群中的角色。

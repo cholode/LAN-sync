@@ -220,6 +220,31 @@ services:
         soft: 65535
         hard: 65535
 
+  # --- [4.4] 房间与群成员服务 ---
+  room-service:
+    build:
+      context: .
+      dockerfile: services/rooms/Dockerfile
+    container_name: im-room
+    restart: unless-stopped
+    networks:
+      - lan-im-network
+    ports:
+      - "${ROOM_SERVER_PORT:-8082}:${ROOM_SERVER_PORT:-8082}"
+    environment:
+      - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=UTC
+      - TZ=UTC
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-0}
+      - JWT_SECRET=${JWT_SECRET}
+      - ROOM_SERVER_PORT=${ROOM_SERVER_PORT:-8082}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
   # --- [4.5] 独立管理控制面服务 ---
   admin-service:
     build:
@@ -455,12 +480,14 @@ services:
       - "80:80"
     environment:
       # 只替换以下部署变量，避免误替换模板中的 $host、$uri 等 Nginx 变量。
-      - NGINX_ENVSUBST_FILTER=^(NGINX_SERVER_NAME|BACKEND_HOST|BACKEND_PORT|ADMIN_HOST|ADMIN_PORT)$$
+      - NGINX_ENVSUBST_FILTER=^(NGINX_SERVER_NAME|BACKEND_HOST|BACKEND_PORT|ADMIN_HOST|ADMIN_PORT|ROOM_HOST|ROOM_PORT)$$
       - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-_}
       - BACKEND_HOST=${NGINX_BACKEND_HOST:-backend}
       - BACKEND_PORT=${NGINX_BACKEND_PORT:-8080}
       - ADMIN_HOST=${NGINX_ADMIN_HOST:-admin-service}
       - ADMIN_PORT=${ADMIN_SERVER_PORT:-8081}
+      - ROOM_HOST=${NGINX_ROOM_HOST:-room-service}
+      - ROOM_PORT=${ROOM_SERVER_PORT:-8082}
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
     ulimits:
@@ -470,3 +497,4 @@ services:
     depends_on:
       - backend
       - admin-service
+      - room-service

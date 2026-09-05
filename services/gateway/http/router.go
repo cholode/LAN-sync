@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"lan-im-go/pkg"
 	adminservice "lan-im-go/services/admin/application"
 	"lan-im-go/services/gateway/handlers"
 	"lan-im-go/services/gateway/websocket"
@@ -21,10 +20,15 @@ import (
 
 // Dependencies 表示 HTTP 网关在运行时所依赖的能力。
 // 通过显式定义这个边界，可以让网关以后能够被独立替换。
+type RouteRegistrar interface {
+	RegisterRoutes(group *gin.RouterGroup)
+}
+
 type Dependencies struct {
 	Hub          *core.Hub
 	DB           *gorm.DB
 	Messages     *messages.Module
+	Rooms        RouteRegistrar
 	ErrorService *adminservice.ErrorCenterService
 	FrontendDir  string
 }
@@ -88,7 +92,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 
 	deps.Messages.RegisterRoutes(authorized)
 
-	registerRoomRoutes(authorized, deps.Hub)
+	deps.Rooms.RegisterRoutes(authorized)
 
 	frontend := deps.FrontendDir
 	if frontend == "" {
@@ -106,40 +110,6 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	})
 
 	return r
-}
-
-func registerRoomRoutes(group *gin.RouterGroup, hub *core.Hub) {
-	pkg.Infoln("进入WebSocket连接配置")
-
-	group.POST(
-		"/rooms/:id/join",
-		api.JoinRoom(hub),
-	)
-
-	group.GET(
-		"/rooms/:id/members",
-		api.GetRoomMembers(),
-	)
-
-	group.DELETE(
-		"/rooms/:id/members/:user_id",
-		api.RemoveRoomMember(hub),
-	)
-
-	group.DELETE(
-		"/rooms/:id/disband",
-		api.OwnerDisbandRoom(hub),
-	)
-
-	group.POST(
-		"/rooms",
-		api.CreateRoom(hub),
-	)
-
-	group.GET(
-		"/my_rooms",
-		api.GetMyRooms(),
-	)
 }
 
 // NewServer 用于创建 HTTP 网关对应的 Server 实例。

@@ -15,6 +15,8 @@ import (
 	"lan-im-go/services/messages/archiver"
 	"lan-im-go/services/messages/search"
 	"lan-im-go/services/messages/storage"
+	roomapi "lan-im-go/services/rooms/api"
+	roomservice "lan-im-go/services/rooms/application"
 	"lan-im-go/shared/concurrency/taskpool"
 	"lan-im-go/shared/observability/metrics"
 	"net/http"
@@ -113,6 +115,7 @@ func main() {
 	metrics.RegisterTaskPoolMetrics(hub.FanoutPool())
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
+	go core.StartRoomEventListener(ctx, hub)
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// Python Agent 服务通过 Kafka 独立消费消息。Go 侧只保留其调用的 IMService。
@@ -147,12 +150,13 @@ func main() {
 	// 主服务只保留运行所需的错误记录；管理 API 由独立 admin-service 提供。
 	errorService := adminservice.NewErrorCenterService(infrastructure.DB)
 	messageModule := messages.NewModule(messageRepo, repository.RoomMember, infrastructure.DB, fileStorage)
+	roomModule := roomapi.NewModule(roomservice.NewService(repository.Room, repository.RoomMember, hub))
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
 	// ================================
 	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, DB: infrastructure.DB,
-		Messages: messageModule, ErrorService: errorService, FrontendDir: "./frontend/dist"})
+		Messages: messageModule, Rooms: roomModule, ErrorService: errorService, FrontendDir: "./frontend/dist"})
 
 	// ================================
 	// 阶段7：启动 HTTP 服务

@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"strings"
+
 	"gorm.io/gorm"
 	"lan-im-go/models"
 )
@@ -13,6 +15,26 @@ type roomRepository interface {
 	GetJoinedRooms(userID int64) ([]*models.Room, error)
 	GetRoomByExactName(exactName string) (*models.Room, error)
 	GetJoinedRoomsWithRole(userID int64) ([]JoinedRoom, error)
+	SearchRooms(keyword string, offset, limit int) ([]*models.Room, int64, error)
+}
+
+// SearchRooms 按名称搜索未解散的普通群聊，并返回分页总数。
+func (r *roomRepoImpl) SearchRooms(keyword string, offset, limit int) ([]*models.Room, int64, error) {
+	query := r.db.Model(&models.Room{}).Where("type = ? AND status = ?", 2, 0)
+	if keyword = strings.TrimSpace(keyword); keyword != "" {
+		query = query.Where("name LIKE ?", "%"+keyword+"%")
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var rooms []*models.Room
+	if err := query.Order("last_active_at DESC, id DESC").Offset(offset).Limit(limit).Find(&rooms).Error; err != nil {
+		return nil, 0, err
+	}
+	return rooms, total, nil
 }
 
 type roomRepoImpl struct {
