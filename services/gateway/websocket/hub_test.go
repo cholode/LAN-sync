@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"lan-im-go/models"
 	"sync"
 	"testing"
@@ -145,6 +146,49 @@ func TestHub_ForwardMessageToMultipleClients(t *testing.T) {
 
 	if received != 3 {
 		t.Errorf("received = %d, want 3", received)
+	}
+}
+
+func TestHub_LargeRoomFanoutPreservesMessageOrder(t *testing.T) {
+	hub, _, _ := startHub(t)
+	hub.fanoutThreshold = 10
+	hub.fanoutBatchSize = 20
+
+	const clientCount = 128
+	clients := make([]*Client, 0, clientCount)
+	for i := 0; i < clientCount; i++ {
+		client := clientFor(hub, int64(i+1))
+		clients = append(clients, client)
+		hub.Register(client, []int64{600})
+	}
+
+	for sequence := 1; sequence <= 2; sequence++ {
+		hub.Publish(&models.Message{
+			RoomID:      600,
+			SenderID:    999,
+			Content:     "fanout",
+			ClientMsgID: fmt.Sprintf("msg-%d", sequence),
+			Type:        1,
+		})
+	}
+
+	deadline := time.After(2 * time.Second)
+	for _, client := range clients {
+		for sequence := 1; sequence <= 2; sequence++ {
+			select {
+			case raw := <-client.Send:
+				var received models.Message
+				if err := json.Unmarshal(raw, &received); err != nil {
+					t.Fatalf("unmarshal fanout message: %v", err)
+				}
+				want := fmt.Sprintf("msg-%d", sequence)
+				if received.ClientMsgID != want {
+					t.Fatalf("client %d message order: got %s, want %s", client.UserID, received.ClientMsgID, want)
+				}
+			case <-deadline:
+				t.Fatalf("timed out waiting for client %d message %d", client.UserID, sequence)
+			}
+		}
 	}
 }
 

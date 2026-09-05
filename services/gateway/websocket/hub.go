@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -19,8 +21,9 @@ import (
 )
 
 const (
-	// poolDispatchThreshold 房间成员数超过此阈值时，使用协程池分发消息。
-	poolDispatchThreshold = 100
+	// 房间成员数达到该阈值后，使用协程池并发分发消息。
+	defaultPoolDispatchThreshold = 100
+	defaultFanoutBatchSize       = 200
 
 	defaultHubShardCount = 64
 )
@@ -40,7 +43,11 @@ type Subscription struct {
 
 // Hub 局部内存路由引擎，按用户和房间两个维度分片。
 type Hub struct {
-	shards []*hubShard
+	shards            []*hubShard
+	fanoutPool        *taskpool.Pool
+	fanoutThreshold   int
+	fanoutBatchSize   int
+	releaseFanoutOnce sync.Once
 }
 
 type hubShard struct {
@@ -70,7 +77,17 @@ func NewHubWithShards(shardCount int) *Hub {
 	if shardCount <= 0 {
 		shardCount = defaultHubShardCount
 	}
-	hub := &Hub{shards: make([]*hubShard, shardCount)}
+	workerCount := positiveEnvInt("HUB_FANOUT_WORKERS", runtime.GOMAXPROCS(0)*4)
+	pool, err := taskpool.New(workerCount)
+	if err != nil {
+		panic("create gateway fan-out pool: " + err.Error())
+	}
+	hub := &Hub{
+		shards:          make([]*hubShard, shardCount),
+		fanoutPool:      pool,
+		fanoutThreshold: positiveEnvInt("HUB_FANOUT_THRESHOLD", defaultPoolDispatchThreshold),
+		fanoutBatchSize: positiveEnvInt("HUB_FANOUT_BATCH_SIZE", defaultFanoutBatchSize),
+	}
 	for i := 0; i < shardCount; i++ {
 		hub.shards[i] = &hubShard{
 			hub:        hub,
@@ -81,7 +98,27 @@ func NewHubWithShards(shardCount int) *Hub {
 			killClient: make(chan *Client, 64),
 		}
 	}
+	pkg.Infof(
+		"[Gateway FanoutPool] ready workers=%d threshold=%d batch_size=%d",
+		workerCount,
+		hub.fanoutThreshold,
+		hub.fanoutBatchSize,
+	)
 	return hub
+}
+
+func positiveEnvInt(key string, fallback int) int {
+	if raw := os.Getenv(key); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+// FanoutPool 返回当前 Gateway 的扇出协程池，供监控模块采集指标。
+func (h *Hub) FanoutPool() *taskpool.Pool {
+	return h.fanoutPool
 }
 
 func (h *Hub) shardForUser(userID int64) *hubShard {
@@ -94,6 +131,7 @@ func (h *Hub) shardForRoom(roomID int64) *hubShard {
 
 // Run 启动所有分片循环，直到上下文取消。
 func (h *Hub) Run(ctx context.Context) {
+	defer h.releaseFanoutOnce.Do(h.fanoutPool.Release)
 	var wg sync.WaitGroup
 	for _, shard := range h.shards {
 		wg.Add(1)
@@ -483,7 +521,7 @@ func (s *hubShard) dispatchMessage(msg *models.Message, payload []byte) {
 		metrics.ObserveHubDispatchLatency(msg.RoomID, time.Since(start).Seconds())
 	}()
 
-	if len(clients) < poolDispatchThreshold {
+	if len(clients) < s.hub.fanoutThreshold {
 		dispatched := 0
 		for _, client := range clients {
 			if client.TrySend(payload) {
@@ -498,18 +536,39 @@ func (s *hubShard) dispatchMessage(msg *models.Message, payload []byte) {
 		return
 	}
 
-	for _, client := range clients {
-		c := client
-		taskpool.Go(func() {
-			if c.TrySend(payload) {
-				metrics.ObserveHubDispatch(msg.RoomID, 1)
-			} else {
+	var dispatched atomic.Int64
+	var batches sync.WaitGroup
+	// 在保证每个任务不超过 fanoutBatchSize 的前提下均匀分批。
+	// 按群成员上限 2000 和默认批次 200 计算，最多生成 10 个任务。
+	taskCount := (len(clients) + s.hub.fanoutBatchSize - 1) / s.hub.fanoutBatchSize
+	if taskCount < 2 {
+		// 达到大群阈值后至少拆成两个任务，确保进入协程池后能真正并发扇出。
+		taskCount = 2
+	}
+	balancedBatchSize := (len(clients) + taskCount - 1) / taskCount
+	for start := 0; start < len(clients); start += balancedBatchSize {
+		end := min(start+balancedBatchSize, len(clients))
+		batch := clients[start:end]
+		batches.Add(1)
+		task := func() {
+			defer batches.Done()
+			for _, client := range batch {
+				if client.TrySend(payload) {
+					dispatched.Add(1)
+					continue
+				}
 				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
 				metrics.RecordWSSlowClient()
-				s.requestEvict(c)
+				s.requestEvict(client)
 			}
-		})
+		}
+		if err := s.hub.fanoutPool.Submit(task); err != nil {
+			// 协程池关闭期间提交失败时在当前协程执行，避免静默丢失已接收消息。
+			task()
+		}
 	}
+	batches.Wait()
+	metrics.ObserveHubDispatch(msg.RoomID, int(dispatched.Load()))
 }
 
 func (s *hubShard) requestEvict(client *Client) {

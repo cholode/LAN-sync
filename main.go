@@ -71,8 +71,7 @@ func main() {
 		defer infrastructure.CloseMongo()
 		messageRepo = messages.NewMongoRepository(infrastructure.MessageCollection)
 	}
-	taskpool.Init(0) // 0=default workers(CPU*2)
-	metrics.RegisterTaskPoolMetrics()
+	taskpool.Init(0) // 0 表示使用默认工作协程数
 	if err := search.Init(context.Background()); err != nil {
 		pkg.Fatalf("[Elasticsearch] init failed: %v", err)
 	}
@@ -108,6 +107,7 @@ func main() {
 	// 阶段4：WebSocket 核心引擎启动
 	// ================================
 	hub := core.NewHub()
+	metrics.RegisterTaskPoolMetrics(hub.FanoutPool())
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
 	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")

@@ -1,30 +1,34 @@
 package metrics
 
-import (
-	"lan-im-go/shared/concurrency/taskpool"
+import "github.com/prometheus/client_golang/prometheus"
 
-	"github.com/prometheus/client_golang/prometheus"
-)
+type taskPoolStats interface {
+	Running() int
+	Waiting() int
+	Cap() int
+}
 
-func RegisterTaskPoolMetrics() {
+// RegisterTaskPoolMetrics 注册 Gateway 独占扇出协程池的监控指标。
+// 显式传入协程池，避免错误采集进程级兼容协程池的数据。
+func RegisterTaskPoolMetrics(pool taskPoolStats) {
 	register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "im_hub_task_pool_running",
 		Help: "当前任务池正在运行的任务数",
 	}, func() float64 {
-		return float64(taskpool.Running())
+		return float64(pool.Running())
 	}))
 
 	register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "im_hub_task_pool_waiting",
 		Help: "当前任务池等待执行的任务数",
 	}, func() float64 {
-		return float64(taskpool.Waiting())
+		return float64(pool.Waiting())
 	}))
 
 	register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "im_hub_task_pool_capacity",
 		Help: "当前任务池容量",
 	}, func() float64 {
-		return float64(taskpool.Cap())
+		return float64(pool.Cap())
 	}))
 }
