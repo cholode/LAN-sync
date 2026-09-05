@@ -31,9 +31,12 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
+      AGENT_QUERY_DB_PASSWORD: ${AGENT_QUERY_DB_PASSWORD}
+      TZ: UTC
     volumes:
       - mysql_data:/var/lib/mysql
       - ./deploy/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./deploy/mysql/10-create-agent-reader.sh:/docker-entrypoint-initdb.d/10-create-agent-reader.sh:ro
       - ./mysql-custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -322,6 +325,7 @@ services:
       - EMBED_API_KEY=${EMBED_API_KEY}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
+      - AGENT_QUERY_DATABASE_URL=mysql+pymysql://agent_reader:${AGENT_QUERY_DB_PASSWORD}@db:3306/${DB_NAME}?charset=utf8mb4
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
     depends_on:
@@ -353,6 +357,7 @@ services:
       - EMBED_API_KEY=${EMBED_API_KEY}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
+      - AGENT_QUERY_DATABASE_URL=mysql+pymysql://agent_reader:${AGENT_QUERY_DB_PASSWORD}@db:3306/${DB_NAME}?charset=utf8mb4
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
       - AGENT_KAFKA_GROUP=${AGENT_KAFKA_GROUP:-agent_service}

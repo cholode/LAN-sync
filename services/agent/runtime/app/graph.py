@@ -13,7 +13,7 @@ from app.config import RuntimeConfig
 from app.settings import get_settings
 from app.prompt import build_history_section, build_prompt, build_rag_section
 from app.rag import get_retriever
-from app.tools import build_get_messages_tool
+from app.tools import build_get_messages_tool, build_room_database_query_tool
 from app.time_utils import utc_now
 
 COOLDOWN_SECONDS = get_settings().agent.cooldown_seconds
@@ -173,7 +173,10 @@ def agent_node(state: AgentState) -> dict[str, Any]:
         timeout=settings.llm.timeout_seconds,
     )
 
-    tools = [build_get_messages_tool(state["room_id"])]
+    tools = [
+        build_get_messages_tool(state["room_id"]),
+        build_room_database_query_tool(state["room_id"]),
+    ]
     llm_with_tools = llm.bind_tools(tools)
 
     messages = [SystemMessage(content=system_prompt), *state.get("messages", [])]
@@ -206,6 +209,7 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     tool_results: list[ToolMessage] = []
     tool_by_name = {
         "get_messages": build_get_messages_tool(state["room_id"]),
+        "query_room_database": build_room_database_query_tool(state["room_id"]),
     }
 
     for tool_call in tool_calls:

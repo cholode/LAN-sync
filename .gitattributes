@@ -2,3 +2,4 @@
 * text=auto
 
 deploy/backend-entrypoint.sh text eol=lf
+deploy/mysql/*.sh text eol=lf

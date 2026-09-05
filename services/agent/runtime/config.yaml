@@ -42,6 +42,12 @@ im_service:
 
 database:
   url: "${AGENT_DATABASE_URL}"
+  # 生产环境应配置只授予 SELECT 权限的独立数据库账号。
+  query_url: "${AGENT_QUERY_DATABASE_URL}"
+  query_max_rows: 100
+  query_timeout_ms: 3000
+  query_max_attempts: 3
+  query_max_output_chars: 20000
   pool_size: 10
   max_overflow: 20
   pool_recycle_seconds: 3600

@@ -2,9 +2,10 @@
 
 from datetime import datetime, timezone
 
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool, tool
 
 from app.im_client import get_im_client
+from app.storage.room_query import execute_room_select, schema_for_prompt
 from app.time_utils import utc_from_timestamp
 
 
@@ -48,3 +49,19 @@ def build_get_messages_tool(room_id: int):
         return "\n".join(lines)
 
     return get_messages
+
+
+def build_room_database_query_tool(room_id: int) -> StructuredTool:
+    def query_room_database(sql: str) -> str:
+        return execute_room_select(sql, room_id)
+
+    return StructuredTool.from_function(
+        func=query_room_database,
+        name="query_room_database",
+        description=(
+            "执行当前群聊范围内的只读 MySQL 查询。只允许单条 SELECT，必须使用表别名，"
+            "并用 __ROOM_ID__ 作为当前群占位符。工具返回 JSON；如果 ok=false，"
+            "请根据 message 和 hint 修正 SQL 后再次调用。\n\n"
+            + schema_for_prompt()
+        ),
+    )

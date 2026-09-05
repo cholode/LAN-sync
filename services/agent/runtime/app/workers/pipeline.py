@@ -263,6 +263,7 @@ class AgentPipeline:
                     system_prompt=config.system_prompt or "",
                     question=message.content,
                     context=context,
+                    room_id=room_id,
                 )
                 if reply:
                     await asyncio.to_thread(

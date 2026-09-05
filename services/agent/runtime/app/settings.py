@@ -68,6 +68,11 @@ class IMServiceSettings:
 @dataclass(frozen=True)
 class DatabaseSettings:
     url: str
+    query_url: str = ""
+    query_max_rows: int = 100
+    query_timeout_ms: int = 3000
+    query_max_attempts: int = 3
+    query_max_output_chars: int = 20000
     pool_size: int = 10
     max_overflow: int = 20
     pool_recycle_seconds: int = 3600
@@ -219,6 +224,14 @@ def _load_settings() -> Settings:
         im_service=IMServiceSettings(grpc_addr=str(im_service.get("grpc_addr") or "backend:50052")),
         database=DatabaseSettings(
             url=_database_url(database.get("url")),
+            query_url=str(database.get("query_url") or ""),
+            query_max_rows=min(500, max(1, _int(database.get("query_max_rows"), 100))),
+            query_timeout_ms=min(10000, max(100, _int(database.get("query_timeout_ms"), 3000))),
+            query_max_attempts=min(5, max(1, _int(database.get("query_max_attempts"), 3))),
+            query_max_output_chars=min(
+                100000,
+                max(1000, _int(database.get("query_max_output_chars"), 20000)),
+            ),
             pool_size=_int(database.get("pool_size"), 10),
             max_overflow=_int(database.get("max_overflow"), 20),
             pool_recycle_seconds=_int(database.get("pool_recycle_seconds"), 3600),

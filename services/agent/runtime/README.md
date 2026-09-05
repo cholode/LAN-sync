@@ -45,7 +45,8 @@ GET    /api/v1/removal-requests
 - `app/prompt.py`：群聊对话提示词模板
 - `app/rag.py`：Qdrant 向量检索
 - `app/embeddings.py`：Doubao 多模态 embedding HTTP 客户端
-- `app/tools.py`：基于 Go `IMService` 的 `get_messages` 工具
+- `app/tools.py`：`get_messages` 与群聊数据库查询工具
+- `app/storage/room_query.py`：群聊 SQL Schema、SELECT 校验、群范围绑定与结果限制
 - `app/im_client.py`：用于调用 Go `IMService` 的 gRPC 客户端
 
 ## 配置
@@ -77,3 +78,9 @@ im_service:
 ```
 
 诸如 `${LLM_API_KEY}` 这样的值会在启动时从环境变量中解析。运行时智能体默认配置也定义在 `config.yaml` 的 `agent` 部分中。
+
+## 群聊数据库查询工具
+
+对话 Agent 可以调用 `query_room_database` 查询当前群聊的数据。Schema 由服务端白名单生成，未列出的表和字段（例如用户密码）不可访问。SQL 必须是单条 `SELECT`，每个群范围表都必须在 `WHERE` 的强制 `AND` 条件中使用 `__ROOM_ID__`；实际群号由服务端绑定，模型不能指定。子查询、注释、通配字段、非白名单函数和跨群 JOIN 会被拒绝。
+
+默认最多返回 100 行、执行 3 秒、输出 20000 字符；查询出错时 Agent 最多根据错误自动修正 3 次。Docker Compose 使用 `AGENT_QUERY_DB_PASSWORD` 创建并连接只授予 `SELECT` 权限的 `agent_reader`；在宿主机直接运行 Agent 时，可通过 `AGENT_QUERY_DATABASE_URL` 指向同一账号。
