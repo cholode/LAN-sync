@@ -8,14 +8,13 @@ import (
 	"lan-im-go/repository"
 	adminservice "lan-im-go/services/admin/application"
 	"lan-im-go/services/admin/control"
-	"lan-im-go/services/files/api"
-	"lan-im-go/services/files/api/storage"
 	"lan-im-go/services/gateway/grpc"
 	"lan-im-go/services/gateway/http"
 	"lan-im-go/services/gateway/websocket"
 	"lan-im-go/services/messages/api"
 	"lan-im-go/services/messages/archiver"
 	"lan-im-go/services/messages/search"
+	"lan-im-go/services/messages/storage"
 	"lan-im-go/shared/concurrency/taskpool"
 	"lan-im-go/shared/observability/metrics"
 	"net/http"
@@ -145,18 +144,15 @@ func main() {
 		}()
 	}
 
-	// 主服务只保留运行所需的错误记录和上传元数据能力；管理 API 由独立 admin-service 提供。
-	auditService := adminservice.NewAuditService(infrastructure.DB)
+	// 主服务只保留运行所需的错误记录；管理 API 由独立 admin-service 提供。
 	errorService := adminservice.NewErrorCenterService(infrastructure.DB)
-	fileService := adminservice.NewFileService(infrastructure.DB, fileStorage, auditService)
-	fileModule := files.NewModule(fileStorage, fileService)
-	messageModule := messages.NewModule(messageRepo, repository.RoomMember)
+	messageModule := messages.NewModule(messageRepo, repository.RoomMember, infrastructure.DB, fileStorage)
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
 	// ================================
 	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, DB: infrastructure.DB,
-		Files: fileModule, Messages: messageModule, ErrorService: errorService, FrontendDir: "./frontend/dist"})
+		Messages: messageModule, ErrorService: errorService, FrontendDir: "./frontend/dist"})
 
 	// ================================
 	// 阶段7：启动 HTTP 服务

@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	adminservice "lan-im-go/services/admin/application"
-	"lan-im-go/services/files/api/storage"
+	"lan-im-go/services/messages/storage"
 	"lan-im-go/shared/http/middleware"
 )
 

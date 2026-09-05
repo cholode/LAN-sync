@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"lan-im-go/models"
-	"lan-im-go/services/files/api/storage"
+	"lan-im-go/services/messages/storage"
 )
 
 // FileService 负责超级管理员后台的文件管理、异常检测和安全清理。
@@ -46,65 +46,12 @@ type FileListItem struct {
 	HasMessage bool   `json:"has_message"`
 }
 
-// RecordUpload 保存一条已完成上传的文件记录。
 type AuditAction struct {
 	AdminUserID int64
 	AdminName   string
 	RequestID   string
 	RemoteIP    string
 	UserAgent   string
-}
-
-func (s *FileService) RecordUpload(ctx context.Context, userID int64, req CompleteUploadRequest) (*models.FileRecord, error) {
-	var existing models.FileRecord
-	err := s.db.WithContext(ctx).Where("object_key = ?", req.ObjectKey).First(&existing).Error
-	if err == nil {
-		existing.OriginalName = req.OriginalName
-		existing.SHA256 = req.SHA256
-		existing.Size = req.FileSize
-		existing.UploaderID = userID
-		existing.RoomID = req.RoomID
-		existing.Status = "uploaded"
-		existing.UpdatedAt = time.Now()
-		if s.storage != nil {
-			existing.Backend = string(s.storage.BackendType())
-		}
-		if err := s.db.WithContext(ctx).Save(&existing).Error; err != nil {
-			return nil, err
-		}
-		return &existing, nil
-	}
-	if err != gorm.ErrRecordNotFound {
-		return nil, err
-	}
-
-	backend := "minio"
-	if s.storage != nil {
-		backend = string(s.storage.BackendType())
-	}
-	record := &models.FileRecord{
-		ObjectKey:    req.ObjectKey,
-		OriginalName: req.OriginalName,
-		SHA256:       req.SHA256,
-		Size:         req.FileSize,
-		UploaderID:   userID,
-		RoomID:       req.RoomID,
-		Backend:      backend,
-		Status:       "uploaded",
-	}
-	if err := s.db.WithContext(ctx).Create(record).Error; err != nil {
-		return nil, err
-	}
-	return record, nil
-}
-
-// CompleteUploadRequest 与前端上传完成后回调的请求保持一致。
-type CompleteUploadRequest struct {
-	ObjectKey    string
-	OriginalName string
-	SHA256       string
-	FileSize     int64
-	RoomID       int64
 }
 
 // ListFiles 分页查询文件记录，并补充存储实际状态。

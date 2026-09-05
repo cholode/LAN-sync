@@ -12,7 +12,6 @@ import (
 
 	"lan-im-go/pkg"
 	adminservice "lan-im-go/services/admin/application"
-	"lan-im-go/services/files/api"
 	"lan-im-go/services/gateway/handlers"
 	"lan-im-go/services/gateway/websocket"
 	"lan-im-go/services/messages/api"
@@ -25,7 +24,6 @@ import (
 type Dependencies struct {
 	Hub          *core.Hub
 	DB           *gorm.DB
-	Files        *files.Module
 	Messages     *messages.Module
 	ErrorService *adminservice.ErrorCenterService
 	FrontendDir  string
@@ -82,15 +80,12 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	public.POST("/register", api.RegisterHandler)
 	public.POST("/login", api.LoginHandler)
 
-	deps.Files.RegisterPublicRoutes(public)
-
 	authorized := r.Group("/api/v1")
 
 	authorized.Use(middleware.JWTAuth())
 
 	authorized.GET("/ws", api.WsEndpoint(deps.Hub))
 
-	deps.Files.RegisterAuthorizedRoutes(authorized)
 	deps.Messages.RegisterRoutes(authorized)
 
 	registerRoomRoutes(authorized, deps.Hub)
