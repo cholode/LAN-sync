@@ -121,11 +121,14 @@ Hub 按用户和房间两个维度分片，默认 `64` 个分片，可通过 `HU
 - HMAC-SHA256 签名，默认 24 小时过期。
 - 普通用户与超级管理员通过角色隔离；管理接口另经 `RequireAdmin` 与限流中间件。
 
-### 对象存储（`services/files/api/storage`）
+### 消息文件链路（`services/messages`）
 
 - 通过 `STORAGE_BACKEND=minio|oss` 选择 MinIO 或阿里云 OSS。
-- 后端只签发预签名上传/下载 URL，不代理文件字节流。
-- 前端完成直传后调用完成接口，再由消息体携带 `/api/v1/download/{object_key}`。
+- 消息服务负责签发上传 URL、登记上传结果和下载授权；Admin 服务只负责审核与删除。
+- 前端完成直传后调用完成接口，再由消息体携带 `/api/v1/files/{file_id}/download`。
+- 下载必须携带 JWT；消息服务会校验请求者是私有文件上传者或对应群聊的当前成员。
+- 鉴权通过后接口返回短期预签名地址，浏览器使用不带 JWT 的第二个请求下载，避免与对象存储签名冲突。
+- 历史消息中的 `/api/v1/download/{object_key}` 暂时保留，但也会执行相同的身份与群成员校验。
 - 本地磁盘不再承载正常文件链路。
 
 ### LLM Agent（`agent-service`）

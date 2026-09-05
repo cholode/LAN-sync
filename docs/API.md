@@ -129,19 +129,27 @@ Local disk storage is no longer supported. The backend only issues presigned URL
 
 **Auth**: JWT Bearer Token
 
-直传成功后调用该接口，后端将对象 Key 转成可供客户端消息使用的下载路径。
+直传成功后调用该接口，消息服务登记文件与上传者、群聊的关系，并返回文件 ID 下载路径。
 
 **Request body**:
 
 ```json
-{ "object_key": "2026-08-17/1/1755400000000_report.pdf" }
+{
+  "object_key": "2026-08-17/1/1755400000000_report.pdf",
+  "original_name": "report.pdf",
+  "sha256": "...",
+  "file_size": 1024,
+  "room_id": 10
+}
 ```
 
 **Success response (200)**:
 
 ```json
 {
-  "download_url": "/api/v1/download/2026-08-17/1/1755400000000_report.pdf"
+  "id": 123,
+  "object_key": "2026-08-17/1/1755400000000_report.pdf",
+  "download_url": "/api/v1/files/123/download"
 }
 ```
 
@@ -156,9 +164,17 @@ Local disk storage is no longer supported. The backend only issues presigned URL
 
 ## 3. Download
 
-### GET /api/v1/download/{object_key}
+### GET /api/v1/files/{file_id}/download
 
-No authentication required. The server generates a presigned download URL and responds with a `302` redirect to the object store.
+**Auth**: JWT Bearer Token
+
+消息服务会校验请求者是私有文件上传者，或仍是文件所属群聊的成员。鉴权成功后返回短期对象存储地址：
+
+```json
+{ "download_url": "http://object-storage/...?signed-query" }
+```
+
+客户端随后使用一个不携带 JWT 的请求访问 `download_url`。历史消息使用的 `GET /api/v1/download/{object_key}` 暂时兼容，但同样要求 JWT 并执行成员权限校验。
 
 ## Switching Storage Mode
 
