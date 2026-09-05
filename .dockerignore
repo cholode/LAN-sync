@@ -9,8 +9,10 @@
 data/
 data_storage/
 
-# 前端构建产物和依赖，后端镜像不需要
-frontend/
+# 前端依赖与构建产物；源码供独立 Admin 前端镜像使用
+frontend/node_modules/
+frontend/dist/
+frontend/admin-dist/
 frontendold/
 .backup_frontend_20260816/
 LAN-IM-interface-connected/
