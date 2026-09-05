@@ -217,8 +217,8 @@ function extensionOf(filename = '') {
   return idx >= 0 ? filename.slice(idx + 1).toLowerCase() : ''
 }
 
-function makeDownloadUrl(objectKey) {
-  return `${API_BASE}/download/${encodeURIComponent(objectKey)}`
+function makeDownloadUrl(fileId) {
+  return `${API_BASE}/files/${encodeURIComponent(fileId)}/download`
 }
 
 export async function uploadFile(file, { onStage = () => {}, onProgress = () => {}, signal, roomId } = {}) {
@@ -272,7 +272,7 @@ export async function uploadFile(file, { onStage = () => {}, onProgress = () => 
     onProgress(100)
     return {
       object_key: presign.object_key,
-      download_url: makeDownloadUrl(presign.object_key),
+      download_url: record.download_url || makeDownloadUrl(record.id),
       hash,
       file_name: file.name,
       file_size: file.size,

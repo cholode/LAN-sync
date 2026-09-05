@@ -83,7 +83,7 @@ export const imApi = {
   },
   presignUpload: (payload) => http.post('/files/presign', payload),
   completeUpload: (payload) => http.post('/files/complete', payload),
-  downloadUrl: (objectKey) => `${(import.meta.env.VITE_API_BASE || '/api/v1').replace(/\/$/, '')}/download/${encodeURIComponent(objectKey)}`,
+  downloadUrl: (fileId) => `${(import.meta.env.VITE_API_BASE || '/api/v1').replace(/\/$/, '')}/files/${encodeURIComponent(fileId)}/download`,
   async messages(roomId) {
     const data = await http.get(`/rooms/${roomId}/messages`)
     return normalizeList(data).map(normalizeMessage)

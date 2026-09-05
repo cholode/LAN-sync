@@ -107,7 +107,7 @@
             <div class="sender">{{ displayName(m) }}</div>
                         <div class="message-content">
               <template v-for="(part, partIndex) in messageParts(m)" :key="partIndex">
-                <a v-if="part.type === 'link'" :href="part.url" target="_blank" rel="noopener" class="file-link">{{ part.text || part.url }}</a>
+                <a v-if="part.type === 'link'" :href="part.url" class="file-link" @click.prevent="downloadMessageFile(part)">{{ part.text || '下载文件' }}</a>
                 <span v-else>{{ part.text }}</span>
               </template>
             </div>
@@ -269,24 +269,50 @@ function initialOf(m) {
   return String(name || 'U').slice(0, 1).toUpperCase()
 }
 
-function extractFileUrl(content) {
+function extractFileReference(content) {
   const text = String(content || '')
-  const match = text.match(/\[文件\]\s*(\/api\/v1\/download\/[^\s]+)/)
-  if (match) return match[1]
-  const fallback = text.match(/(\/api\/v1\/download\/[^\s]+)/)
-  return fallback ? fallback[1] : ''
+  const typed = text.match(/^\[文件\]\s+(.+?)\s+(\/api\/v1\/(?:files\/\d+\/download|download\/[^\s]+))$/)
+  if (typed) return { name: typed[1], url: typed[2] }
+  const fallback = text.match(/(\/api\/v1\/(?:files\/\d+\/download|download\/[^\s]+))/)
+  return fallback ? { name: '下载文件', url: fallback[1] } : null
 }
 
 function messageParts(m) {
   const text = String(m.content || '')
-  const url = extractFileUrl(text)
-  if (!url) return [{ type: 'text', text }]
-  const idx = text.indexOf(url)
+  const file = extractFileReference(text)
+  if (!file) return [{ type: 'text', text }]
+  const idx = text.indexOf(file.url)
   return [
-    { type: 'text', text: text.slice(0, idx) },
-    { type: 'link', text: url, url },
-    { type: 'text', text: text.slice(idx + url.length) },
+    { type: 'text', text: file.name === '下载文件' ? text.slice(0, idx) : '' },
+    { type: 'link', text: file.name, url: file.url },
+    { type: 'text', text: text.slice(idx + file.url.length) },
   ]
+}
+
+async function downloadMessageFile(part) {
+  try {
+    const authorizeRes = await fetch(part.url, {
+      headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+    })
+    const authorizeData = await authorizeRes.json().catch(() => null)
+    if (!authorizeRes.ok) {
+      throw new Error(authorizeData?.error || `下载授权失败 (${authorizeRes.status})`)
+    }
+    if (!authorizeData?.download_url) throw new Error('下载授权响应缺少文件地址')
+    // 对象存储的预签名 URL 已携带自身认证信息，这个请求不能再附加 JWT。
+    const downloadRes = await fetch(authorizeData.download_url)
+    if (!downloadRes.ok) throw new Error(`文件下载失败 (${downloadRes.status})`)
+    const blobUrl = URL.createObjectURL(await downloadRes.blob())
+    const anchor = document.createElement('a')
+    anchor.href = blobUrl
+    anchor.download = part.text || '下载文件'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(blobUrl)
+  } catch (e) {
+    alert(e.message || '文件下载失败')
+  }
 }
 
 function enrichMessage(m) {
@@ -459,7 +485,7 @@ async function handleFile(ev) {
       onProgress: (p) => (uploadProgress.value = p),
     })
     if (ws?.readyState !== WebSocket.OPEN) throw new Error('文件已上传，但 WebSocket 已断开，无法发送文件消息')
-    ws.send(JSON.stringify({ room_id: current.value.id, content: '[文件] ' + result.download_url, client_msg_id: globalThis.crypto?.randomUUID?.() || String(Date.now()) }))
+    ws.send(JSON.stringify({ room_id: current.value.id, content: `[文件] ${result.file_name} ${result.download_url}`, client_msg_id: globalThis.crypto?.randomUUID?.() || String(Date.now()) }))
   } catch (e) {
     alert(e.message || '文件上传失败')
   } finally {
