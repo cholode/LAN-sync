@@ -4,10 +4,31 @@ global:
 
 scrape_configs:
   - job_name: lan-im-backend
+    scrape_interval: 1s
     metrics_path: /metrics
     static_configs:
       - targets:
           - backend:6060
         labels:
           service: backend
+          project: lan-im-go
+
+  - job_name: lan-im-agent-api
+    scrape_interval: 1s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - agent-service:8000
+        labels:
+          service: agent-api
+          project: lan-im-go
+
+  - job_name: lan-im-agent-worker
+    scrape_interval: 1s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - agent-worker:8001
+        labels:
+          service: agent-worker
           project: lan-im-go

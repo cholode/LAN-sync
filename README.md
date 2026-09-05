@@ -159,19 +159,22 @@ docker compose ps prometheus grafana
 
 | 入口 | 地址 | 说明 |
 | --- | --- | --- |
-| Backend Metrics | `http://127.0.0.1:6060/metrics` | Prometheus 原始指标，包含 CPU、内存、WebSocket、Hub、Kafka、Redis、数据库和 Agent 指标 |
+| Backend Metrics | `http://127.0.0.1:6060/metrics` | Go 服务原始指标，包含 CPU、内存、WebSocket、Hub、Kafka、Redis 和数据库指标 |
+| Agent Metrics | `http://127.0.0.1:8000/metrics` | Python Agent API 指标；Worker 指标由 Prometheus 在容器网络内采集 |
 | Go pprof | `http://127.0.0.1:6060/debug/pprof/` | Go CPU、堆、goroutine 等性能诊断入口 |
 | Prometheus | `http://127.0.0.1:9090` | PromQL 查询和历史时序数据 |
-| Prometheus Targets | `http://127.0.0.1:9090/targets` | 检查 `lan-im-backend` 抓取目标是否为 `UP` |
+| Prometheus Targets | `http://127.0.0.1:9090/targets` | 检查 Backend、Agent API 和 Agent Worker 抓取目标是否为 `UP` |
 | Grafana | `http://127.0.0.1:3000` | 预置监控看板 |
 
-Prometheus 每 5 秒从 `backend:6060/metrics` 抓取一次指标，默认保留 15 天。Grafana 已自动配置 Prometheus 数据源。登录 Grafana 后进入：
+Prometheus 每秒采集 Backend、Agent API 和 Agent Worker 指标，默认保留 15 天。Grafana 已自动配置 Prometheus 数据源。登录 Grafana 后可使用三个预置看板：
 
 ```text
 Dashboards -> LAN IM -> LAN IM 运行总览
+Dashboards -> LAN IM -> LAN IM WebSocket 与 Gateway
+Dashboards -> LAN IM -> LAN IM Agent 与 RAG
 ```
 
-预置看板包含 Backend CPU、RSS 内存、WebSocket 活跃连接、Kafka Consumer Lag、消息吞吐、Hub 任务池和 Agent P95 回复延迟。默认 Grafana 用户名和密码均为 `admin`，部署前应通过 `.env` 修改：
+WebSocket 看板包含鉴权到可传输的全链路阶段、按秒 P50/P95/P99、连接、消息、错误和独立 TaskPool；Agent 看板包含审核、分块、Embedding、Qdrant、对话与移除申请。默认 Grafana 用户名和密码均为 `admin`，部署前应通过 `.env` 修改：
 
 ```env
 GRAFANA_ADMIN_USER=admin

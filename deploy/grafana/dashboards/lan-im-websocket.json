@@ -1,0 +1,177 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "sum(im_ws_connections_active{node_id=~\"$node\"})", "refId": "A"}],
+      "title": "当前 WebSocket 连接",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "cps"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "sum(rate(im_ws_connection_pipeline_total{node_id=~\"$node\",stage=\"ready_total\"}[1m]))", "refId": "A"}],
+      "title": "建连请求 / 秒",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "sum(rate(im_ws_connection_pipeline_total{node_id=~\"$node\",stage=\"ready_total\",result=~\"success|degraded\"}[1m])) / clamp_min(sum(rate(im_ws_connection_pipeline_total{node_id=~\"$node\",stage=\"ready_total\"}[1m])), 0.000001)", "refId": "A"}],
+      "title": "建连可用率",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "max(im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",stage=\"ready_total\",quantile=\"0.95\"})", "refId": "A"}],
+      "title": "全链路 P95（最近秒）",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "max(im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",stage=\"auth\",quantile=\"0.50\"})", "legendFormat": "鉴权 P50", "refId": "A"},
+        {"expr": "max(im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",stage=\"auth\",quantile=\"0.95\"})", "legendFormat": "鉴权 P95", "refId": "B"},
+        {"expr": "max(im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",stage=\"auth\",quantile=\"0.99\"})", "legendFormat": "鉴权 P99", "refId": "C"}
+      ],
+      "title": "鉴权延迟（按秒 P50 / P95 / P99）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "max(im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",stage=\"ready_total\",quantile=\"0.50\"})", "legendFormat": "全链路 P50", "refId": "A"},
+        {"expr": "max(im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",stage=\"ready_total\",quantile=\"0.95\"})", "legendFormat": "全链路 P95", "refId": "B"},
+        {"expr": "max(im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",stage=\"ready_total\",quantile=\"0.99\"})", "legendFormat": "全链路 P99", "refId": "C"}
+      ],
+      "title": "可传输延迟（按秒 P50 / P95 / P99）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "max by (stage) (im_ws_connection_stage_second_latency_milliseconds{node_id=~\"$node\",quantile=\"0.95\"})", "legendFormat": "{{stage}}", "refId": "A"}],
+      "title": "各建连阶段 P95（最近秒）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (stage, result) (rate(im_ws_connection_pipeline_total{node_id=~\"$node\"}[1m]))", "legendFormat": "{{stage}} / {{result}}", "refId": "A"}],
+      "title": "建连阶段结果 / 秒",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 21},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "sum(rate(im_ws_read_messages_total{node_id=~\"$node\"}[1m]))", "legendFormat": "读取消息/s", "refId": "A"},
+        {"expr": "sum(rate(im_ws_write_messages_total{node_id=~\"$node\"}[1m]))", "legendFormat": "写出消息/s", "refId": "B"},
+        {"expr": "sum(rate(im_hub_dispatched_messages_total{node_id=~\"$node\"}[1m]))", "legendFormat": "Hub 分发/s", "refId": "C"}
+      ],
+      "title": "消息吞吐",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 21},
+      "id": 10,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "sum by (error_type) (rate(im_ws_read_errors_total{node_id=~\"$node\"}[1m]))", "legendFormat": "读错误 {{error_type}}", "refId": "A"},
+        {"expr": "sum by (error_type) (rate(im_ws_write_errors_total{node_id=~\"$node\"}[1m]))", "legendFormat": "写错误 {{error_type}}", "refId": "B"},
+        {"expr": "sum by (reason) (rate(im_hub_queue_drops_total{node_id=~\"$node\"}[1m]))", "legendFormat": "丢弃 {{reason}}", "refId": "C"}
+      ],
+      "title": "WebSocket 错误与丢弃",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 21},
+      "id": 11,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "im_hub_task_pool_running{node_id=~\"$node\"}", "legendFormat": "运行中 {{node_id}}", "refId": "A"},
+        {"expr": "im_hub_task_pool_waiting{node_id=~\"$node\"}", "legendFormat": "等待中 {{node_id}}", "refId": "B"},
+        {"expr": "im_hub_task_pool_capacity{node_id=~\"$node\"}", "legendFormat": "容量 {{node_id}}", "refId": "C"}
+      ],
+      "title": "Gateway 独立 TaskPool",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 29},
+      "id": 12,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(im_ws_connection_duration_seconds_bucket{node_id=~\"$node\"}[5m])))", "legendFormat": "P50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(im_ws_connection_duration_seconds_bucket{node_id=~\"$node\"}[5m])))", "legendFormat": "P95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(im_ws_connection_duration_seconds_bucket{node_id=~\"$node\"}[5m])))", "legendFormat": "P99", "refId": "C"}
+      ],
+      "title": "连接存活时长",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 29},
+      "id": 13,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, operation) (rate(im_redis_latency_seconds_bucket[5m])))", "legendFormat": "{{operation}} P95", "refId": "A"},
+        {"expr": "sum(rate(im_redis_errors_total[1m]))", "legendFormat": "Redis 错误/s", "refId": "B"}
+      ],
+      "title": "Redis 在线状态写入与错误",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1s",
+  "schemaVersion": 39,
+  "tags": ["lan-im", "websocket", "gateway"],
+  "templating": {"list": [{"allValue": ".*", "current": {"selected": true, "text": "All", "value": "$__all"}, "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"}, "definition": "label_values(im_ws_connections_active, node_id)", "hide": 0, "includeAll": true, "label": "节点", "multi": true, "name": "node", "options": [], "query": {"query": "label_values(im_ws_connections_active, node_id)", "refId": "StandardVariableQuery"}, "refresh": 1, "regex": "", "skipUrlSync": false, "sort": 1, "type": "query"}]},
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "LAN IM WebSocket 与 Gateway",
+  "uid": "lan-im-websocket",
+  "version": 1,
+  "weekStart": ""
+}

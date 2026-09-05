@@ -80,12 +80,12 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
       "id": 7,
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, model) (rate(im_agent_reply_latency_seconds_bucket[5m])))", "legendFormat": "{{model}} P95", "refId": "A"}],
-      "title": "Agent 回复延迟 P95",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, stage) (rate(agent_pipeline_duration_seconds_bucket[5m])))", "legendFormat": "{{stage}} P95", "refId": "A"}],
+      "title": "Python Agent 流水线延迟 P95",
       "type": "timeseries"
     }
   ],
-  "refresh": "5s",
+  "refresh": "1s",
   "schemaVersion": 39,
   "tags": ["lan-im", "websocket", "kafka", "agent"],
   "templating": {"list": []},

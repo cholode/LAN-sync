@@ -1,0 +1,111 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "red", "text": "离线"}, "1": {"color": "green", "text": "运行中"}}, "type": "value"}], "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "max(agent_worker_up)", "refId": "A"}],
+      "title": "Agent Worker",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "sum(rate(agent_moderation_messages_total[1m]))", "refId": "A"}],
+      "title": "审核消息 / 秒",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "sum(rate(agent_chunks_total{result=\"success\"}[1m]))", "refId": "A"}],
+      "title": "向量化 Chunk / 秒",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "sum(increase(agent_removal_requests_total[24h]))", "refId": "A"}],
+      "title": "24 小时移除申请",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (status, rule_code) (rate(agent_moderation_messages_total[1m]))", "legendFormat": "{{status}} / {{rule_code}}", "refId": "A"}],
+      "title": "审核结果",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, stage) (rate(agent_pipeline_duration_seconds_bucket[5m])))", "legendFormat": "{{stage}} P50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, stage) (rate(agent_pipeline_duration_seconds_bucket[5m])))", "legendFormat": "{{stage}} P95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le, stage) (rate(agent_pipeline_duration_seconds_bucket[5m])))", "legendFormat": "{{stage}} P99", "refId": "C"}
+      ],
+      "title": "审核 / 分块 / 对话流水线延迟",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, operation) (rate(agent_qdrant_operation_duration_seconds_bucket[5m])))", "legendFormat": "{{operation}} P50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, operation) (rate(agent_qdrant_operation_duration_seconds_bucket[5m])))", "legendFormat": "{{operation}} P95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le, operation) (rate(agent_qdrant_operation_duration_seconds_bucket[5m])))", "legendFormat": "{{operation}} P99", "refId": "C"}
+      ],
+      "title": "Qdrant 操作延迟",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "sum by (operation, result) (rate(agent_qdrant_operations_total[1m]))", "legendFormat": "Qdrant {{operation}} / {{result}}", "refId": "A"},
+        {"expr": "sum by (stage, result) (rate(agent_pipeline_runs_total[1m]))", "legendFormat": "Pipeline {{stage}} / {{result}}", "refId": "B"}
+      ],
+      "title": "Agent 与 RAG 执行结果",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1s",
+  "schemaVersion": 39,
+  "tags": ["lan-im", "agent", "rag", "moderation"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "LAN IM Agent 与 RAG",
+  "uid": "lan-im-agent",
+  "version": 1,
+  "weekStart": ""
+}
