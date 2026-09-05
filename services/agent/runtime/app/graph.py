@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import operator
 import time
-from datetime import datetime
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -15,6 +14,7 @@ from app.settings import get_settings
 from app.prompt import build_history_section, build_prompt, build_rag_section
 from app.rag import get_retriever
 from app.tools import build_get_messages_tool
+from app.time_utils import utc_now
 
 COOLDOWN_SECONDS = get_settings().agent.cooldown_seconds
 
@@ -80,7 +80,7 @@ def trigger_node(state: AgentState) -> dict[str, Any]:
     entry = {
         "sender_name": state.get("sender_name") or f"用户{state['sender_id']}",
         "content": state["content"],
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "time": utc_now().strftime("%Y-%m-%d %H:%M UTC"),
     }
 
     if not should_trigger(state["content"], cfg, state["room_id"]):

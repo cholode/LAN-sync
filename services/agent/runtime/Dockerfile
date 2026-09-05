@@ -3,7 +3,8 @@ FROM ${DOCKER_HUB_MIRROR}/library/python:3.11-slim
 
 WORKDIR /app
 
-ENV AGENT_CONFIG_PATH=/app/config.yaml
+ENV AGENT_CONFIG_PATH=/app/config.yaml \
+	TZ=UTC
 
 COPY config.yaml ./config.yaml
 COPY requirements.txt ./

@@ -8,6 +8,8 @@ from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Index, Integer, Stri
 from sqlalchemy.dialects.mysql import BIGINT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from app.time_utils import utc_now
+
 
 class Base(DeclarativeBase):
     pass
@@ -31,8 +33,8 @@ class AgentBot(SoftDeleteMixin, Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500))
     avatar_url: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
 
 class RoomAgentBinding(SoftDeleteMixin, Base):
@@ -49,8 +51,8 @@ class RoomAgentBinding(SoftDeleteMixin, Base):
     legacy_bot_user_id: Mapped[int | None] = mapped_column(BigInteger)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("1"))
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default=text("100"))
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
 
 class RoomAgentConfig(SoftDeleteMixin, Base):
@@ -71,12 +73,12 @@ class RoomAgentConfig(SoftDeleteMixin, Base):
         server_default=text("0"),
     )
     extra_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=datetime.now,
-        onupdate=datetime.now,
+        default=utc_now,
+        onupdate=utc_now,
     )
     def restore(self) -> None:
         self.deleted_at = 0
@@ -102,8 +104,8 @@ class AgentMessageInbox(Base):
     message_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
     error_message: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
 
 class ModerationRecord(Base):
@@ -121,7 +123,7 @@ class ModerationRecord(Base):
     evidence: Mapped[str | None] = mapped_column(Text)
     confidence: Mapped[float | None]
     raw_result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 
 
 class RemovalRequest(SoftDeleteMixin, Base):
@@ -137,8 +139,8 @@ class RemovalRequest(SoftDeleteMixin, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
     reviewed_by_user_id: Mapped[int | None] = mapped_column(BigInteger)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
 
 class AgentChunk(Base):
@@ -153,4 +155,4 @@ class AgentChunk(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     qdrant_point_id: Mapped[str | None] = mapped_column(String(64), unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)

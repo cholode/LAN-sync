@@ -18,6 +18,7 @@ from qdrant_client.models import (
 
 from app.embeddings import Embedder, get_embedder
 from app.settings import get_settings
+from app.time_utils import utc_from_timestamp, utc_now
 
 
 @dataclass
@@ -141,8 +142,8 @@ class QdrantVectorStore:
                 if isinstance(value, str):
                     return datetime.fromisoformat(value.replace("Z", "+00:00"))
                 if value:
-                    return datetime.fromtimestamp(int(value) / 1000)
-                return datetime.now()
+                    return utc_from_timestamp(int(value) / 1000)
+                return utc_now()
 
             results.append(
                 ChunkResult(

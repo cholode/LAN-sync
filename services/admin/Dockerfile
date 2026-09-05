@@ -15,8 +15,10 @@ RUN go build -ldflags="-s -w" -o admin-server ./services/admin/cmd
 
 FROM ${DOCKER_HUB_MIRROR}/library/alpine:3.18
 RUN apk --no-cache add tzdata ca-certificates su-exec && \
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone
+	cp /usr/share/zoneinfo/UTC /etc/localtime && \
+	echo "UTC" > /etc/timezone
+
+ENV TZ=UTC
 
 WORKDIR /app
 COPY --from=builder /build/admin-server /app/admin-server

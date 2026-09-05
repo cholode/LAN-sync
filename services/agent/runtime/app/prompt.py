@@ -1,7 +1,8 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
+
+from app.time_utils import utc_now
 
 CHAT_PROMPT_TEMPLATE = """### 系统角色
 {{.SystemPrompt}}
@@ -44,7 +45,7 @@ def build_prompt(
     replacements: dict[str, Any] = {
         "{{.SystemPrompt}}": system_prompt,
         "{{.RoomName}}": room_name,
-        "{{.CurrentTime}}": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "{{.CurrentTime}}": utc_now().strftime("%Y-%m-%d %H:%M:%S UTC"),
         "{{.RAGSection}}": rag_section,
         "{{.HistorySection}}": history_section,
         "{{.SenderName}}": sender_name,

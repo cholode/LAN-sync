@@ -19,11 +19,14 @@ import (
 )
 
 func main() {
+	// 微服务内部统一使用 UTC；北京时间只在展示层转换。
+	time.Local = time.UTC
+
 	gin.SetMode(gin.ReleaseMode)
 
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
-		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=Local"
+		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=UTC"
 	}
 
 	config.InitRedis()

@@ -146,7 +146,8 @@ services:
      - "8080:8080"
      - "6060:6060"
     environment:
-      - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
+      - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=UTC
+      - TZ=UTC
       - REDIS_ADDR=redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=${REDIS_DB:-0}
@@ -228,7 +229,8 @@ services:
     ports:
       - "${ADMIN_HTTP_PORT:-8081}:8081"
     environment:
-      - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
+      - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=UTC
+      - TZ=UTC
       - REDIS_ADDR=redis:6379
       - MESSAGE_STORE=${MESSAGE_STORE:-mongo}
       - MONGO_URI=mongodb://mongo:27017
@@ -315,6 +317,7 @@ services:
       - ./services/agent/runtime/config.yaml:/app/config.yaml:ro
     environment:
       - AGENT_CONFIG_PATH=/app/config.yaml
+      - TZ=UTC
       - LLM_API_KEY=${LLM_API_KEY}
       - EMBED_API_KEY=${EMBED_API_KEY}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -345,6 +348,7 @@ services:
       - ./services/agent/runtime/config.yaml:/app/config.yaml:ro
     environment:
       - AGENT_CONFIG_PATH=/app/config.yaml
+      - TZ=UTC
       - LLM_API_KEY=${LLM_API_KEY}
       - EMBED_API_KEY=${EMBED_API_KEY}
       - DB_PASSWORD=${DB_PASSWORD}

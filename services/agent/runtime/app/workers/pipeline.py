@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import func, select, update
 
@@ -22,6 +22,7 @@ from app.storage.models import (
     RoomAgentConfig,
 )
 from app.workflows.agents import answer_question, chunk_messages, moderate_messages
+from app.time_utils import utc_now
 
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class AgentPipeline:
             await asyncio.sleep(self.settings.kafka.poll_interval_seconds)
 
     async def _requeue_stale(self) -> None:
-        cutoff = datetime.now() - timedelta(minutes=5)
+        cutoff = utc_now() - timedelta(minutes=5)
         async with session_factory() as session:
             await session.execute(
                 update(AgentMessageInbox)
@@ -57,7 +58,7 @@ class AgentPipeline:
             await session.commit()
 
     async def _retry_approved_chunks(self) -> None:
-        retry_before = datetime.now() - timedelta(seconds=30)
+        retry_before = utc_now() - timedelta(seconds=30)
         async with session_factory() as session:
             room_ids = list(await session.scalars(
                 select(AgentMessageInbox.room_id)
@@ -85,7 +86,7 @@ class AgentPipeline:
                 await self._run_chunking(room_id, bindings, messages)
 
     async def _ready_rooms(self) -> list[int]:
-        cutoff = datetime.now() - timedelta(seconds=self.settings.kafka.batch_window_seconds)
+        cutoff = utc_now() - timedelta(seconds=self.settings.kafka.batch_window_seconds)
         async with session_factory() as session:
             rows = await session.execute(
                 select(

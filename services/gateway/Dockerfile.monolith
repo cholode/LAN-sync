@@ -41,8 +41,10 @@ LABEL description="LiteIM Backend Server"
 
 # 安装必备依赖：时区数据、CA证书（支持HTTPS请求）、su-exec（entrypoint 降权）
 RUN apk --no-cache add tzdata ca-certificates su-exec && \
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone
+	cp /usr/share/zoneinfo/UTC /etc/localtime && \
+	echo "UTC" > /etc/timezone
+
+ENV TZ=UTC
 
 WORKDIR /app
 

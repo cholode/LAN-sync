@@ -22,10 +22,14 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"strings"
+	"time"
 )
 
 // main 程序入口函数
 func main() {
+	// 微服务内部统一使用 UTC；北京时间只在展示层转换。
+	time.Local = time.UTC
+
 	// 独立启动指标与pprof管理服务
 	if strings.ToLower(os.Getenv("METRICS_ENABLED")) != "false" {
 		metricsAddr := os.Getenv("METRICS_ADDR")
@@ -53,7 +57,7 @@ func main() {
 	// ================================
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
-		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=Local"
+		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=UTC"
 		pkg.Infoln("[警告] 未检测到DB_DSN环境变量，使用本地默认配置连接MySQL")
 	}
 

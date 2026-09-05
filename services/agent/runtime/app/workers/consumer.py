@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
-
 from aiokafka import AIOKafkaConsumer
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.settings import get_settings
 from app.storage.database import session_factory
 from app.storage.models import AgentMessageInbox, RoomAgentBinding
+from app.time_utils import utc_from_timestamp, utc_now
 
 
 def decode_message(value: bytes) -> dict:
@@ -24,7 +23,7 @@ def decode_message(value: bytes) -> dict:
                 "sender_id": message.sender_id,
                 "message_id": message.client_msg_id,
                 "content": message.content,
-                "message_time": datetime.fromtimestamp(message.created_at_ns / 1_000_000_000),
+                "message_time": utc_from_timestamp(message.created_at_ns / 1_000_000_000),
             }
     except Exception:
         pass
@@ -36,7 +35,7 @@ def decode_message(value: bytes) -> dict:
         "sender_id": int(raw["sender_id"]),
         "message_id": str(raw.get("client_msg_id") or ""),
         "content": str(raw.get("content") or ""),
-        "message_time": datetime.fromtimestamp(timestamp / 1_000_000_000) if timestamp else datetime.now(),
+        "message_time": utc_from_timestamp(timestamp / 1_000_000_000) if timestamp else utc_now(),
     }
 
 

@@ -1,15 +1,18 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from langchain_core.tools import tool
 
 from app.im_client import get_im_client
+from app.time_utils import utc_from_timestamp
 
 
 def _parse_iso(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return parsed
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def build_get_messages_tool(room_id: int):
@@ -37,7 +40,7 @@ def build_get_messages_tool(room_id: int):
             f"时间段 {start.strftime('%Y-%m-%d %H:%M')} ~ {end.strftime('%Y-%m-%d %H:%M')} 的消息记录：\n"
         ]
         for message in messages:
-            created = datetime.fromtimestamp(message["created_at_unix_ms"] / 1000)
+            created = utc_from_timestamp(message["created_at_unix_ms"] / 1000)
             sender_name = message.get("sender_name") or f"用户{message['sender_id']}"
             lines.append(
                 f"[{created.strftime('%Y-%m-%d %H:%M')}] {sender_name}: {message['content']}"
