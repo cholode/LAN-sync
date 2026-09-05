@@ -35,3 +35,6 @@ perf*/*.json
 perf*/*.txt
 perf*/*.tsv
 perf*/*.log
+
+services/agent/runtime/.tmp-test-deps/
+frontend/admin-dist/
