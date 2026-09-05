@@ -38,6 +38,19 @@ var CurrentNodeID = metrics.NodeID()
 
 func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		pipelineStartedAt := time.Now()
+		if value, exists := c.Get("ws_pipeline_started_at"); exists {
+			if startedAt, ok := value.(time.Time); ok {
+				pipelineStartedAt = startedAt
+			}
+		}
+		readyRecorded := false
+		defer func() {
+			if !readyRecorded {
+				metrics.ObserveWSConnectionStage(metrics.WSStageReadyTotal, pipelineStartedAt, "failed")
+			}
+		}()
+
 		userID, exists := c.Get("user_id")
 		if !exists {
 			pkg.Infof("user identity missing\n")
@@ -45,18 +58,24 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			return
 		}
 		realUserID := userID.(int64)
+		membershipStartedAt := time.Now()
 		roomIDs, err := repository.RoomMember.GetUserRoomIDs(realUserID)
 		if err != nil {
+			metrics.ObserveWSConnectionStage(metrics.WSStageMembership, membershipStartedAt, "failed")
 			pkg.Infof("[connection failed] load rooms failed UID:%d Err:%v", realUserID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load joined rooms"})
 			return
 		}
+		metrics.ObserveWSConnectionStage(metrics.WSStageMembership, membershipStartedAt, "success")
 
+		upgradeStartedAt := time.Now()
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
+			metrics.ObserveWSConnectionStage(metrics.WSStageUpgrade, upgradeStartedAt, "failed")
 			pkg.Infof("[connection failed] WebSocket upgrade error UID:%d Err:%v", realUserID, err)
 			return
 		}
+		metrics.ObserveWSConnectionStage(metrics.WSStageUpgrade, upgradeStartedAt, "success")
 		pkg.Infof("WebSocket connected UID:%d\n", realUserID)
 		connStart := time.Now()
 		metrics.WSConnected()
@@ -75,13 +94,23 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 
 		// 注册时一次性挂到该用户已经加入的全部房间，避免先注册空连接、
 		// 再异步补房间期间漏掉群消息。
+		hubRegisterStartedAt := time.Now()
 		hub.Register(client, roomIDs)
+		metrics.ObserveWSConnectionStage(metrics.WSStageHubRegister, hubRegisterStartedAt, "success")
 
+		redisOnlineStartedAt := time.Now()
 		ctxOnline, cancelOnline := context.WithTimeout(context.Background(), 2*time.Second)
+		onlineResult := "success"
 		if err := cache.SetUserConnectionOnline(ctxOnline, realUserID, CurrentNodeID, client.ConnID); err != nil {
+			onlineResult = "failed"
 			pkg.Infof("[online warn] UID:%d Redis online state failed: %v", realUserID, err)
 		}
 		cancelOnline()
+		metrics.ObserveWSConnectionStage(metrics.WSStageRedisOnline, redisOnlineStartedAt, onlineResult)
+		readyResult := "success"
+		if onlineResult != "success" {
+			readyResult = "degraded"
+		}
 
 		go func() {
 			if user, err := repository.User.GetByID(realUserID); err == nil && user != nil {
@@ -102,6 +131,8 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		}()
 
 		go client.WritePump()
+		metrics.ObserveWSConnectionStage(metrics.WSStageReadyTotal, pipelineStartedAt, readyResult)
+		readyRecorded = true
 		client.ReadPump()
 	}
 }

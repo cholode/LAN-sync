@@ -2,9 +2,11 @@ package middleware
 
 import (
 	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/metrics"
 
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,6 +14,18 @@ import (
 // JWTAuth JWT身份验证中间件
 func JWTAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		wsRequest := c.Request.URL.Path == "/api/v1/ws"
+		pipelineStartedAt := time.Now()
+		if wsRequest {
+			c.Set("ws_pipeline_started_at", pipelineStartedAt)
+		}
+		recordAuthFailure := func(result string) {
+			if !wsRequest {
+				return
+			}
+			metrics.ObserveWSConnectionStage(metrics.WSStageAuth, pipelineStartedAt, result)
+			metrics.ObserveWSConnectionStage(metrics.WSStageReadyTotal, pipelineStartedAt, result)
+		}
 		var tokenString string
 		// 1. 从标准HTTP请求头中获取Token
 		pkg.Infof("[JWT认证] 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
@@ -22,6 +36,7 @@ func JWTAuth() gin.HandlerFunc {
 				tokenString = parts[1]
 				pkg.Infof("从请求头提取Token成功")
 			} else {
+				recordAuthFailure("invalid_authorization_header")
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "请求头Token格式非法"})
 				c.Abort()
 				return
@@ -34,6 +49,7 @@ func JWTAuth() gin.HandlerFunc {
 
 		// 3. 校验Token是否存在
 		if tokenString == "" {
+			recordAuthFailure("missing_token")
 			pkg.Infof("Token凭证为空")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未提供Token凭证，访问被拒绝"})
 			c.Abort()
@@ -42,6 +58,7 @@ func JWTAuth() gin.HandlerFunc {
 
 		claims, err := pkg.ParseToken(tokenString)
 		if err != nil {
+			recordAuthFailure("invalid_token")
 			pkg.Infof("Token解析失败\n")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token解析失败"})
 			c.Abort()
@@ -50,6 +67,9 @@ func JWTAuth() gin.HandlerFunc {
 
 		c.Set("user_id", claims.UserID)
 		c.Set("user_role", claims.Role)
+		if wsRequest {
+			metrics.ObserveWSConnectionStage(metrics.WSStageAuth, pipelineStartedAt, "success")
+		}
 		c.Next()
 	}
 }

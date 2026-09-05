@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	wsConnectionsActive = prometheus.NewGauge(prometheus.GaugeOpts{
+	wsConnectionsActive = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "im_ws_connections_active",
 		Help: "Current active WebSocket connections",
-	})
+	}, []string{"node_id"})
 	wsConnectionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "im_ws_connections_total",
 		Help: "Total WebSocket connections",
@@ -50,12 +50,12 @@ func init() {
 }
 
 func WSConnected() {
-	wsConnectionsActive.Inc()
+	wsConnectionsActive.WithLabelValues(nodeID).Inc()
 	RecordWSConnected()
 }
 
 func WSDisconnected(duration time.Duration, closeReason string) {
-	wsConnectionsActive.Dec()
+	wsConnectionsActive.WithLabelValues(nodeID).Dec()
 	if closeReason == "" {
 		closeReason = "normal"
 	}

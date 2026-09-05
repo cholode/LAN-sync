@@ -8,12 +8,14 @@ import (
 
 var (
 	hubClientsTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "im_hub_clients_total",
-		Help: "当前 Hub 管理的客户端连接数",
+		Name:        "im_hub_clients_total",
+		Help:        "当前 Hub 管理的客户端连接数",
+		ConstLabels: prometheus.Labels{"node_id": nodeID},
 	})
 	hubRoomsTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "im_hub_rooms_total",
-		Help: "当前 Hub 管理的房间数",
+		Name:        "im_hub_rooms_total",
+		Help:        "当前 Hub 管理的房间数",
+		ConstLabels: prometheus.Labels{"node_id": nodeID},
 	})
 	hubDispatchedMessagesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "im_hub_dispatched_messages_total",
