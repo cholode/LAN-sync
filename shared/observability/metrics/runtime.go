@@ -25,7 +25,6 @@ var (
 	apiRequestsWindow     = apiRequestsLastMinute
 	wsReadWindow          = newSecondWindow(300)
 	wsWriteWindow         = newSecondWindow(300)
-	apiLatencyWindow      = newLatencyWindow(1024)
 	api4xx                int64
 	api5xx                int64
 	apiTotal              int64
@@ -121,7 +120,6 @@ func ObserveAPIRequest(status int, duration time.Duration) {
 	apiRequestsWindow.Add(now)
 	atomic.AddInt64(&apiTotal, 1)
 	ms := float64(duration.Microseconds()) / 1000.0
-	apiLatencyWindow.Add(ms)
 	atomic.AddInt64(&apiLatencySumMS, int64(ms))
 	atomic.AddInt64(&apiLatencyCount, 1)
 	if status >= 500 {
@@ -150,6 +148,7 @@ func RuntimeSnapshotNow() RuntimeSnapshot {
 	}
 	api1m := apiRequestsWindow.Sum(60)
 	api5m := apiRequestsWindow.Sum(300)
+	apiLatency := apiWindow("gateway").latestComplete(time.Now())
 	errTotal := atomic.LoadInt64(&api4xx) + atomic.LoadInt64(&api5xx)
 	var errRate float64
 	if apiTotalValue > 0 {
@@ -182,9 +181,9 @@ func RuntimeSnapshotNow() RuntimeSnapshot {
 			QPS1m:            float64(api1m) / 60.0,
 			QPS5m:            float64(api5m) / 300.0,
 			AverageLatencyMS: apiAvg,
-			P50LatencyMS:     apiLatencyWindow.Percentile(0.50),
-			P95LatencyMS:     apiLatencyWindow.Percentile(0.95),
-			P99LatencyMS:     apiLatencyWindow.Percentile(0.99),
+			P50LatencyMS:     apiLatency.p50,
+			P95LatencyMS:     apiLatency.p95,
+			P99LatencyMS:     apiLatency.p99,
 			Status4xx:        atomic.LoadInt64(&api4xx),
 			Status5xx:        atomic.LoadInt64(&api5xx),
 			ErrorRate:        errRate,

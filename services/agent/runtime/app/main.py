@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 
 from app.api.router import router
-from app.metrics import HTTP_DURATION, HTTP_REQUESTS
+from app.metrics import observe_api_request, register_api_metrics_collector
 from app.storage.database import close_database, init_database
 
 
@@ -20,6 +20,7 @@ async def lifespan(_: FastAPI):
         await close_database()
 
 
+register_api_metrics_collector()
 app = FastAPI(title="LAN IM Agent Service", version="0.2.0", lifespan=lifespan)
 app.include_router(router)
 app.mount("/metrics", make_asgi_app())
@@ -27,6 +28,8 @@ app.mount("/metrics", make_asgi_app())
 
 @app.middleware("http")
 async def observe_http(request, call_next):
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
     started_at = perf_counter()
     status = 500
     try:
@@ -35,6 +38,5 @@ async def observe_http(request, call_next):
         return response
     finally:
         route = request.scope.get("route")
-        path = getattr(route, "path", request.url.path)
-        HTTP_DURATION.labels(method=request.method, path=path).observe(perf_counter() - started_at)
-        HTTP_REQUESTS.labels(method=request.method, path=path, status=status).inc()
+        path = getattr(route, "path", "unmatched")
+        observe_api_request(request.method, path, status, perf_counter() - started_at)

@@ -17,6 +17,7 @@ import (
 	"lan-im-go/services/rooms/application"
 	roomevents "lan-im-go/services/rooms/events"
 	"lan-im-go/shared/http/middleware"
+	"lan-im-go/shared/observability/metrics"
 )
 
 func main() {
@@ -51,13 +52,14 @@ func main() {
 	module := roomapi.NewModule(service)
 
 	router := gin.New()
-	router.Use(middleware.RequestID(), gin.Recovery())
+	router.Use(middleware.APIMetrics("room"), middleware.RequestID(), gin.Recovery())
 	router.Use(cors.New(cors.Config{
 		AllowAllOrigins: true, AllowMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true, MaxAge: 12 * time.Hour,
 	}))
 	router.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
 	authorized := router.Group("/api/v1", middleware.JWTAuth())
 	module.RegisterRoutes(authorized)
 

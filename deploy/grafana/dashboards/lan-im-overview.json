@@ -83,6 +83,30 @@
       "targets": [{"expr": "histogram_quantile(0.95, sum by (le, stage) (rate(agent_pipeline_duration_seconds_bucket[5m])))", "legendFormat": "{{stage}} P95", "refId": "A"}],
       "title": "Python Agent 流水线延迟 P95",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (component) (im_api_completed_qps)", "legendFormat": "{{component}}", "refId": "A"}],
+      "title": "API 完整链路完成 QPS（最近完整秒）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 16},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "max by (component) (im_api_completion_latency_milliseconds{quantile=\"0.50\"})", "legendFormat": "{{component}} P50", "refId": "A"},
+        {"expr": "max by (component) (im_api_completion_latency_milliseconds{quantile=\"0.95\"})", "legendFormat": "{{component}} P95", "refId": "B"},
+        {"expr": "max by (component) (im_api_completion_latency_milliseconds{quantile=\"0.99\"})", "legendFormat": "{{component}} P99", "refId": "C"}
+      ],
+      "title": "API 端到端延迟（最近完整秒）",
+      "type": "timeseries"
     }
   ],
   "refresh": "1s",

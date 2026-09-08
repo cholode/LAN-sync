@@ -16,6 +16,7 @@ import (
 	"lan-im-go/services/admin/control"
 	"lan-im-go/services/messages/api"
 	"lan-im-go/shared/http/middleware"
+	"lan-im-go/shared/observability/metrics"
 )
 
 func main() {
@@ -60,6 +61,7 @@ func main() {
 	})
 
 	router := gin.New()
+	router.Use(middleware.APIMetrics("admin"))
 	router.Use(middleware.RequestID())
 	router.Use(middleware.RecoveryWithErrorRecorder(adminModule.ErrorService))
 	router.Use(cors.New(cors.Config{
@@ -72,6 +74,7 @@ func main() {
 	}))
 
 	adminModule.RegisterRoutes(router)
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	port := os.Getenv("ADMIN_SERVER_PORT")
 	if port == "" {
