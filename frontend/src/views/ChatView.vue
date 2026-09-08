@@ -88,7 +88,7 @@
 
         <div
           v-for="m in displayedMessages"
-          :key="m.id || m.client_msg_id"
+          :key="messageKey(m)"
           class="message"
           :class="{ mine: isMine(m) }"
         >
@@ -200,6 +200,7 @@ import {
 import AppLogo from '../components/common/AppLogo.vue'
 import { useAuthStore } from '../stores/auth.js'
 import { imApi, createImSocket, normalizeSocketMessage } from '../api/im.js'
+import { mergeMessages, messageKey } from '../utils/message-order.js'
 import { uploadFile } from '../services/uploader.js'
 
 const auth = useAuthStore()
@@ -365,7 +366,8 @@ async function selectRoom(r) {
   const [msgRes, memberRes] = await Promise.allSettled([imApi.messages(r.id), imApi.members(r.id)])
   if (current.value?.id !== r.id) return
   members.value = memberRes.status === 'fulfilled' ? normalizeList(memberRes.value) : []
-  messages.value = (msgRes.status === 'fulfilled' ? normalizeList(msgRes.value) : []).map(enrichMessage)
+  // 历史请求期间可能已经收到实时消息，合并而不是覆盖，避免丢气泡或重复展示。
+  messages.value = mergeMessages((msgRes.status === 'fulfilled' ? normalizeList(msgRes.value) : []).map(enrichMessage), messages.value)
   scrollToBottom()
 }
 
@@ -472,9 +474,7 @@ function connect() {
         const raw = normalizeSocketMessage(JSON.parse(ev.data))
         if (current.value && (!raw.room_id || Number(raw.room_id) === Number(current.value.id))) {
           const m = enrichMessage(raw)
-          const key = m.client_msg_id || m.id
-          if (key && messages.value.some((x) => (x.client_msg_id || x.id) === key)) return
-          messages.value.push(m)
+          messages.value = mergeMessages(messages.value, [m])
           scrollToBottom()
         }
       } catch {}

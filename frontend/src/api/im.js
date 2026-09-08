@@ -29,7 +29,8 @@ function normalizeMember(member = {}) {
 function normalizeMessage(message = {}) {
   return {
     ...message,
-    id: message.id ?? message.msg_id ?? message.client_msg_id,
+    id: message.message_id ?? message.id ?? message.msg_id ?? message.client_msg_id,
+    room_seq: message.room_seq ?? '0',
     user_id: message.user_id ?? numeric(message.sender_id),
     sender_id: message.sender_id ?? message.user_id,
     username: message.username || message.sender_name || message.user_name || '',
@@ -54,7 +55,8 @@ function normalizeList(data) {
 export function normalizeSocketMessage(raw = {}) {
   return normalizeMessage({
     ...raw,
-    id: raw.id ?? raw.ID ?? raw.client_msg_id ?? raw.ClientMsgID,
+    id: raw.message_id ?? raw.id ?? raw.ID ?? raw.client_msg_id ?? raw.ClientMsgID,
+    room_seq: raw.room_seq ?? raw.RoomSeq ?? '0',
     room_id: raw.room_id ?? raw.RoomID ?? raw.roomID,
     sender_id: raw.sender_id ?? raw.SenderID ?? raw.senderID,
     client_msg_id: raw.client_msg_id ?? raw.ClientMsgID,
