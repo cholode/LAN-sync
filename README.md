@@ -3,29 +3,37 @@
 ## 当前架构概览
 
 - 接入层：Nginx 提供 HTTP 与 WebSocket 反向代理；生产 HTTPS 建议由云负载均衡、Ingress 或独立 TLS 网关终止。
-- 业务层：Go `backend` 提供用户端与管理端 REST API、WebSocket Hub 和 `IMService` gRPC。
-- 管理模块：管理业务位于 `services/admin`，可通过其独立命令和 `AdminControlService` gRPC 单独部署。
+- 接入进程：Go `backend` 提供认证、WebSocket Hub、Agent 操作以及现有 IM/Admin 控制面 gRPC。
+- 业务服务：`room-service` 独立处理房间；`message-service` 提供消息查询、搜索和文件 API；`message-sequencer` 单实例内存去重、分配群序号并独立消费正式消息广播；`message-worker` 异步归档。编号器暂不支持重启恢复，详见 [消息幂等推演与实现](docs/message-idempotency.md)。
+- 管理服务：`admin-service` 独立提供管理 HTTP API，通过 gRPC 调用 Gateway 的运行时控制面。
 - AI 层：Python `agent-service` 通过 FastAPI 提供管理接口，并由独立 Worker 消费 Kafka 执行审核、对话和分块。
 - 存储层：MySQL/MongoDB 存业务与消息，Redis 做在线状态/缓存/Pub-Sub，Elasticsearch 做消息检索，Qdrant 做向量检索，MinIO/OSS 做对象存储。
 
 ### 容器通信图
 nginx -> backend：HTTP REST + WebSocket，聊天前端入口；浏览器 WebSocket 消息载荷为 JSON。
-nginx -> backend：`/api/v1/admin/*` 管理 API，与普通 API 共用容器但保留独立鉴权和限流路由组。
-backend -> Kafka -> agent-service：群聊消息事件。
-agent-service -> backend：gRPC/protobuf，调用 IMService 的 get_messages 等工具。
+nginx -> admin-service：`/api/v1/admin/*` 管理 API。
+nginx -> room-service：房间和成员 HTTP API。
+nginx -> message-service：消息历史、搜索和文件 HTTP API。
+backend -> Kafka 待处理主题 -> message-sequencer -> Kafka 正式主题 -> message-worker / agent-worker：带固定 ID 和群序号的消息事件。
+agent-worker -> backend：gRPC/protobuf，调用 IMService 查询消息、发送回复。
+admin-service -> backend：gRPC 运行时管理。
 backend -> MySQL：原生 MySQL 协议
 backend -> Redis：原生 RESP；im:broadcast:* 消息载荷已使用 protobuf。
+message-sequencer -> Redis -> backend：正式消息广播，携带固定 ID 和群序号。
 backend -> Kafka：原生 Kafka 协议；聊天消息 Value 已使用 protobuf。
 backend -> MongoDB：原生 Mongo/BSON 协议
-backend -> Elasticsearch：HTTP JSON，ES 原生 API
-backend -> MinIO/OSS：S3 兼容 HTTP 协议
-backend -> Qdrant：Qdrant gRPC/protobuf
-agent-service -> Redis/Qdrant：原生协议
-backend 管理模块 -> MySQL/Redis/Mongo/Qdrant/MinIO：基础设施原生协议
+message-service / message-worker -> Elasticsearch：HTTP JSON，ES 原生 API
+message-service -> MinIO/OSS：对象存储 HTTP 协议
+message-worker -> MySQL/MongoDB、Redis：消息持久化与缓存
+agent-worker -> Qdrant：gRPC 向量读写
+admin-service -> MySQL/Redis/MongoDB/MinIO：管理数据访问
+
+旧部署升级须先停旧归档器，再启动独立 Worker，步骤见 [消息服务迁移说明](services/messages/README.md)。
 
 ## 压测基线
 
 最新结果来自 `perf3b/` 与 `perf4/`，结论均以实测数据为准。
+以下历史基线早于新增编号器，不代表当前两阶段 Kafka 链路的性能；新链路尚未重新压测。
 
 ### HTTP 只读接口（N+1 修复后，perf3b）
 
@@ -160,18 +168,21 @@ docker compose ps prometheus grafana
 | 入口 | 地址 | 说明 |
 | --- | --- | --- |
 | Backend Metrics | `http://127.0.0.1:6060/metrics` | Go 服务原始指标，包含 CPU、内存、WebSocket、Hub、Kafka、Redis 和数据库指标 |
+| Admin Metrics | `http://127.0.0.1:8081/metrics` | 独立管理服务的 API 延迟、完成 QPS 和运行指标 |
+| Room Metrics | `http://127.0.0.1:8082/metrics` | 独立房间服务的 API 延迟、完成 QPS 和运行指标 |
 | Agent Metrics | `http://127.0.0.1:8000/metrics` | Python Agent API 指标；Worker 指标由 Prometheus 在容器网络内采集 |
 | Go pprof | `http://127.0.0.1:6060/debug/pprof/` | Go CPU、堆、goroutine 等性能诊断入口 |
 | Prometheus | `http://127.0.0.1:9090` | PromQL 查询和历史时序数据 |
 | Prometheus Targets | `http://127.0.0.1:9090/targets` | 检查 Backend、Agent API 和 Agent Worker 抓取目标是否为 `UP` |
 | Grafana | `http://127.0.0.1:3000` | 预置监控看板 |
 
-Prometheus 每秒采集 Backend、Agent API 和 Agent Worker 指标，默认保留 15 天。Grafana 已自动配置 Prometheus 数据源。登录 Grafana 后可使用三个预置看板：
+Prometheus 每秒采集 Backend、Admin、Room、Agent API 和 Agent Worker 指标，默认保留 15 天。Grafana 已自动配置 Prometheus 数据源。登录 Grafana 后可使用四个预置看板：
 
 ```text
 Dashboards -> LAN IM -> LAN IM 运行总览
 Dashboards -> LAN IM -> LAN IM WebSocket 与 Gateway
 Dashboards -> LAN IM -> LAN IM Agent 与 RAG
+Dashboards -> LAN IM -> LAN IM Gateway 压测
 ```
 
 WebSocket 看板包含鉴权到可传输的全链路阶段、按秒 P50/P95/P99、连接、消息、错误和独立 TaskPool；Agent 看板包含审核、分块、Embedding、Qdrant、对话与移除申请。默认 Grafana 用户名和密码均为 `admin`，部署前应通过 `.env` 修改：
@@ -206,7 +217,7 @@ max(im_kafka_consumer_lag)
 ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 user@服务器地址
 ```
 
-更完整的指标说明见 `docs/metrics.md`。
+完整接口联调说明见 `docs/API.md`，更完整的指标说明见 `docs/metrics.md`。
 
 ### 7. 创建账号并设置超管
 

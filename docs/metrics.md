@@ -62,6 +62,11 @@ Docker Compose 已自动将上述变量注入 `backend` 服务，并在宿主机
 
 | 指标 | 类型 | 说明 |
 |---|---|---|
+| `im_api_requests_total` | Counter | 已完成的 API 请求数，按服务、方法、模板路由和状态码区分 |
+| `im_api_request_duration_seconds` | Histogram | 从请求进入服务路由到处理链返回的端到端耗时 |
+| `im_api_completed_qps` | Gauge | 最近完整秒内完成全链路处理的请求数，即完成 QPS |
+| `im_api_completion_latency_milliseconds` | Gauge | 最近完整秒的 P50/P95/P99；内部使用 1ms 固定桶，超过 10s 按 10s 显示 |
+| `im_api_completion_samples` | Gauge | 计算最近完整秒分位数时使用的样本数 |
 | `im_auth_login_attempts_total{result}` | Counter | 按结果统计登录请求，可用于计算失败率与限流比例 |
 | `im_auth_login_duration_seconds` | Histogram | 登录端到端耗时 |
 | `im_auth_bcrypt_active` | Gauge | 当前正在执行的 bcrypt 校验数 |
@@ -165,6 +170,12 @@ scrape_configs:
       - targets:
           - 'backend:6060'
 ```
+
+Gateway 对照压测使用 `docker-compose.gateway-perf.yml` 后，Prometheus 会改用
+`perf7/prometheus.yml`，同时抓取 `gateway-1`、`gateway-2` 和 `gateway-3`。
+k6 客户端指标通过 `http://测试主机:9090/api/v1/write` 写入 Prometheus，Grafana 的
+`LAN IM Gateway 压测` 看板会显示投递延迟、连接成功率、重复投递和各实例资源数据。
+完整命令与安全限制见 `perf7/README.md`。
 
 ## 5. 云服务器迁移
 
