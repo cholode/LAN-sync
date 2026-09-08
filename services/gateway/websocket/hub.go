@@ -491,6 +491,8 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 			}
 
 			msg := &models.Message{
+				ID:          envelope.MessageID,
+				RoomSeq:     envelope.RoomSeq,
 				RoomID:      envelope.RoomID,
 				SenderID:    envelope.SenderID,
 				ClientMsgID: envelope.ClientMsgID,

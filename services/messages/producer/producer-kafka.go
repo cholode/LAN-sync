@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
 
 	"lan-im-go/contracts/events"
@@ -15,21 +14,21 @@ import (
 )
 
 type MessageClient struct {
-	writer      *kafka.Writer
-	redisClient *redis.Client
-	topic       string
+	writer *kafka.Writer
+	topic  string
 }
 
-func NewMessageClient(brokers []string, topic string, async bool, redisClient *redis.Client) *MessageClient {
+func NewMessageClient(brokers []string, topic string) *MessageClient {
 	return &MessageClient{
 		writer: &kafka.Writer{
-			Addr:     kafka.TCP(brokers...),
-			Topic:    topic,
-			Balancer: &kafka.Hash{},
-			Async:    async,
+			Addr:         kafka.TCP(brokers...),
+			Topic:        topic,
+			Balancer:     &kafka.Hash{},
+			Async:        false,
+			RequiredAcks: kafka.RequireAll,
+			BatchTimeout: 5 * time.Millisecond,
 		},
-		redisClient: redisClient,
-		topic:       topic,
+		topic: topic,
 	}
 }
 
@@ -62,13 +61,7 @@ func (c *MessageClient) HandleIncomingMessage(ctx context.Context, roomID string
 		return fmt.Errorf("kafka 写入失败: %w", err)
 	}
 
-	redisChannel := "im:broadcast:room:" + roomID
-	pubErr := c.redisClient.Publish(ctx, redisChannel, payload).Err()
-	metrics.ObserveRedisPubSub(redisChannel, "publish", pubErr)
-	if pubErr != nil {
-		pkg.Infof("[中间件告警] Redis 广播发布失败（消息仍已落盘Kafka）: %v", pubErr)
-	}
-
+	// 广播由正式消息消费者负责，禁止未编号消息绕过编号器。
 	return nil
 }
 

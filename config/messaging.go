@@ -11,7 +11,7 @@ import (
 const (
 	defaultRedisAddr          = "localhost:6379"
 	defaultKafkaBroker        = "localhost:9092"
-	defaultKafkaTopic         = "im_chat_messages"
+	defaultKafkaTopic         = "im_chat_messages_sequenced_v1"
 	defaultKafkaArchiverGroup = "im_archiver_group"
 )
 
@@ -36,8 +36,8 @@ type RedisConfig struct {
 type KafkaConfig struct {
 	Brokers       []string
 	Topic         string
+	IngressTopic  string
 	ArchiverGroup string
-	ProducerAsync bool
 }
 
 var (
@@ -66,8 +66,8 @@ func Messaging() MessagingConfig {
 			Kafka: KafkaConfig{
 				Brokers:       splitNonEmpty(brokersValue),
 				Topic:         envString("KAFKA_TOPIC", defaultKafkaTopic),
+				IngressTopic:  envString("KAFKA_INGRESS_TOPIC", "im_chat_messages_ingress_v1"),
 				ArchiverGroup: envString("KAFKA_ARCHIVER_GROUP", defaultKafkaArchiverGroup),
-				ProducerAsync: envBool("KAFKA_PRODUCER_ASYNC", true),
 			},
 		}
 	})
