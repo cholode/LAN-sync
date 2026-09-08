@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-shell">
+  <div class="chat-shell" :class="{ 'has-current': current, 'details-open': showDetails }">
     <aside class="rail">
       <AppLogo compact />
       <button class="rail-btn active"><MessageSquareText :size="19" /></button>
@@ -21,7 +21,7 @@
         </button>
       </div>
 
-      <div class="join-room">
+      <div v-if="showCreate" class="join-room">
         <input v-model="joinRoomId" class="input" placeholder="输入群号加入" @keyup.enter="joinRoom" />
         <button class="btn btn-primary btn-sm" :disabled="joiningRoom" @click="joinRoom">
           {{ joiningRoom ? '加入中' : '加入' }}
@@ -30,7 +30,7 @@
 
       <div class="room-search"><Search :size="14" /><input v-model="keyword" placeholder="搜索会话" /></div>
 
-      <div class="room-list">
+      <div class="room-list"><div v-if="!filteredRooms.length" class="room-empty">{{ keyword ? '没有匹配的会话' : '点击右上角 + 创建或加入群聊' }}</div>
         <button
           v-for="r in filteredRooms"
           :key="r.id"
@@ -51,20 +51,13 @@
 
     <main class="conversation">
       <header>
-        <div class="header-title">
+        <button v-if="current" class="square back-button" aria-label="返回会话列表" @click="current = null"><ArrowLeft :size="18" /></button><div class="header-title">
           <h2>{{ current?.name || current?.room_name || '选择一个会话' }}</h2>
           <span v-if="current">Room #{{ current.id }}</span>
         </div>
         <div class="header-actions">
-          <button
-            v-if="current"
-            class="btn btn-sm agent-toggle"
-            :disabled="agentLoading"
-            @click="toggleAgent"
-          >
-            <Bot :size="14" />
-            <span>{{ agentLoading ? '处理中' : agentEnabled ? '停用 Agent' : '启用 Agent' }}</span>
-          </button>
+          <button v-if="current" class="square" aria-label="搜索聊天记录" @click="showHistory = !showHistory"><Search :size="17" /></button>
+          <button v-if="current" class="square" aria-label="会话信息与 Agent 管理" @click="showDetails = !showDetails"><Users :size="17" /></button>
           <div class="conn"><span :class="socketState"></span>{{ socketState === 'online' ? '实时连接' : '离线' }}</div>
           <div class="user-chip" :title="auth.user?.username || ''">
             <img v-if="auth.user?.avatar" :src="auth.user.avatar" alt="" />
@@ -73,7 +66,7 @@
         </div>
       </header>
 
-      <div v-if="current" class="history-search">
+      <div v-if="current && showHistory" class="history-search">
         <Search :size="14" />
         <input v-model="historyKeyword" placeholder="按关键字搜索聊天记录" @keyup.enter="searchHistory" />
         <button class="btn btn-sm" :disabled="historySearching" @click="searchHistory">
@@ -146,15 +139,20 @@
     </main>
 
     <aside class="detail">
-      <header>会话信息</header>
+      <header>会话信息<button class="square" aria-label="关闭会话信息" @click="showDetails = false"><X :size="17" /></button></header>
       <div v-if="current" class="detail-body">
         <div class="room-big">{{ String(current.name || current.room_name || '群').slice(0, 1) }}</div>
         <h3>{{ current.name || current.room_name }}</h3>
         <p>Room #{{ current.id }}</p>
-        <div class="info-row"><Users :size="15" /><span>成员</span><b>{{ members.length }}</b></div>
+        <section class="agent-card">
+<div class="agent-heading"><Bot :size="20" /><b>群聊 Agent</b><span>{{ agentEnabled ? '已启用' : '已停用' }}</span></div>
+<p>在聊天中使用 @agent 与助手对话。</p>
+<div v-if="canManageAgent" class="agent-actions"><button class="btn" :disabled="agentLoading" @click="toggleAgent">{{ agentLoading ? '处理中…' : agentEnabled ? '停用 Agent' : '启用 Agent' }}</button><button class="btn danger" :disabled="agentLoading" @click="removeAgent"><Trash2 :size="14" />移除 Agent 账号</button></div>
+<p v-else>仅群主和管理员可以管理 Agent。</p><p v-if="agentMessage" role="status">{{ agentMessage }}</p>
+</section><div class="info-row"><Users :size="15" /><span>成员</span><b>{{ members.length }}</b></div>
         <div class="members">
           <div
-            v-for="m in members.slice(0, 8)"
+            v-for="m in members"
             :key="m.id || m.user_id"
             class="member-row"
             @contextmenu.prevent="openMemberMenu($event, m)"
@@ -195,6 +193,9 @@ import {
   Paperclip,
   Smile,
   Bot,
+  ArrowLeft,
+  X,
+  Trash2,
 } from 'lucide-vue-next'
 import AppLogo from '../components/common/AppLogo.vue'
 import { useAuthStore } from '../stores/auth.js'
@@ -213,6 +214,10 @@ const newRoom = ref('')
 const showCreate = ref(false)
 const showEmoji = ref(false)
 const socketState = ref('offline')
+const showDetails = ref(false)
+const showHistory = ref(false)
+const agentMessage = ref('')
+const canManageAgent = computed(() => auth.isSuperAdmin || Number(current.value?.my_role) >= 2 || String(current.value?.creator_id) === String(auth.user?.id ?? auth.user?.user_id))
 const agentEnabled = ref(false)
 const agentLoading = ref(false)
 const msgBox = ref()
@@ -349,7 +354,7 @@ async function selectRoom(r) {
   current.value = r
   showEmoji.value = false
   agentEnabled.value = Boolean(r.agent_enabled)
-  agentLoading.value = false
+  agentMessage.value = ''
   historyKeyword.value = ''
   historySearching.value = false
   historySearchActive.value = false
@@ -358,26 +363,40 @@ async function selectRoom(r) {
   members.value = []
 
   const [msgRes, memberRes] = await Promise.allSettled([imApi.messages(r.id), imApi.members(r.id)])
+  if (current.value?.id !== r.id) return
   members.value = memberRes.status === 'fulfilled' ? normalizeList(memberRes.value) : []
   messages.value = (msgRes.status === 'fulfilled' ? normalizeList(msgRes.value) : []).map(enrichMessage)
   scrollToBottom()
 }
 
-async function toggleAgent() {
+async function toggleAgent() { await changeAgent(false) }
+async function removeAgent() {
   if (!current.value || agentLoading.value) return
+  if (!confirm('移除该群的 Agent 账号及配置？历史消息保留，其他群不受影响。')) return
+  await changeAgent(true)
+}
+async function changeAgent(remove) {
+  if (!current.value || agentLoading.value || !canManageAgent.value) return
+  const room = current.value
+  const enabled = !room.agent_enabled
   agentLoading.value = true
+  agentMessage.value = ''
   try {
-    if (agentEnabled.value) await imApi.disableAgent(current.value.id)
-    else await imApi.enableAgent(current.value.id)
-    agentEnabled.value = !agentEnabled.value
-    if (current.value) current.value.agent_enabled = agentEnabled.value
-    const room = rooms.value.find((x) => String(x.id) === String(current.value.id))
-    if (room) room.agent_enabled = agentEnabled.value
+    if (remove) await imApi.removeAgent(room.id)
+    else if (enabled) await imApi.enableAgent(room.id)
+    else await imApi.disableAgent(room.id)
+    room.agent_enabled = remove ? false : enabled
+    if (current.value?.id === room.id) {
+      agentEnabled.value = room.agent_enabled
+      agentMessage.value = remove ? '已移除该群的 Agent 账号与配置' : enabled ? 'Agent 已启用' : 'Agent 已停用'
+      try {
+        const fresh = await imApi.members(room.id)
+        if (current.value?.id === room.id) members.value = fresh
+      } catch { agentMessage.value += '；成员列表刷新失败，请重新打开会话' }
+    }
   } catch (e) {
-    alert(e.message || 'Agent 操作失败')
-  } finally {
-    agentLoading.value = false
-  }
+    if (current.value?.id === room.id) agentMessage.value = e.message || '操作失败，请重试'
+  } finally { agentLoading.value = false }
 }
 
 async function createRoom() {
@@ -598,8 +617,8 @@ onBeforeUnmount(() => {
 .chat-shell {
   height: 100vh;
   display: grid;
-  grid-template-rows: minmax(0, 100vh);
-  grid-template-columns: 68px 290px minmax(360px, 1fr) 260px;
+  grid-template-rows: minmax(0, 1fr); height: 100dvh;
+  grid-template-columns: 68px 300px minmax(0, 1fr);
   background: var(--surface);
   overflow: hidden;
 }
@@ -1253,5 +1272,63 @@ onBeforeUnmount(() => {
   .rooms {
     display: none;
   }
+}
+
+.detail { display: none; position: fixed; inset: 0 0 0 auto; width: min(340px, 100vw); z-index: 40; box-shadow: -12px 0 40px #17203320; }
+.details-open .detail { display: flex; }
+.back-button { display: none; }
+.rooms > header, .conversation > header { height: 80px; gap: 16px; padding: 0 24px; }
+.header-title { flex: 1; }
+.conversation h2 { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-title span { margin-top: 5px; }
+.room-search { margin: 20px 16px 12px; height: 42px; }
+.room { padding: 14px 12px; margin-bottom: 6px; }
+.room.active { background: var(--primary-soft); box-shadow: inset 3px 0 var(--primary); }
+.room-meta b { font-size: 14px; }
+.room-meta span, .rooms header span { font-size: 12px; }
+.room-empty { padding: 28px 16px; color: var(--text-3); line-height: 1.8; text-align: center; }
+.new-room, .join-room { padding: 12px 16px 0; gap: 8px; }
+.new-room .input, .join-room .input { min-width: 0; flex: 1; }
+.history-search { margin: 16px 24px 0; }
+.messages { padding: 28px clamp(20px, 5vw, 80px); }
+.message { margin: 0 0 24px; }
+.bubble { padding: 12px 16px; font-size: 14px; line-height: 1.75; background: var(--surface); border-color: var(--line); }
+.sender { font-size: 12px; margin-bottom: 6px; }
+.bubble time { font-size: 10px; }
+.conversation footer { padding: 20px 24px; align-items: center; gap: 10px; }
+.composer { min-height: 66px; padding: 14px; line-height: 1.6; }
+.attach, .send { height: 42px; }
+.agent-card { margin-top: 28px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); text-align: left; }
+.agent-heading { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.agent-heading span { margin-left: auto; font-size: 11px; color: var(--text-2); }
+.agent-card p { font-size: 12px; line-height: 1.8; margin-top: 12px; }
+.agent-actions { display: grid; gap: 10px; margin-top: 16px; }
+.danger { color: var(--danger); }
+.members div { padding: 10px 0; font-size: 13px; overflow-wrap: anywhere; }
+.members span, .member-avatar { flex-shrink: 0; }
+.detail h3 { overflow-wrap: anywhere; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 900px) {
+.chat-shell { grid-template-columns: 56px 240px minmax(0, 1fr); }
+.conn { display: none; }
+.conversation > header { padding: 0 16px; }
+.conversation footer { padding: 16px; gap: 6px; }
+}
+@media (max-width: 720px) {
+.chat-shell { grid-template-columns: 52px minmax(0, 1fr); }
+.rooms { display: flex; }
+.conversation { display: none; }
+.has-current .rooms { display: none; }
+.has-current .conversation { display: flex; }
+.back-button { display: grid; }
+.conversation > header { gap: 8px; height: 72px; }
+.header-actions { gap: 6px; }
+.user-chip { display: none; }
+.messages { padding: 20px 14px; }
+.conversation footer { flex-wrap: wrap; padding: 12px; }
+.composer { order: -1; flex-basis: 100%; }
+.send { margin-left: auto; }
+.history-search { margin: 12px; flex-wrap: wrap; }
+.empty { text-align: center; line-height: 1.7; }
 }
 </style>
