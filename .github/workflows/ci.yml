@@ -49,6 +49,9 @@ jobs:
       - name: Vet packages
         run: go vet ./...
 
+      - name: Test service boundaries and shutdown
+        run: go test -race ./...
+
       - name: Build Linux binary
         run: CGO_ENABLED=0 GOOS=linux go build -o /dev/null ./...
 
