@@ -52,7 +52,7 @@ class RedisSettings:
 @dataclass(frozen=True)
 class KafkaSettings:
     brokers: list[str] = field(default_factory=lambda: ["kafka:9092"])
-    topic: str = "im_chat_messages"
+    topic: str = "im_chat_messages_sequenced_v1"
     group_id: str = "agent_service"
     batch_size: int = 50
     batch_window_seconds: float = 60.0
@@ -214,7 +214,7 @@ def _load_settings() -> Settings:
         redis=RedisSettings(addr=str(redis.get("addr") or "redis:6379")),
         kafka=KafkaSettings(
             brokers=[item.strip() for item in str(kafka.get("brokers") or "kafka:9092").split(",") if item.strip()],
-            topic=str(kafka.get("topic") or "im_chat_messages"),
+            topic=str(kafka.get("topic") or "im_chat_messages_sequenced_v1"),
             group_id=str(kafka.get("group_id") or "agent_service"),
             batch_size=_int(kafka.get("batch_size"), 50),
             batch_window_seconds=_float(kafka.get("batch_window_seconds"), 60.0),

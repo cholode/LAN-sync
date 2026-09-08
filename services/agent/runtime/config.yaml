@@ -30,7 +30,7 @@ redis:
 
 kafka:
   brokers: "${KAFKA_BROKERS:-kafka:9092}"
-  topic: "${KAFKA_TOPIC:-im_chat_messages}"
+  topic: "${KAFKA_TOPIC:-im_chat_messages_sequenced_v1}"
   group_id: "${AGENT_KAFKA_GROUP:-agent_service}"
   batch_size: 50
   batch_window_seconds: 60
