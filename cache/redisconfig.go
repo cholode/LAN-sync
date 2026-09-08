@@ -16,7 +16,7 @@ import (
 const (
 	onlineKeyPrefix     = "im:user:online:"
 	onlineTTL           = 60 * time.Second
-	roomLatestKeyPrefix = "im:room:latest:"
+	roomLatestKeyPrefix = "im:room:latest:v2:"
 	roomLatestTTL       = 30 * time.Minute
 	roomLatestMax       = 100
 )
@@ -115,18 +115,20 @@ func CheckUsersOnline(ctx context.Context, userIDs []int64) (map[int64]bool, err
 
 // CachedMsg 缓存消息体，与 API 响应对齐
 type CachedMsg struct {
-	ID        int64     `json:"id,string"`
-	RoomID    int64     `json:"room_id,string"`
-	SenderID  int64     `json:"sender_id,string"`
-	Type      int8      `json:"type"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
+	RoomSeq     int64     `json:"room_seq,string"`
+	ClientMsgID string    `json:"client_msg_id"`
+	ID          int64     `json:"id,string"`
+	RoomID      int64     `json:"room_id,string"`
+	SenderID    int64     `json:"sender_id,string"`
+	Type        int8      `json:"type"`
+	Content     string    `json:"content"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // GetLatestMessages 从 Redis 读取房间最新的 limit 条消息
 func GetLatestMessages(ctx context.Context, roomID int64, limit int) ([]CachedMsg, error) {
 	key := fmt.Sprintf("%s%d", roomLatestKeyPrefix, roomID)
-	vals, err := config.RedisClient.LRange(ctx, key, 0, int64(limit-1)).Result()
+	vals, err := config.RedisClient.ZRevRange(ctx, key, 0, int64(limit-1)).Result()
 	if err != nil || len(vals) == 0 {
 		return nil, err
 	}
@@ -139,7 +141,7 @@ func GetLatestMessages(ctx context.Context, roomID int64, limit int) ([]CachedMs
 		}
 		out = append(out, m)
 	}
-	// LPush + LRange 返回的是新→旧，翻转为旧→新，跟 MySQL 路径保持一致
+	// 按群序号读取后翻转为旧到新；重放旧消息不会把旧记录顶到最新位置。
 	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
 		out[i], out[j] = out[j], out[i]
 	}
@@ -155,7 +157,12 @@ func BackfillRoomCache(ctx context.Context, msgs []*models.Message) {
 	rooms := make(map[int64]struct{}, len(msgs))
 
 	for _, m := range msgs {
+		// 旧消息没有序号，仍由数据库分页；超出浮点精确整数范围时不使用缓存。
+		if m.RoomSeq <= 0 || m.RoomSeq > 1<<53 {
+			continue
+		}
 		payload, err := json.Marshal(CachedMsg{
+			RoomSeq: m.RoomSeq, ClientMsgID: m.ClientMsgID,
 			ID: m.ID, RoomID: m.RoomID, SenderID: m.SenderID,
 			Type: m.Type, Content: m.Content, CreatedAt: m.CreatedAt,
 		})
@@ -163,8 +170,8 @@ func BackfillRoomCache(ctx context.Context, msgs []*models.Message) {
 			continue
 		}
 		key := fmt.Sprintf("%s%d", roomLatestKeyPrefix, m.RoomID)
-		pipe.LPush(ctx, key, string(payload))
-		pipe.LTrim(ctx, key, 0, roomLatestMax-1)
+		pipe.ZAdd(ctx, key, &redis.Z{Score: float64(m.RoomSeq), Member: string(payload)})
+		pipe.ZRemRangeByRank(ctx, key, 0, -roomLatestMax-1)
 		rooms[m.RoomID] = struct{}{}
 	}
 

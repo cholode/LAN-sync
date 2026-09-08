@@ -89,7 +89,8 @@ func (m *Module) SearchMessages() gin.HandlerFunc {
 				continue
 			}
 			hits = append(hits, search.MessageHit{
-				ID: message.ID, RoomID: message.RoomID, SenderID: message.SenderID,
+				RoomSeq: message.RoomSeq,
+				ID:      message.ID, RoomID: message.RoomID, SenderID: message.SenderID,
 				ClientMsgID: message.ClientMsgID, Type: message.Type,
 				Content: message.Content, CreatedAt: message.CreatedAt,
 			})

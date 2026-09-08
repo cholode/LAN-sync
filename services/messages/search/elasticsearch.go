@@ -45,6 +45,7 @@ const messageIndexMapping = `{
 
 // messageDoc 是聊天消息在 Elasticsearch 中的表示形式。
 type messageDoc struct {
+	RoomSeq     int64     `json:"room_seq"`
 	ID          int64     `json:"id"`
 	RoomID      int64     `json:"room_id"`
 	SenderID    int64     `json:"sender_id"`
@@ -67,6 +68,7 @@ type SearchParams struct {
 
 // MessageHit 表示 Elasticsearch 返回的一条匹配消息。
 type MessageHit struct {
+	RoomSeq     int64     `json:"room_seq,string"`
 	ID          int64     `json:"id,string"`
 	RoomID      int64     `json:"room_id,string"`
 	SenderID    int64     `json:"sender_id,string"`
@@ -183,10 +185,7 @@ func IndexMessages(ctx context.Context, msgs []*models.Message) error {
 			continue
 		}
 
-		id := msg.ClientMsgID
-		if id == "" {
-			id = strconv.FormatInt(msg.ID, 10)
-		}
+		id := strconv.FormatInt(msg.ID, 10)
 
 		meta, err := json.Marshal(map[string]any{
 			"index": map[string]any{
@@ -327,6 +326,7 @@ func SearchMessages(ctx context.Context, roomID int64, params SearchParams) (*Se
 	}
 	for _, hit := range decoded.Hits.Hits {
 		out.Hits = append(out.Hits, MessageHit{
+			RoomSeq:     hit.Source.RoomSeq,
 			ID:          hit.Source.ID,
 			RoomID:      hit.Source.RoomID,
 			SenderID:    hit.Source.SenderID,
@@ -342,6 +342,7 @@ func SearchMessages(ctx context.Context, roomID int64, params SearchParams) (*Se
 
 func toMessageDoc(msg *models.Message) messageDoc {
 	doc := messageDoc{
+		RoomSeq:     msg.RoomSeq,
 		ID:          msg.ID,
 		RoomID:      msg.RoomID,
 		SenderID:    msg.SenderID,

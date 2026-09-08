@@ -31,18 +31,7 @@ func notDeletedFilter() bson.M {
 }
 
 func (r *mongoMessageRepo) SaveMessage(msg *models.Message) error {
-	doc := msg.ToMessageDocument()
-	if doc == nil {
-		return nil
-	}
-
-	_, err := r.collection.UpdateOne(
-		context.Background(),
-		bson.M{"client_msg_id": doc.ClientMsgID},
-		bson.M{"$setOnInsert": doc},
-		options.UpdateOne().SetUpsert(true),
-	)
-	return err
+	return r.SaveMessageBatch([]*models.Message{msg})
 }
 
 func (r *mongoMessageRepo) SaveMessageBatch(msgs []*models.Message) error {
@@ -50,28 +39,61 @@ func (r *mongoMessageRepo) SaveMessageBatch(msgs []*models.Message) error {
 		return nil
 	}
 
-	models := make([]mongo.WriteModel, 0, len(msgs))
+	writes := make([]mongo.WriteModel, 0, len(msgs))
 	for _, msg := range msgs {
 		doc := msg.ToMessageDocument()
 		if doc == nil || doc.ClientMsgID == "" {
 			continue
 		}
-		models = append(models, mongo.NewUpdateOneModel().
-			SetFilter(bson.M{"client_msg_id": doc.ClientMsgID}).
+		writes = append(writes, mongo.NewUpdateOneModel().
+			SetFilter(bson.M{"sender_id": doc.SenderID, "client_msg_id": doc.ClientMsgID}).
 			SetUpdate(bson.M{"$setOnInsert": doc}).
 			SetUpsert(true))
 	}
 
-	if len(models) == 0 {
+	if len(writes) == 0 {
 		return nil
 	}
 
 	_, err := r.collection.BulkWrite(
 		context.Background(),
-		models,
-		options.BulkWrite().SetOrdered(false),
+		writes,
+		options.BulkWrite().SetOrdered(true),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	// 重放消息沿用主存储中的 ID，防止缓存和搜索索引产生另一份消息。
+	keys := make([]string, 0, len(msgs))
+	for _, msg := range msgs {
+		keys = append(keys, msg.ClientMsgID)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cursor, err := r.collection.Find(ctx, bson.M{"client_msg_id": bson.M{"$in": keys}})
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+	var docs []models.MessageDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return err
+	}
+	byKey := make(map[models.MessageRequestKey]*models.Message, len(docs))
+	for i := range docs {
+		msg := docs[i].ToMessage()
+		byKey[msg.RequestKey()] = msg
+	}
+	for _, msg := range msgs {
+		stored := byKey[msg.RequestKey()]
+		if stored == nil {
+			return mongo.ErrNoDocuments
+		}
+		if err := models.ReconcileMessage(msg, stored); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *mongoMessageRepo) GetHistoryByCursor(roomID int64, cursorMsgID int64, limit int) ([]*models.Message, error) {
@@ -82,19 +104,22 @@ func (r *mongoMessageRepo) GetHistoryByCursor(roomID int64, cursorMsgID int64, l
 	filter["room_id"] = roomID
 	if cursorMsgID > 0 {
 		var cursorDoc models.MessageDocument
-		err := r.collection.FindOne(ctx, bson.M{"_id": cursorMsgID}).Decode(&cursorDoc)
+		err := r.collection.FindOne(ctx, bson.M{"_id": cursorMsgID, "room_id": roomID}).Decode(&cursorDoc)
 		if err == nil {
+			older := bson.A{
+				bson.M{"room_seq": bson.M{"$lt": cursorDoc.RoomSeq}},
+				bson.M{"room_seq": cursorDoc.RoomSeq, "_id": bson.M{"$lt": cursorMsgID}},
+			}
+			if cursorDoc.RoomSeq > 0 {
+				older = append(older, bson.M{"room_seq": bson.M{"$exists": false}})
+			} else {
+				older = append(older, bson.M{"room_seq": bson.M{"$exists": false}, "_id": bson.M{"$lt": cursorMsgID}})
+			}
 			filter = bson.M{
 				"room_id": roomID,
 				"$and": bson.A{
 					notDeletedFilter(),
-					bson.M{"$or": bson.A{
-						bson.M{"created_at": bson.M{"$lt": cursorDoc.CreatedAt}},
-						bson.M{
-							"created_at": cursorDoc.CreatedAt,
-							"_id":        bson.M{"$lt": cursorMsgID},
-						},
-					}},
+					bson.M{"$or": older},
 				},
 			}
 		} else {
@@ -110,7 +135,7 @@ func (r *mongoMessageRepo) GetHistoryByCursor(roomID int64, cursorMsgID int64, l
 
 	opts := options.Find().
 		SetSort(bson.D{
-			{Key: "created_at", Value: -1},
+			{Key: "room_seq", Value: -1},
 			{Key: "_id", Value: -1},
 		}).
 		SetLimit(int64(limit))

@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"strconv"
@@ -9,16 +10,19 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"lan-im-go/cache"
+	"lan-im-go/models"
 )
 
 // chatHistoryMsgDTO 历史消息 API 输出：避免 DeletedAt 等内部字段；id 用 JSON 字符串防止前端 Number 精度丢失（雪花 ID）
 type chatHistoryMsgDTO struct {
-	ID        int64     `json:"id,string"`
-	RoomID    int64     `json:"room_id,string"`
-	SenderID  int64     `json:"sender_id,string"`
-	Type      int8      `json:"type"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
+	RoomSeq     int64     `json:"room_seq,string"`
+	ClientMsgID string    `json:"client_msg_id"`
+	ID          int64     `json:"id,string"`
+	RoomID      int64     `json:"room_id,string"`
+	SenderID    int64     `json:"sender_id,string"`
+	Type        int8      `json:"type"`
+	Content     string    `json:"content"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // GetChatHistory 获取群聊历史消息（游标分页）
@@ -72,6 +76,7 @@ func (m *Module) GetChatHistory() gin.HandlerFunc {
 				out := make([]chatHistoryMsgDTO, 0, len(messages))
 				for _, m := range messages {
 					out = append(out, chatHistoryMsgDTO{
+						RoomSeq: m.RoomSeq, ClientMsgID: m.ClientMsgID,
 						ID: m.ID, RoomID: m.RoomID, SenderID: m.SenderID,
 						Type: m.Type, Content: m.Content, CreatedAt: m.CreatedAt,
 					})
@@ -97,7 +102,12 @@ func (m *Module) GetChatHistory() gin.HandlerFunc {
 
 		// 缓存未命中时，异步回填 Redis
 		if cursorMsgID == 0 && len(dbMsgs) > 0 {
-			go cache.BackfillRoomCache(c.Request.Context(), dbMsgs)
+			// HTTP 响应返回后请求上下文会取消，回填使用独立的短超时上下文。
+			go func(messages []*models.Message) {
+				fillCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				cache.BackfillRoomCache(fillCtx, messages)
+			}(dbMsgs)
 		}
 
 		if len(dbMsgs) > 0 {
@@ -108,6 +118,7 @@ func (m *Module) GetChatHistory() gin.HandlerFunc {
 		out := make([]chatHistoryMsgDTO, 0, len(dbMsgs))
 		for _, m := range dbMsgs {
 			out = append(out, chatHistoryMsgDTO{
+				RoomSeq: m.RoomSeq, ClientMsgID: m.ClientMsgID,
 				ID: m.ID, RoomID: m.RoomID, SenderID: m.SenderID,
 				Type: m.Type, Content: m.Content, CreatedAt: m.CreatedAt,
 			})
