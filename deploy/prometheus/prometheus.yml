@@ -3,6 +3,26 @@ global:
   evaluation_interval: 5s
 
 scrape_configs:
+  - job_name: lan-im-message-sequencer
+    static_configs:
+      - targets: ["message-sequencer:6062"]
+        labels:
+          service: message-sequencer
+          project: lan-im-go
+  - job_name: lan-im-message-api
+    static_configs:
+      - targets: [message-service:8083]
+        labels:
+          service: message
+          project: lan-im-go
+
+  - job_name: lan-im-message-worker
+    static_configs:
+      - targets: [message-worker:6061]
+        labels:
+          service: message-worker
+          project: lan-im-go
+
   - job_name: lan-im-backend
     scrape_interval: 1s
     metrics_path: /metrics
@@ -21,6 +41,26 @@ scrape_configs:
           - agent-service:8000
         labels:
           service: agent-api
+          project: lan-im-go
+
+  - job_name: lan-im-admin
+    scrape_interval: 1s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - admin-service:8081
+        labels:
+          service: admin
+          project: lan-im-go
+
+  - job_name: lan-im-room
+    scrape_interval: 1s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - room-service:8082
+        labels:
+          service: room
           project: lan-im-go
 
   - job_name: lan-im-agent-worker

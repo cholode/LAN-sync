@@ -160,15 +160,12 @@ services:
       - REDIS_READ_TIMEOUT=${REDIS_READ_TIMEOUT:-3s}
       - REDIS_WRITE_TIMEOUT=${REDIS_WRITE_TIMEOUT:-3s}
       - KAFKA_BROKERS=kafka:9092
-      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages_sequenced_v1}
       - KAFKA_ARCHIVER_GROUP=${KAFKA_ARCHIVER_GROUP:-im_archiver_group}
-      - KAFKA_PRODUCER_ASYNC=${KAFKA_PRODUCER_ASYNC:-true}
+      - KAFKA_INGRESS_TOPIC=${KAFKA_INGRESS_TOPIC:-im_chat_messages_ingress_v1}
       - MESSAGE_STORE=${MESSAGE_STORE:-mysql}
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB=${MONGO_DB:-lan_im}
-      - ES_ENABLED=${ES_ENABLED:-true}
-      - ES_ADDR=http://elasticsearch:9200
-      - ES_INDEX_MESSAGES=${ES_INDEX_MESSAGES:-lan-im-messages}
       - QDRANT_HOST=qdrant
       - ADMIN_CONTROL_GRPC_ENABLED=${ADMIN_CONTROL_GRPC_ENABLED:-true}
       - ADMIN_CONTROL_GRPC_ADDR=0.0.0.0:50053
@@ -189,12 +186,6 @@ services:
       - HUB_FANOUT_BATCH_SIZE=${HUB_FANOUT_BATCH_SIZE:-200}
       - JWT_SECRET=${JWT_SECRET}
       - TOPIC_CHUNK_INTERVAL=${TOPIC_CHUNK_INTERVAL}
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
-      - MINIO_BUCKET=${MINIO_BUCKET:-lan-im-files}
-      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
     deploy:
       resources:
         limits:
@@ -207,18 +198,137 @@ services:
         condition: service_started
       mongo:
         condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
       kafka:
         condition: service_started
       qdrant:
         condition: service_started
-      minio:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
     ulimits:
       nofile:
         soft: 65535
         hard: 65535
+
+  # 编号状态只保存在内存中：禁止扩容，不自动重启，不提供崩溃恢复保证。
+  message-sequencer:
+    build:
+      context: .
+      dockerfile: services/messages/Dockerfile
+      args:
+        MESSAGE_PROCESS: sequencer
+    container_name: im-message-sequencer
+    restart: "no"
+    networks: [lan-im-network]
+    expose: ["6062"]
+    environment:
+      TZ: UTC
+      NODE_ID: message-sequencer
+      METRICS_ADDR: 0.0.0.0:6062
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_INGRESS_TOPIC: ${KAFKA_INGRESS_TOPIC:-im_chat_messages_ingress_v1}
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-im_chat_messages_sequenced_v1}
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+    depends_on:
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:6062/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 30s
+
+  # 消息 API 与归档 Worker 分别构建运行，共享消息存储配置。
+  message-service:
+    build:
+      context: .
+      dockerfile: services/messages/Dockerfile
+      args:
+        MESSAGE_PROCESS: api
+    container_name: im-message
+    restart: unless-stopped
+    networks: [lan-im-network]
+    expose: ["8083"]
+    environment: &message-environment
+      DB_DSN: root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=UTC
+      TZ: UTC
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      MESSAGE_STORE: ${MESSAGE_STORE:-mysql}
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB: ${MONGO_DB:-lan_im}
+      ES_ENABLED: ${ES_ENABLED:-true}
+      ES_ADDR: http://elasticsearch:9200
+      ES_INDEX_MESSAGES: ${ES_INDEX_MESSAGES:-lan-im-messages}
+      JWT_SECRET: ${JWT_SECRET}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-lan-im-files}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-minio}
+      NODE_ID: message-api
+    depends_on:
+      backend:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8083/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    stop_grace_period: 30s
+
+  message-worker:
+    build:
+      context: .
+      dockerfile: services/messages/Dockerfile
+      args:
+        MESSAGE_PROCESS: worker
+    # 当前仍直读分区 0，因此只运行一个实例，不对该服务使用 --scale。
+    container_name: im-message-worker
+    restart: unless-stopped
+    networks: [lan-im-network]
+    expose: ["6061"]
+    environment:
+      <<: *message-environment
+      NODE_ID: message-worker
+      METRICS_ADDR: 0.0.0.0:6061
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-im_chat_messages_sequenced_v1}
+      KAFKA_ARCHIVER_GROUP: ${KAFKA_ARCHIVER_GROUP:-im_archiver_group}
+    depends_on:
+      message-service:
+        condition: service_healthy
+      message-sequencer:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:6061/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    stop_grace_period: 45s
 
   # --- [4.4] 房间与群成员服务 ---
   room-service:
@@ -260,7 +370,7 @@ services:
       - DB_DSN=root:${DB_PASSWORD}@tcp(db:3306)/${DB_NAME}?charset=utf8mb4&parseTime=True&loc=UTC
       - TZ=UTC
       - REDIS_ADDR=redis:6379
-      - MESSAGE_STORE=${MESSAGE_STORE:-mongo}
+      - MESSAGE_STORE=${MESSAGE_STORE:-mysql}
       - MONGO_URI=mongodb://mongo:27017
       - MONGO_DB=${MONGO_DB:-lan_im}
       - ADMIN_SERVER_PORT=${ADMIN_SERVER_PORT:-8081}
@@ -371,7 +481,7 @@ services:
       - DB_NAME=${DB_NAME}
       - AGENT_QUERY_DATABASE_URL=mysql+pymysql://agent_reader:${AGENT_QUERY_DB_PASSWORD}@db:3306/${DB_NAME}?charset=utf8mb4
       - KAFKA_BROKERS=kafka:9092
-      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages_sequenced_v1}
     depends_on:
       db:
         condition: service_healthy
@@ -405,7 +515,7 @@ services:
       - DB_NAME=${DB_NAME}
       - AGENT_QUERY_DATABASE_URL=mysql+pymysql://agent_reader:${AGENT_QUERY_DB_PASSWORD}@db:3306/${DB_NAME}?charset=utf8mb4
       - KAFKA_BROKERS=kafka:9092
-      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages}
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-im_chat_messages_sequenced_v1}
       - AGENT_KAFKA_GROUP=${AGENT_KAFKA_GROUP:-agent_service}
     depends_on:
       db:
@@ -434,6 +544,7 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
       - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
     depends_on:
       backend:
         condition: service_started
@@ -456,6 +567,7 @@ services:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=1s
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -482,7 +594,7 @@ services:
       - "80:80"
     environment:
       # 只替换以下部署变量，避免误替换模板中的 $host、$uri 等 Nginx 变量。
-      - NGINX_ENVSUBST_FILTER=^(NGINX_SERVER_NAME|BACKEND_HOST|BACKEND_PORT|ADMIN_HOST|ADMIN_PORT|ROOM_HOST|ROOM_PORT)$$
+      - NGINX_ENVSUBST_FILTER=^(NGINX_SERVER_NAME|BACKEND_HOST|BACKEND_PORT|ADMIN_HOST|ADMIN_PORT|ROOM_HOST|ROOM_PORT|MESSAGE_HOST|MESSAGE_PORT)$$
       - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-_}
       - BACKEND_HOST=${NGINX_BACKEND_HOST:-backend}
       - BACKEND_PORT=${NGINX_BACKEND_PORT:-8080}
@@ -490,6 +602,8 @@ services:
       - ADMIN_PORT=${ADMIN_SERVER_PORT:-8081}
       - ROOM_HOST=${NGINX_ROOM_HOST:-room-service}
       - ROOM_PORT=${ROOM_SERVER_PORT:-8082}
+      - MESSAGE_HOST=message-service
+      - MESSAGE_PORT=8083
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
     ulimits:
@@ -500,3 +614,4 @@ services:
       - backend
       - admin-service
       - room-service
+      - message-service
