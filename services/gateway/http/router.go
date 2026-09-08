@@ -74,6 +74,9 @@ func NewRouter(deps Dependencies) *gin.Engine {
 
 	authorized.GET("/ws", api.WsEndpoint(deps.Hub))
 
+	authorized.POST("/rooms/:id/agent/enable", api.RoomAgentHandler(deps.DB, "enable"))
+	authorized.POST("/rooms/:id/agent/disable", api.RoomAgentHandler(deps.DB, "disable"))
+	authorized.DELETE("/rooms/:id/agent", api.RoomAgentHandler(deps.DB, "remove", deps.Hub.LeaveRoom))
 
 	frontend := deps.FrontendDir
 	if frontend == "" {
