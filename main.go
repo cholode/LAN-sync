@@ -12,17 +12,14 @@ import (
 	"lan-im-go/services/gateway/http"
 	"lan-im-go/services/gateway/websocket"
 	"lan-im-go/services/messages/api"
-	"lan-im-go/services/messages/archiver"
-	"lan-im-go/services/messages/search"
-	"lan-im-go/services/messages/storage"
-	roomapi "lan-im-go/services/rooms/api"
-	roomservice "lan-im-go/services/rooms/application"
 	"lan-im-go/shared/concurrency/taskpool"
 	"lan-im-go/shared/observability/metrics"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -77,12 +74,6 @@ func main() {
 		messageRepo = messages.NewMongoRepository(infrastructure.MessageCollection)
 	}
 	taskpool.Init(0) // 0 表示使用默认工作协程数
-	if err := search.Init(context.Background()); err != nil {
-		pkg.Fatalf("[Elasticsearch] init failed: %v", err)
-	}
-	defer search.Close()
-
-	fileStorage := storage.New()
 
 	// ================================
 	// 阶段2：数据访问层初始化
@@ -91,22 +82,10 @@ func main() {
 	pkg.Infoln("[系统就绪] 数据访问层(DAL)初始化完成")
 
 	// ================================
-	// 阶段3：Kafka 离线消息归档消费服务
+	// 阶段3：统一处理退出信号；消息归档由独立 Worker 运行
 	// ================================
-	messagingCfg := config.Messaging()
-	worker := archiver.NewWorker(
-		messagingCfg.Kafka.Brokers,
-		messagingCfg.Kafka.Topic,
-		messagingCfg.Kafka.ArchiverGroup,
-		config.RedisClient,
-	)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		pkg.Infoln("[系统启动] Kafka离线消息归档协程进入循环监听...")
-		worker.Start(ctx)
-	}()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	// ================================
 	// 阶段4：WebSocket 核心引擎启动
@@ -149,14 +128,12 @@ func main() {
 
 	// 主服务只保留运行所需的错误记录；管理 API 由独立 admin-service 提供。
 	errorService := adminservice.NewErrorCenterService(infrastructure.DB)
-	messageModule := messages.NewModule(messageRepo, repository.RoomMember, infrastructure.DB, fileStorage)
-	roomModule := roomapi.NewModule(roomservice.NewService(repository.Room, repository.RoomMember, hub))
 
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
 	// ================================
 	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, DB: infrastructure.DB,
-		Messages: messageModule, Rooms: roomModule, ErrorService: errorService, FrontendDir: "./frontend/dist"})
+		ErrorService: errorService, FrontendDir: "./frontend/dist"})
 
 	// ================================
 	// 阶段7：启动 HTTP 服务
@@ -167,6 +144,12 @@ func main() {
 	}
 
 	srv := gateways.NewServer(":"+port, r)
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+		defer stop()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
 
 	pkg.Infof("[系统启动] LAN-IM 服务端启动成功，监听端口 :%s", port)
 

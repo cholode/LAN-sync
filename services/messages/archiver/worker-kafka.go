@@ -10,54 +10,31 @@ import (
 	"lan-im-go/pkg"
 	"lan-im-go/repository"
 	"lan-im-go/services/messages/search"
-	"lan-im-go/shared/concurrency/taskpool"
 	"lan-im-go/shared/observability/metrics"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
 )
 
-// idSeq 使用雪花算法简化版：毫秒时间戳(42位) + 序列号(10位)
-// 支持每毫秒 1024 个 ID，可用约 140 年
-var (
-	idEpoch    int64 = 1750000000000 // 2025-06-01 00:00:00 UTC 起始时间戳(毫秒)
-	idSequence int64
-	idLastMs   int64
-	idMu       sync.Mutex
-)
-
-func nextID() int64 {
-	idMu.Lock()
-	defer idMu.Unlock()
-
-	now := time.Now().UnixMilli()
-	if now == idLastMs {
-		idSequence = (idSequence + 1) & 0x3FF // 10 位，可用范围为 0–1023
-		if idSequence == 0 {
-			for now <= idLastMs {
-				now = time.Now().UnixMilli()
-			}
-		}
-	} else {
-		idSequence = 0
-	}
-	idLastMs = now
-
-	return (now-idEpoch)<<10 | idSequence
-}
-
 type Worker struct {
-	reader    *kafka.Reader
+	reader    messageReader
 	rdb       *redis.Client
 	topic     string
 	partition int
 	offsetKey string
+	saveBatch func([]*models.Message) error
 }
 
-func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client) *Worker {
+// messageReader 隔离 Kafka 客户端，便于验证停机刷新与批次提交顺序。
+type messageReader interface {
+	ReadMessage(context.Context) (kafka.Message, error)
+	Close() error
+	Lag() int64
+}
+
+func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client, repo repository.MessageRepository) (*Worker, error) {
 	const partition = 0
 	offsetKey := fmt.Sprintf("im:kafka:offset:{%s}:%d", topic, partition)
 
@@ -81,6 +58,11 @@ func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client
 		MaxWait:     500 * time.Millisecond,
 		StartOffset: startOffset,
 	})
+	// 直读固定分区时显式设置绝对游标，避免重启后 Reader 忽略起始配置而从头扫描。
+	if err := reader.SetOffset(startOffset); err != nil {
+		_ = reader.Close()
+		return nil, fmt.Errorf("设置 Kafka 起始游标失败: %w", err)
+	}
 
 	return &Worker{
 		reader:    reader,
@@ -88,24 +70,27 @@ func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client
 		topic:     topic,
 		partition: partition,
 		offsetKey: offsetKey,
-	}
+		saveBatch: repo.SaveMessageBatch,
+	}, nil
 }
 
 const (
 	batchSize         = 1000
 	flushInterval     = 500 * time.Millisecond
-	roomLatestKeyPref = "im:room:latest:"
+	roomLatestKeyPref = "im:room:latest:v2:"
 	roomLatestTTL     = 30 * time.Minute
 	roomLatestMax     = 100
 )
 
 type cachedMsg struct {
-	ID        int64     `json:"id,string"`
-	RoomID    int64     `json:"room_id,string"`
-	SenderID  int64     `json:"sender_id,string"`
-	Type      int8      `json:"type"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
+	RoomSeq     int64     `json:"room_seq,string"`
+	ClientMsgID string    `json:"client_msg_id"`
+	ID          int64     `json:"id,string"`
+	RoomID      int64     `json:"room_id,string"`
+	SenderID    int64     `json:"sender_id,string"`
+	Type        int8      `json:"type"`
+	Content     string    `json:"content"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*models.Message) {
@@ -116,7 +101,11 @@ func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*models.Message) 
 	rooms := make(map[int64]struct{}, len(msgs))
 
 	for _, m := range msgs {
+		if m.DeletedAt != 0 || m.RoomSeq <= 0 || m.RoomSeq > 1<<53 {
+			continue
+		}
 		payload, err := json.Marshal(cachedMsg{
+			RoomSeq: m.RoomSeq, ClientMsgID: m.ClientMsgID,
 			ID: m.ID, RoomID: m.RoomID, SenderID: m.SenderID,
 			Type: m.Type, Content: m.Content, CreatedAt: m.CreatedAt,
 		})
@@ -124,8 +113,9 @@ func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*models.Message) 
 			continue
 		}
 		key := fmt.Sprintf("%s%d", roomLatestKeyPref, m.RoomID)
-		pipe.LPush(ctx, key, string(payload))
-		pipe.LTrim(ctx, key, 0, roomLatestMax-1)
+		// 相同正式消息覆盖同一成员，旧消息重放不会改变群序号排序。
+		pipe.ZAdd(ctx, key, &redis.Z{Score: float64(m.RoomSeq), Member: string(payload)})
+		pipe.ZRemRangeByRank(ctx, key, 0, -roomLatestMax-1)
 		rooms[m.RoomID] = struct{}{}
 	}
 
@@ -140,16 +130,14 @@ func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*models.Message) 
 	}
 }
 
-func (w *Worker) saveOffset(ctx context.Context, offset int64) {
+func (w *Worker) saveOffset(ctx context.Context, offset int64) error {
 	if w.rdb == nil {
-		return
+		return nil
 	}
-	if err := w.rdb.Set(ctx, w.offsetKey, offset, 0).Err(); err != nil {
-		pkg.Infof("[Archiver] Redis offset 保存失败: %v", err)
-	}
+	return w.rdb.Set(ctx, w.offsetKey, offset, 0).Err()
 }
 
-func (w *Worker) Start(ctx context.Context) {
+func (w *Worker) Start(ctx context.Context) error {
 	defer w.reader.Close()
 
 	pkg.Infof("[Archiver] 稳态消费者已启动（分区直读模式 1000条/500ms + Redis offset）")
@@ -157,36 +145,28 @@ func (w *Worker) Start(ctx context.Context) {
 	msgBatch := make([]*models.Message, 0, batchSize)
 	var lastOffset int64
 
-	flush := func() {
+	flush := func(flushCtx context.Context) error {
 		if len(msgBatch) == 0 {
-			return
+			return nil
 		}
+		// 已开始的批次使用独立短超时，停机不能在落库成功后取消游标提交。
+		flushCtx, stop := context.WithTimeout(context.WithoutCancel(flushCtx), 20*time.Second)
+		defer stop()
 		count := len(msgBatch)
-		// 拷贝批次数据，立即清空原切片让消费者继续读取
-		batch := make([]*models.Message, count)
-		copy(batch, msgBatch)
-		savedOffset := lastOffset
+		// 同一分区串行落库和提交游标，禁止后续批次越过尚未落库的消息。
+		if err := w.saveBatch(msgBatch); err != nil {
+			return fmt.Errorf("归档批次写入失败: %w", err)
+		}
+		if err := search.IndexMessages(flushCtx, msgBatch); err != nil {
+			pkg.Warnf("[Archiver] 搜索索引写入失败，主存储已完成: %v", err)
+		}
+		w.pushLatestToRedis(flushCtx, msgBatch)
+		if err := w.saveOffset(flushCtx, lastOffset); err != nil {
+			return fmt.Errorf("归档游标保存失败: %w", err)
+		}
+		pkg.Infof("[Archiver] 批量写入成功: %d 条 offset=%d", count, lastOffset)
 		msgBatch = msgBatch[:0]
-
-		// 通过协程池异步写入 MySQL，避免阻塞 Kafka 消费循环
-		taskpool.Go(func() {
-			err := repository.Message.SaveMessageBatch(batch)
-			if err != nil {
-				pkg.Infof("[Archiver] 批量写入失败，%d 条 %v", count, err)
-				return
-			}
-
-			if indexErr := search.IndexMessages(ctx, batch); indexErr != nil {
-				pkg.Warnf("[Archiver] Elasticsearch index failed: %d msgs: %v", count, indexErr)
-			} else {
-				pkg.Infof("[Archiver] Elasticsearch indexed: %d msgs offset=%d", count, savedOffset)
-			}
-
-			w.pushLatestToRedis(ctx, batch)
-			pkg.Infof("[Archiver] 批量写入成功: %d 条 offset=%d", count, savedOffset)
-
-			w.saveOffset(ctx, savedOffset)
-		})
+		return nil
 	}
 
 	ticker := time.NewTicker(flushInterval)
@@ -195,11 +175,18 @@ func (w *Worker) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			flush()
+			// 使用独立退出上下文，使已接收消息在取消消费后仍能完成刷新。
+			flushCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if err := flush(flushCtx); err != nil {
+				return err
+			}
 			pkg.Infoln("[Archiver] 消费者安全退出")
-			return
+			return nil
 		case <-ticker.C:
-			flush()
+			if err := flush(ctx); err != nil {
+				return err
+			}
 		default:
 		}
 
@@ -220,12 +207,15 @@ func (w *Worker) Start(ctx context.Context) {
 
 		envelope, err := protocol.Unmarshal(m.Value)
 		if err != nil {
-			pkg.Infof("[Archiver] message parse failed offset=%d: %v", m.Offset, err)
-			continue
+			return fmt.Errorf("正式消息解析失败 offset=%d: %w", m.Offset, err)
 		}
 
+		if envelope.MessageID <= 0 || envelope.RoomSeq <= 0 {
+			return fmt.Errorf("正式消息缺少编号 offset=%d，禁止归档时重新编号", m.Offset)
+		}
 		msgBatch = append(msgBatch, &models.Message{
-			ID:          nextID(),
+			ID:          envelope.MessageID,
+			RoomSeq:     envelope.RoomSeq,
 			RoomID:      envelope.RoomID,
 			SenderID:    envelope.SenderID,
 			ClientMsgID: envelope.ClientMsgID,
@@ -236,7 +226,9 @@ func (w *Worker) Start(ctx context.Context) {
 		lastOffset = m.Offset
 
 		if len(msgBatch) >= batchSize {
-			flush()
+			if err := flush(ctx); err != nil {
+				return err
+			}
 		}
 	}
 }

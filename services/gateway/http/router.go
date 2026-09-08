@@ -4,6 +4,7 @@ package gateways
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -13,22 +14,14 @@ import (
 	adminservice "lan-im-go/services/admin/application"
 	"lan-im-go/services/gateway/handlers"
 	"lan-im-go/services/gateway/websocket"
-	"lan-im-go/services/messages/api"
 	"lan-im-go/shared/http/middleware"
-	"lan-im-go/shared/observability/metrics"
 )
 
 // Dependencies 表示 HTTP 网关在运行时所依赖的能力。
 // 通过显式定义这个边界，可以让网关以后能够被独立替换。
-type RouteRegistrar interface {
-	RegisterRoutes(group *gin.RouterGroup)
-}
-
 type Dependencies struct {
 	Hub          *core.Hub
 	DB           *gorm.DB
-	Messages     *messages.Module
-	Rooms        RouteRegistrar
 	ErrorService *adminservice.ErrorCenterService
 	FrontendDir  string
 }
@@ -40,18 +33,9 @@ func NewRouter(deps Dependencies) *gin.Engine {
 
 	r := gin.New()
 
+	r.Use(middleware.APIMetrics("gateway"))
 	r.Use(middleware.RequestID())
 	r.Use(middleware.RecoveryWithErrorRecorder(deps.ErrorService))
-
-	r.Use(func(c *gin.Context) {
-		start := time.Now()
-		c.Next()
-
-		metrics.ObserveAPIRequest(
-			c.Writer.Status(),
-			time.Since(start),
-		)
-	})
 
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins: true,
@@ -90,9 +74,6 @@ func NewRouter(deps Dependencies) *gin.Engine {
 
 	authorized.GET("/ws", api.WsEndpoint(deps.Hub))
 
-	deps.Messages.RegisterRoutes(authorized)
-
-	deps.Rooms.RegisterRoutes(authorized)
 
 	frontend := deps.FrontendDir
 	if frontend == "" {
@@ -104,8 +85,16 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	r.GET("/", func(c *gin.Context) {
 		c.File(frontend + "/index.html")
 	})
+	r.GET("/health/ready", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+	})
 
 	r.NoRoute(func(c *gin.Context) {
+		// 已迁出的业务接口不能回落成 HTML，避免调用方误判请求成功。
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "接口不存在，请通过统一入口访问对应业务服务"})
+			return
+		}
 		c.File(frontend + "/index.html")
 	})
 
