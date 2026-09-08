@@ -13,6 +13,8 @@ import (
 )
 
 type MessageEnvelope struct {
+	MessageID   int64
+	RoomSeq     int64
 	RoomID      int64
 	SenderID    int64
 	ClientMsgID string
@@ -36,6 +38,8 @@ func Marshal(msg MessageEnvelope) ([]byte, error) {
 	}
 
 	return proto.Marshal(&imv1.ChatMessage{
+		MessageId:   msg.MessageID,
+		RoomSeq:     msg.RoomSeq,
 		RoomId:      msg.RoomID,
 		SenderId:    msg.SenderID,
 		ClientMsgId: msg.ClientMsgID,
@@ -73,6 +77,8 @@ func UnmarshalProto(data []byte) (MessageEnvelope, error) {
 	}
 
 	msgEnvelope := MessageEnvelope{
+		MessageID:   msg.GetMessageId(),
+		RoomSeq:     msg.GetRoomSeq(),
 		RoomID:      msg.GetRoomId(),
 		SenderID:    msg.GetSenderId(),
 		ClientMsgID: msg.GetClientMsgId(),

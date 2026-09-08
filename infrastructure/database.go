@@ -4,9 +4,9 @@ import (
 	"os"
 	"time"
 
-	"lan-im-go/shared/observability/metrics"
 	"lan-im-go/models"
 	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/metrics"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -62,6 +62,12 @@ func InitDatabase(dsn string) {
 	err = DB.AutoMigrate(migrateModels...)
 	if err != nil {
 		pkg.Fatalf("[错误] 数据库表结构同步失败: %v", err)
+	}
+	// 新联合唯一索引创建后再移除旧全局索引，允许不同用户复用客户端凭证。
+	if os.Getenv("MESSAGE_STORE") != "mongo" && DB.Migrator().HasIndex(&models.Message{}, "idx_client_msg_id") {
+		if err := DB.Migrator().DropIndex(&models.Message{}, "idx_client_msg_id"); err != nil {
+			pkg.Fatalf("消息幂等索引迁移失败: %v", err)
+		}
 	}
 
 	metrics.RegisterGORMMetrics(DB, "mysql")

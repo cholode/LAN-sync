@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"os"
 	"time"
 
@@ -10,8 +11,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
-	"lan-im-go/shared/observability/metrics"
 	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/metrics"
 )
 
 var (
@@ -56,8 +57,12 @@ func InitMongo() {
 func ensureMessageIndexes(ctx context.Context) error {
 	indexes := []mongo.IndexModel{
 		{
-			Keys:    bson.D{{Key: "client_msg_id", Value: 1}},
+			Keys:    bson.D{{Key: "sender_id", Value: 1}, {Key: "client_msg_id", Value: 1}},
 			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys:    bson.D{{Key: "room_id", Value: 1}, {Key: "room_seq", Value: 1}},
+			Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"room_seq": bson.M{"$gt": 0}}),
 		},
 		{
 			Keys: bson.D{
@@ -81,6 +86,15 @@ func ensureMessageIndexes(ctx context.Context) error {
 	}
 
 	_, err := MessageCollection.Indexes().CreateMany(ctx, indexes)
+	if err != nil {
+		return err
+	}
+	// 旧消息没有群序号，部分唯一索引不会给历史数据强行编号。
+	err = MessageCollection.Indexes().DropOne(ctx, "client_msg_id_1")
+	var commandErr mongo.CommandError
+	if errors.As(err, &commandErr) && commandErr.Code == 27 {
+		return nil
+	}
 	return err
 }
 

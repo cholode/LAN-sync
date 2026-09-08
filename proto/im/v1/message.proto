@@ -11,4 +11,7 @@ message ChatMessage {
   int32 type = 4;
   string content = 5;
   int64 created_at_ns = 6;
+  // 正式消息由编号器统一赋值，重投时保持不变。
+  int64 message_id = 7;
+  int64 room_seq = 8;
 }

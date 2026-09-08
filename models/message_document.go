@@ -6,6 +6,7 @@ import "time"
 // 消息存储可以独立于关系型模型进行切换。
 type MessageDocument struct {
 	ID          int64     `bson:"_id,omitempty"`           // 消息 ID，作为 MongoDB 文档主键
+	RoomSeq     int64     `bson:"room_seq,omitempty"`      // 群内序号，由编号器生成
 	RoomID      int64     `bson:"room_id,omitempty"`       // 聊天室 ID
 	SenderID    int64     `bson:"sender_id,omitempty"`     // 发送者用户 ID
 	ClientMsgID string    `bson:"client_msg_id,omitempty"` // 客户端生成的消息唯一标识，用于幂等去重
@@ -24,6 +25,7 @@ func (m *Message) ToMessageDocument() *MessageDocument {
 
 	return &MessageDocument{
 		ID:          m.ID,
+		RoomSeq:     m.RoomSeq,
 		RoomID:      m.RoomID,
 		SenderID:    m.SenderID,
 		ClientMsgID: m.ClientMsgID,
@@ -42,6 +44,7 @@ func (d *MessageDocument) ToMessage() *Message {
 
 	return &Message{
 		ID:          d.ID,
+		RoomSeq:     d.RoomSeq,
 		RoomID:      d.RoomID,
 		SenderID:    d.SenderID,
 		ClientMsgID: d.ClientMsgID,

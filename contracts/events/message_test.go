@@ -8,6 +8,8 @@ import (
 func TestMarshalUnmarshalRoundTrip(t *testing.T) {
 	now := time.Unix(0, 1759999999999000000)
 	in := MessageEnvelope{
+		MessageID:   9007199254740993,
+		RoomSeq:     43,
 		RoomID:      42,
 		SenderID:    7,
 		ClientMsgID: "msg-abc",
@@ -33,6 +35,9 @@ func TestMarshalUnmarshalRoundTrip(t *testing.T) {
 	}
 	if out.Type != in.Type || out.Content != in.Content {
 		t.Fatalf("unexpected content/type: %+v", out)
+	}
+	if out.MessageID != in.MessageID || out.RoomSeq != in.RoomSeq {
+		t.Fatal("正式消息编号未保留")
 	}
 	if out.CreatedAt.UnixNano() != now.UnixNano() {
 		t.Fatalf("created_at = %v, want %v", out.CreatedAt, now)
