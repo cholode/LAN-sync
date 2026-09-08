@@ -1,0 +1,46 @@
+# 使用方式：docker compose -f docker-compose.yml -f docker-compose.gateway-perf.yml ...
+# 消息归档统一由 message-worker 负责；此文件只扩容 Gateway 接入进程。
+services:
+  backend:
+    environment:
+      NODE_ID: gateway-1
+      SERVER_PORT: "8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "${PERF_GATEWAY_CPUS:-1.0}"
+          memory: ${PERF_GATEWAY_MEMORY:-2G}
+  gateway-2:
+    extends:
+      file: docker-compose.yml
+      service: backend
+    container_name: im-gateway-2
+    ports: !reset []
+    environment:
+      NODE_ID: gateway-2
+      SERVER_PORT: "8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "${PERF_GATEWAY_CPUS:-1.0}"
+          memory: ${PERF_GATEWAY_MEMORY:-2G}
+  gateway-3:
+    extends:
+      file: docker-compose.yml
+      service: backend
+    container_name: im-gateway-3
+    ports: !reset []
+    environment:
+      NODE_ID: gateway-3
+      SERVER_PORT: "8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "${PERF_GATEWAY_CPUS:-1.0}"
+          memory: ${PERF_GATEWAY_MEMORY:-2G}
+  prometheus:
+    volumes:
+      - ./perf7/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  nginx:
+    volumes:
+      - ${PERF_NGINX_TEMPLATE:-./perf7/default.conf.template}:/etc/nginx/templates/default.conf.template:ro

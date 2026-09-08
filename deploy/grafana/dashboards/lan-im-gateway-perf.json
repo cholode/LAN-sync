@@ -1,0 +1,171 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "max(k6_connected_before_send_rate{testid=~\"$testid\"})", "refId": "A"}],
+      "title": "连接就绪率",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "max(k6_messages_sent_total{testid=~\"$testid\"})", "refId": "A"}],
+      "title": "已发送消息",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "max(k6_unique_deliveries_total{testid=~\"$testid\"})", "refId": "A"}],
+      "title": "唯一触达",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [
+        {"expr": "max(k6_duplicate_deliveries_total{testid=~\"$testid\"})", "legendFormat": "重复", "refId": "A"},
+        {"expr": "max(k6_socket_errors_total{testid=~\"$testid\"})", "legendFormat": "错误", "refId": "B"}
+      ],
+      "title": "重复投递 / Socket 错误",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "max(k6_delivery_latency_ms_p50{testid=~\"$testid\"})", "legendFormat": "P50", "refId": "A"},
+        {"expr": "max(k6_delivery_latency_ms_p95{testid=~\"$testid\"})", "legendFormat": "P95", "refId": "B"},
+        {"expr": "max(k6_delivery_latency_ms_p99{testid=~\"$testid\"})", "legendFormat": "P99", "refId": "C"}
+      ],
+      "title": "k6 端到端投递延迟",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "im_ws_connections_active{job=\"lan-im-gateways\"}", "legendFormat": "{{node_id}}", "refId": "A"}],
+      "title": "Gateway 连接分布",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "sum by (node_id) (rate(im_ws_read_messages_total{job=\"lan-im-gateways\"}[1m]))", "legendFormat": "{{node_id}} 读取/s", "refId": "A"},
+        {"expr": "sum by (node_id) (rate(im_ws_write_messages_total{job=\"lan-im-gateways\"}[1m]))", "legendFormat": "{{node_id}} 写出/s", "refId": "B"}
+      ],
+      "title": "各 Gateway 消息吞吐",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "im_hub_task_pool_running{job=\"lan-im-gateways\"}", "legendFormat": "{{node_id}} 运行", "refId": "A"},
+        {"expr": "im_hub_task_pool_waiting{job=\"lan-im-gateways\"}", "legendFormat": "{{node_id}} 等待", "refId": "B"}
+      ],
+      "title": "各 Gateway TaskPool",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 21},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "rate(process_cpu_seconds_total{job=\"lan-im-gateways\"}[1m])", "legendFormat": "{{node_id}}", "refId": "A"}],
+      "title": "Gateway CPU",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 21},
+      "id": 10,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "process_resident_memory_bytes{job=\"lan-im-gateways\"}", "legendFormat": "{{node_id}}", "refId": "A"}],
+      "title": "Gateway RSS 内存",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 21},
+      "id": 11,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "im_api_completed_qps{job=\"lan-im-gateways\",component=\"gateway\"}", "legendFormat": "{{node_id}}", "refId": "A"}],
+      "title": "Gateway API 完成 QPS",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 29},
+      "id": 12,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "up{job=\"lan-im-gateways\"}", "legendFormat": "{{node_id}}", "refId": "A"}],
+      "title": "Prometheus 三实例抓取状态",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1s",
+  "schemaVersion": 39,
+  "tags": ["lan-im", "gateway", "k6", "performance"],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "lan-im-prometheus"},
+        "definition": "label_values(k6_messages_sent_total, testid)",
+        "includeAll": true,
+        "label": "测试编号",
+        "multi": true,
+        "name": "testid",
+        "options": [],
+        "query": {"query": "label_values(k6_messages_sent_total, testid)", "refId": "StandardVariableQuery"},
+        "refresh": 1,
+        "sort": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "LAN IM Gateway 压测",
+  "uid": "lan-im-gateway-perf",
+  "version": 1,
+  "weekStart": ""
+}
