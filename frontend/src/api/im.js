@@ -92,11 +92,13 @@ export const imApi = {
   },
   async searchMessages(roomId, params = {}) {
     const data = await http.get(`/rooms/${roomId}/messages/search${query(params)}`)
-    const hits = data?.hits?.hits || data?.hits || []
+    const hits = data?.hits?.hits ?? data?.hits
     if (Array.isArray(hits)) {
-      return hits.map((item) => normalizeMessage(item._source ? { ...item._source, id: item._id } : item))
+      const items = hits.map((item) => normalizeMessage(item._source ? { ...item._source, id: item._id } : item))
+      return { items, total: Number(data?.total ?? data?.hits?.total?.value ?? data?.hits?.total ?? items.length) }
     }
-    return normalizeList(data).map(normalizeMessage)
+    const items = normalizeList(data).map(normalizeMessage)
+    return { items, total: Number(data?.total ?? items.length) }
   },
   async members(roomId) {
     const data = await http.get(`/rooms/${roomId}/members`)

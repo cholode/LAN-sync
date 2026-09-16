@@ -3,7 +3,8 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const backend = env.VITE_DEV_BACKEND || 'http://127.0.0.1:8080'
+  // Nginx routes room/message APIs to their independent services.
+  const backend = env.VITE_DEV_BACKEND || 'http://127.0.0.1'
 
   return {
     plugins: [vue()],

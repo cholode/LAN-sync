@@ -56,7 +56,7 @@
           <span v-if="current">Room #{{ current.id }}</span>
         </div>
         <div class="header-actions">
-          <button v-if="current" class="square" aria-label="搜索聊天记录" @click="showHistory = !showHistory"><Search :size="17" /></button>
+          <button v-if="current" class="btn btn-sm" :aria-expanded="showHistory" @click="toggleHistory"><Search :size="17" />聊天记录</button>
           <button v-if="current" class="square" aria-label="会话信息与 Agent 管理" @click="showDetails = !showDetails"><Users :size="17" /></button>
           <div class="conn"><span :class="socketState"></span>{{ socketState === 'online' ? '实时连接' : '离线' }}</div>
           <div class="user-chip" :title="auth.user?.username || ''">
@@ -68,8 +68,8 @@
 
       <div v-if="current && showHistory" class="history-search">
         <Search :size="14" />
-        <input v-model="historyKeyword" placeholder="按关键字搜索聊天记录" @keyup.enter="searchHistory" />
-        <button class="btn btn-sm" :disabled="historySearching" @click="searchHistory">
+        <input ref="historyInput" v-model="historyKeyword" aria-label="搜索当前群聊天记录" placeholder="输入关键词，搜索当前群聊天记录" @keyup.enter="searchHistory()" />
+        <button class="btn btn-sm" :disabled="historySearching || !historyKeyword.trim()" @click="searchHistory()">
           {{ historySearching ? '搜索中' : '搜索' }}
         </button>
         <button v-if="historySearchActive" class="btn btn-sm" @click="clearHistorySearch">返回聊天</button>
@@ -82,9 +82,10 @@
           <span>消息、文件与 @Agent 交互都会显示在这里</span>
         </div>
 
-        <div v-if="historySearchActive" class="search-summary">找到 {{ searchResults.length }} 条相关消息</div>
+        <div v-if="current && historySearchActive" class="search-summary" role="status">{{ historySearching ? '正在搜索聊天记录…' : `已显示 ${searchResults.length} / ${searchTotal} 条相关消息` }}</div>
+        <div v-if="current && searchError" class="search-error" role="alert">{{ searchError }}<button class="btn btn-sm" @click="searchHistory()">重试</button></div>
 
-        <div v-if="historySearchActive && !searchResults.length" class="empty">没有找到相关消息</div>
+        <div v-if="current && historySearchActive && !historySearching && !searchError && !searchResults.length" class="empty">没有找到相关消息，请换个关键词试试</div>
 
         <div
           v-for="m in displayedMessages"
@@ -107,6 +108,7 @@
             <time>{{ formatTime(m.created_at || m.timestamp) }}</time>
           </div>
         </div>
+        <button v-if="current && historySearchActive && searchHasMore" class="btn search-more" :disabled="historySearching" @click="searchHistory(true)">{{ historySearching ? '加载中…' : '加载更多结果' }}</button>
       </div>
 
       <div v-if="uploading" class="upload-progress">
@@ -202,6 +204,7 @@ import { useAuthStore } from '../stores/auth.js'
 import { imApi, createImSocket, normalizeSocketMessage } from '../api/im.js'
 import { mergeMessages, messageKey } from '../utils/message-order.js'
 import { uploadFile } from '../services/uploader.js'
+import { useMessageSearch } from '../composables/useMessageSearch.js'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -229,10 +232,10 @@ const uploadStageText = ref('准备上传')
 const creatingRoom = ref(false)
 const joinRoomId = ref('')
 const joiningRoom = ref(false)
-const historyKeyword = ref('')
-const historySearching = ref(false)
-const historySearchActive = ref(false)
-const searchResults = ref([])
+const historyInput = ref()
+const { keyword: historyKeyword, loading: historySearching, active: historySearchActive,
+  results: searchResults, total: searchTotal, error: searchError, hasMore: searchHasMore, search: searchHistory,
+  clear: clearHistorySearch } = useMessageSearch(current, imApi.searchMessages, enrichMessage)
 const contextMenu = ref({ visible: false, x: 0, y: 0, room: null, member: null })
 let ws
 
@@ -248,7 +251,7 @@ const filteredRooms = computed(() =>
   rooms.value.filter((r) => String(r.name || r.room_name || '').toLowerCase().includes(keyword.value.toLowerCase())),
 )
 
-const displayedMessages = computed(() => (historySearchActive.value ? searchResults.value : messages.value))
+const displayedMessages = computed(() => !current.value ? [] : (historySearchActive.value ? searchResults.value : messages.value))
 
 function normalizeList(data) {
   return Array.isArray(data) ? data : (data?.items || data?.rooms || data?.members || data?.messages || data?.data || [])
@@ -331,7 +334,9 @@ function enrichMessage(m) {
 }
 
 function scrollToBottom() {
-  nextTick(() => msgBox.value?.scrollTo({ top: msgBox.value.scrollHeight, behavior: 'smooth' }))
+  nextTick(() => {
+    if (!historySearchActive.value) msgBox.value?.scrollTo({ top: msgBox.value.scrollHeight, behavior: 'smooth' })
+  })
 }
 
 function insertEmoji(emoji) {
@@ -356,10 +361,7 @@ async function selectRoom(r) {
   showEmoji.value = false
   agentEnabled.value = Boolean(r.agent_enabled)
   agentMessage.value = ''
-  historyKeyword.value = ''
-  historySearching.value = false
-  historySearchActive.value = false
-  searchResults.value = []
+  clearHistorySearch()
   messages.value = []
   members.value = []
 
@@ -440,27 +442,13 @@ async function joinRoom() {
   }
 }
 
-async function searchHistory() {
-  const keyword = historyKeyword.value.trim()
-  if (!keyword || !current.value || historySearching.value) return
-
-  historySearching.value = true
-  try {
-    const hits = normalizeList(await imApi.searchMessages(current.value.id, { q: keyword }))
-    searchResults.value = hits.map(enrichMessage)
-    historySearchActive.value = true
-  } catch (e) {
-    alert(e.message || '历史消息搜索失败')
-  } finally {
-    historySearching.value = false
+async function toggleHistory() {
+  showHistory.value = !showHistory.value
+  if (!showHistory.value) clearHistorySearch()
+  else {
+    await nextTick()
+    historyInput.value?.focus()
   }
-}
-
-function clearHistorySearch() {
-  historyKeyword.value = ''
-  historySearching.value = false
-  historySearchActive.value = false
-  searchResults.value = []
 }
 
 function connect() {
@@ -1314,6 +1302,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 .conversation > header { padding: 0 16px; }
 .conversation footer { padding: 16px; gap: 6px; }
 }
+
+.search-error { display: flex; align-items: center; gap: 12px; color: var(--danger); margin-bottom: 12px; }
+.search-more { align-self: center; margin: 12px auto; flex-shrink: 0; }
 @media (max-width: 720px) {
 .chat-shell { grid-template-columns: 52px minmax(0, 1fr); }
 .rooms { display: flex; }

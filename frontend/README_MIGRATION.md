@@ -10,10 +10,10 @@ npm install
 npm run dev
 ```
 
-开发环境默认把 `/api` 与 WebSocket 都代理到：
+开发环境默认把 `/api` 与 WebSocket 代理到 Compose Nginx 统一入口，再由 Nginx 分发到各服务。先启动 Compose 服务；不要指向仅负责接入的 `8080`，该端口已不再提供房间和消息 HTTP 接口。已有 `frontend/.env` 也需要同步修改：
 
 ```env
-VITE_DEV_BACKEND=http://127.0.0.1:8080
+VITE_DEV_BACKEND=http://127.0.0.1
 VITE_API_BASE=/api/v1
 VITE_WS_AUTH_MODE=query
 ```
@@ -24,7 +24,9 @@ VITE_WS_AUTH_MODE=query
 npm run build
 ```
 
-生成 `frontend/dist/`，继续由现有 Go 服务托管。
+生成 `frontend/dist/`，由 Nginx 托管。
+
+群聊内点击顶部“聊天记录”，输入关键词搜索当前群的已归档消息，支持加载更多结果及返回聊天。左侧“搜索会话”仅筛选群名称。搜索请求调用 `GET /api/v1/rooms/:id/messages/search?q=关键词&from=0&size=20`，后端负责 Elasticsearch 倒排索引查询；索引不可用时按现有逻辑回退到消息存储查询。
 
 ## 已接入的普通 IM 接口
 
