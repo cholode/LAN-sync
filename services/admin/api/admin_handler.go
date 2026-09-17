@@ -7,13 +7,13 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"lan-im-go/cache"
-	"lan-im-go/repository"
+
 	adminservice "lan-im-go/services/admin/application"
 )
 
 // AdminDeleteUser 管理员删除用户（强制下线 + 数据库软删除）。
 // 路由: DELETE /api/v1/admin/users/:id
-func AdminDeleteUser() gin.HandlerFunc {
+func (m *Module) AdminDeleteUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		targetUserIDStr := c.Param("id")
 		targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
@@ -27,7 +27,7 @@ func AdminDeleteUser() gin.HandlerFunc {
 		}
 
 		// 1. 数据库软删除用户。
-		if err := repository.User.SoftDeleteUser(targetUserID); err != nil {
+		if err := m.Users.SoftDeleteUser(targetUserID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "用户删除失败，请查看日志"})
 			return
 		}

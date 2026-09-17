@@ -9,7 +9,7 @@ import (
 	"lan-im-go/shared/observability/metrics"
 )
 
-// APIMetrics measures the full Gin handler chain for application API requests.
+// APIMetrics 测试所有 gin 的 handler，记录请求的耗时和状态码
 func APIMetrics(service string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !strings.HasPrefix(c.Request.URL.Path, "/api/") {

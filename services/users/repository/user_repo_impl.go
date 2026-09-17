@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"gorm.io/gorm"
-	"lan-im-go/models"
+	usersmodel "lan-im-go/services/users/models"
 )
 
 type userRepoImpl struct {
@@ -16,17 +16,17 @@ func NewUserRepoImpl(db *gorm.DB) UserRepository {
 	}
 }
 
-func (r *userRepoImpl) CreateUser(user *models.User) error {
+func (r *userRepoImpl) CreateUser(user *usersmodel.User) error {
 	// 规范：用户密码需在调用前完成bcrypt加密处理，禁止存储明文密码
 	return r.db.Create(user).Error
 }
 
-func (r *userRepoImpl) GetByUsername(username string) (*models.User, error) {
+func (r *userRepoImpl) GetByUsername(username string) (*usersmodel.User, error) {
 	return r.GetByUsernameContext(context.Background(), username)
 }
 
-func (r *userRepoImpl) GetByUsernameContext(ctx context.Context, username string) (*models.User, error) {
-	var user models.User
+func (r *userRepoImpl) GetByUsernameContext(ctx context.Context, username string) (*usersmodel.User, error) {
+	var user usersmodel.User
 	err := r.db.WithContext(ctx).Where("username = ?", username).Take(&user).Error
 	if err != nil {
 		return nil, err
@@ -34,8 +34,8 @@ func (r *userRepoImpl) GetByUsernameContext(ctx context.Context, username string
 	return &user, nil
 }
 
-func (r *userRepoImpl) GetByID(id int64) (*models.User, error) {
-	var user models.User
+func (r *userRepoImpl) GetByID(id int64) (*usersmodel.User, error) {
+	var user usersmodel.User
 	err := r.db.Take(&user, id).Error
 	if err != nil {
 		return nil, err
@@ -46,5 +46,5 @@ func (r *userRepoImpl) GetByID(id int64) (*models.User, error) {
 func (r *userRepoImpl) SoftDeleteUser(id int64) error {
 	// 软删除用户：更新删除时间标记
 	// GORM软删除机制会自动过滤已删除数据，使用户无法登录，同时保留历史数据
-	return r.db.Model(&models.User{}).Where("id = ?", id).Update("deleted_at", gorm.Expr("NOW()")).Error
+	return r.db.Model(&usersmodel.User{}).Where("id = ?", id).Update("deleted_at", gorm.Expr("NOW()")).Error
 }

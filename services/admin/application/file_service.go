@@ -9,8 +9,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	messagesmodel "lan-im-go/services/messages/models"
 	"lan-im-go/services/messages/storage"
+	roomsmodel "lan-im-go/services/rooms/models"
+	usersmodel "lan-im-go/services/users/models"
 )
 
 // FileService 负责超级管理员后台的文件管理、异常检测和安全清理。
@@ -39,7 +41,7 @@ type FileListQuery struct {
 
 // FileListItem 管理后台列表展示的文件项。
 type FileListItem struct {
-	models.FileRecord
+	messagesmodel.FileRecord
 	Username   string `json:"username"`
 	RoomName   string `json:"room_name"`
 	Exists     bool   `json:"exists"`
@@ -56,7 +58,7 @@ type AuditAction struct {
 
 // ListFiles 分页查询文件记录，并补充存储实际状态。
 func (s *FileService) ListFiles(ctx context.Context, q FileListQuery) ([]FileListItem, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.FileRecord{})
+	query := s.db.WithContext(ctx).Model(&messagesmodel.FileRecord{})
 	if q.Keyword != "" {
 		like := q.Keyword + "%"
 		query = query.Where("original_name LIKE ? OR object_key LIKE ?", like, like)
@@ -85,7 +87,7 @@ func (s *FileService) ListFiles(ctx context.Context, q FileListQuery) ([]FileLis
 		return nil, 0, err
 	}
 
-	var records []models.FileRecord
+	var records []messagesmodel.FileRecord
 	if err := query.Order("id DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&records).Error; err != nil {
 		return nil, 0, err
 	}
@@ -113,7 +115,7 @@ func (s *FileService) ListFiles(ctx context.Context, q FileListQuery) ([]FileLis
 
 // GetFile 获取单个文件记录。
 func (s *FileService) GetFile(ctx context.Context, id int64) (*FileListItem, error) {
-	var record models.FileRecord
+	var record messagesmodel.FileRecord
 	if err := s.db.WithContext(ctx).First(&record, id).Error; err != nil {
 		return nil, err
 	}
@@ -131,7 +133,7 @@ func (s *FileService) DeleteFile(ctx context.Context, id int64, action AuditActi
 		return err
 	}
 	// 先删除数据库记录，再删除对象存储文件；若对象删除失败则回补数据库记录，避免产生孤儿对象或悬空记录。
-	if err := s.db.WithContext(ctx).Delete(&models.FileRecord{}, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Delete(&messagesmodel.FileRecord{}, id).Error; err != nil {
 		return err
 	}
 	if s.storage != nil {
@@ -169,7 +171,7 @@ type FileScanResult struct {
 
 // ScanAnomalies 检查数据库记录与对象存储是否一致。
 func (s *FileService) ScanAnomalies(ctx context.Context) (*FileScanResult, error) {
-	var records []models.FileRecord
+	var records []messagesmodel.FileRecord
 	if err := s.db.WithContext(ctx).Order("id DESC").Limit(5000).Find(&records).Error; err != nil {
 		return nil, err
 	}
@@ -253,7 +255,7 @@ func (s *FileService) usernames(ctx context.Context, userIDs []int64) map[int64]
 	if len(userIDs) == 0 {
 		return out
 	}
-	var users []models.User
+	var users []usersmodel.User
 	if err := s.db.WithContext(ctx).Select("id, username").Where("id IN ?", userIDs).Find(&users).Error; err == nil {
 		for _, user := range users {
 			out[user.ID] = user.Username
@@ -267,7 +269,7 @@ func (s *FileService) roomNames(ctx context.Context, roomIDs []int64) map[int64]
 	if len(roomIDs) == 0 {
 		return out
 	}
-	var rooms []models.Room
+	var rooms []roomsmodel.Room
 	if err := s.db.WithContext(ctx).Select("id, name").Where("id IN ?", roomIDs).Find(&rooms).Error; err == nil {
 		for _, room := range rooms {
 			out[room.ID] = room.Name
@@ -277,7 +279,7 @@ func (s *FileService) roomNames(ctx context.Context, roomIDs []int64) map[int64]
 }
 
 func (s *FileService) username(ctx context.Context, userID int64) string {
-	var user models.User
+	var user usersmodel.User
 	if err := s.db.WithContext(ctx).Select("username").First(&user, userID).Error; err == nil {
 		return user.Username
 	}
@@ -285,7 +287,7 @@ func (s *FileService) username(ctx context.Context, userID int64) string {
 }
 
 func (s *FileService) roomName(ctx context.Context, roomID int64) string {
-	var room models.Room
+	var room roomsmodel.Room
 	if err := s.db.WithContext(ctx).Select("name").First(&room, roomID).Error; err == nil {
 		return room.Name
 	}

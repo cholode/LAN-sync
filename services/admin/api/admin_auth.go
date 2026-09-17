@@ -9,10 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	"lan-im-go/models"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
 	authsecurity "lan-im-go/services/auth/security"
+	"lan-im-go/shared/auth"
 	"lan-im-go/shared/observability/metrics"
 )
 
@@ -24,7 +22,7 @@ type adminLoginRequest struct {
 }
 
 // AdminLogin 管理端专属登录入口，只向具备后台权限的账号签发令牌。
-func AdminLogin(c *gin.Context) {
+func (m *Module) AdminLogin(c *gin.Context) {
 	startedAt := time.Now()
 	result := "internal_error"
 	defer func() { metrics.ObserveLogin(startedAt, "admin_"+result) }()
@@ -44,7 +42,7 @@ func AdminLogin(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
-	user, err := repository.User.GetByUsernameContext(ctx, request.Username)
+	user, err := m.Users.GetByUsernameContext(ctx, request.Username)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			result = "timeout"
@@ -77,12 +75,12 @@ func AdminLogin(c *gin.Context) {
 		return
 	}
 
-	if !models.IsAdminRole(user.Role) {
+	if !auth.IsAdminRole(user.Role) {
 		result = "forbidden"
 		c.JSON(http.StatusForbidden, gin.H{"error": "该账号无权登录管理后台"})
 		return
 	}
-	token, err := pkg.GenerateToken(user.ID, user.Role)
+	token, err := auth.GenerateToken(user.ID, user.Role)
 	if err != nil {
 		result = "token_error"
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "令牌生成失败"})

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/logger"
 )
 
 // Backend 标识对象存储的后端类型
@@ -82,7 +82,7 @@ func newOSSProviderFromEnv() Provider {
 	if err != nil {
 		storagePanic("[Storage] OSS 初始化失败", err)
 	}
-	pkg.Infof("[Storage] 使用 OSS 对象存储, endpoint=%s, bucket=%s", endpoint, bucket)
+	logger.Infof("[Storage] 使用 OSS 对象存储, endpoint=%s, bucket=%s", endpoint, bucket)
 	return provider
 }
 
@@ -102,11 +102,11 @@ func newMinioProviderFromEnv() Provider {
 	if err != nil {
 		storagePanic("[Storage] MinIO 初始化失败", err)
 	}
-	pkg.Infof("[Storage] 使用 MinIO 对象存储, endpoint=%s, bucket=%s", endpoint, bucket)
+	logger.Infof("[Storage] 使用 MinIO 对象存储, endpoint=%s, bucket=%s", endpoint, bucket)
 	return provider
 }
 
 func storagePanic(message string, err error) {
-	pkg.Errorf("%s: %v", message, err)
+	logger.Errorf("%s: %v", message, err)
 	panic(fmt.Sprintf("%s: %v", message, err))
 }

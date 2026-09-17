@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	adminmodel "lan-im-go/services/admin/models"
 )
 
 var sensitivePatterns = []*regexp.Regexp{
@@ -49,8 +49,8 @@ type RecordErrorInput struct {
 }
 
 // List 分页查询系统错误。
-func (s *ErrorCenterService) List(ctx context.Context, q ErrorListQuery) ([]models.SystemErrorLog, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.SystemErrorLog{})
+func (s *ErrorCenterService) List(ctx context.Context, q ErrorListQuery) ([]adminmodel.SystemErrorLog, int64, error) {
+	query := s.db.WithContext(ctx).Model(&adminmodel.SystemErrorLog{})
 	if q.Module != "" {
 		query = query.Where("module = ?", q.Module)
 	}
@@ -72,7 +72,7 @@ func (s *ErrorCenterService) List(ctx context.Context, q ErrorListQuery) ([]mode
 		return nil, 0, err
 	}
 
-	var rows []models.SystemErrorLog
+	var rows []adminmodel.SystemErrorLog
 	if err := query.Order("id DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
@@ -81,7 +81,7 @@ func (s *ErrorCenterService) List(ctx context.Context, q ErrorListQuery) ([]mode
 
 // Record 写入一条已脱敏的系统错误。
 func (s *ErrorCenterService) Record(ctx context.Context, input RecordErrorInput) error {
-	record := &models.SystemErrorLog{
+	record := &adminmodel.SystemErrorLog{
 		Timestamp:    time.Now(),
 		Module:       input.Module,
 		ErrorType:    input.ErrorType,
@@ -98,7 +98,7 @@ func (s *ErrorCenterService) Record(ctx context.Context, input RecordErrorInput)
 // Resolve 标记错误已处理。
 func (s *ErrorCenterService) Resolve(ctx context.Context, id, adminUserID int64) error {
 	now := time.Now()
-	return s.db.WithContext(ctx).Model(&models.SystemErrorLog{}).
+	return s.db.WithContext(ctx).Model(&adminmodel.SystemErrorLog{}).
 		Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"resolved":    true,
@@ -110,7 +110,7 @@ func (s *ErrorCenterService) Resolve(ctx context.Context, id, adminUserID int64)
 // Summary 统计未处理错误数量。
 func (s *ErrorCenterService) Summary(ctx context.Context) (int64, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Model(&models.SystemErrorLog{}).Where("resolved = ?", false).Count(&count).Error
+	err := s.db.WithContext(ctx).Model(&adminmodel.SystemErrorLog{}).Where("resolved = ?", false).Count(&count).Error
 	return count, err
 }
 

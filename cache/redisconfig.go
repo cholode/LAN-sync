@@ -9,8 +9,8 @@ import (
 	"github.com/go-redis/redis/v8"
 
 	"lan-im-go/config"
-	"lan-im-go/models"
-	"lan-im-go/pkg"
+	messagesmodel "lan-im-go/services/messages/models"
+	"lan-im-go/shared/observability/logger"
 )
 
 const (
@@ -149,7 +149,7 @@ func GetLatestMessages(ctx context.Context, roomID int64, limit int) ([]CachedMs
 }
 
 // BackfillRoomCache 从 MySQL 回填 Redis 缓存（首次命中 miss 时调用）
-func BackfillRoomCache(ctx context.Context, msgs []*models.Message) {
+func BackfillRoomCache(ctx context.Context, msgs []*messagesmodel.Message) {
 	if len(msgs) == 0 {
 		return
 	}
@@ -182,6 +182,6 @@ func BackfillRoomCache(ctx context.Context, msgs []*models.Message) {
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
-		pkg.Infof("[Cache] Redis 回填热点消息失败: %v", err)
+		logger.Infof("[Cache] Redis 回填热点消息失败: %v", err)
 	}
 }

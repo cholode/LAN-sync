@@ -20,6 +20,8 @@ import (
 // Dependencies 表示 HTTP 网关在运行时所依赖的能力。
 // 通过显式定义这个边界，可以让网关以后能够被独立替换。
 type Dependencies struct {
+	Users        api.UserStore
+	Membership   api.MembershipReader
 	Hub          *core.Hub
 	DB           *gorm.DB
 	ErrorService *adminservice.ErrorCenterService
@@ -63,16 +65,17 @@ func NewRouter(deps Dependencies) *gin.Engine {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	handler := &api.Handler{Users: deps.Users, Membership: deps.Membership}
 	public := r.Group("/api/v1")
 
-	public.POST("/register", api.RegisterHandler)
-	public.POST("/login", api.LoginHandler)
+	public.POST("/register", handler.RegisterHandler)
+	public.POST("/login", handler.LoginHandler)
 
 	authorized := r.Group("/api/v1")
 
 	authorized.Use(middleware.JWTAuth())
 
-	authorized.GET("/ws", api.WsEndpoint(deps.Hub))
+	authorized.GET("/ws", handler.WsEndpoint(deps.Hub))
 
 	authorized.POST("/rooms/:id/agent/enable", api.RoomAgentHandler(deps.DB, "enable"))
 	authorized.POST("/rooms/:id/agent/disable", api.RoomAgentHandler(deps.DB, "disable"))

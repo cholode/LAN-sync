@@ -9,7 +9,10 @@ import (
 	"gorm.io/gorm"
 
 	"lan-im-go/cache"
-	"lan-im-go/models"
+	adminmodel "lan-im-go/services/admin/models"
+	agentmodel "lan-im-go/services/agent/models"
+	roomsmodel "lan-im-go/services/rooms/models"
+	usersmodel "lan-im-go/services/users/models"
 )
 
 // RoomService 提供房间管理查询与操作。
@@ -58,7 +61,7 @@ type RoomListItem struct {
 // ListRooms 分页查询房间列表。
 // ListRooms 分页查询群聊，并用批量查询避免列表页 N+1。
 func (s *RoomService) ListRooms(ctx context.Context, q RoomListQuery) ([]RoomListItem, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.Room{})
+	query := s.db.WithContext(ctx).Model(&roomsmodel.Room{})
 	if q.Keyword != "" {
 		if roomID, err := strconv.ParseInt(q.Keyword, 10, 64); err == nil {
 			query = query.Where("id = ?", roomID)
@@ -87,7 +90,7 @@ func (s *RoomService) ListRooms(ctx context.Context, q RoomListQuery) ([]RoomLis
 		return nil, 0, err
 	}
 
-	var rooms []models.Room
+	var rooms []roomsmodel.Room
 	if err := query.Order("id DESC").
 		Offset((q.Page - 1) * q.PageSize).
 		Limit(q.PageSize).
@@ -163,7 +166,7 @@ type RoomMemberItem struct {
 
 // GetRoomDetail 获取房间详情。
 func (s *RoomService) GetRoomDetail(ctx context.Context, roomID int64) (*RoomDetail, error) {
-	var room models.Room
+	var room roomsmodel.Room
 	if err := s.db.WithContext(ctx).First(&room, roomID).Error; err != nil {
 		return nil, err
 	}
@@ -189,14 +192,14 @@ func (s *RoomService) GetRoomDetail(ctx context.Context, roomID int64) (*RoomDet
 	detail.ViolationCount, _ = s.countRoomViolations(ctx, room.ID, start)
 	detail.Members, _ = s.roomMembers(ctx, room.ID)
 
-	var cfg models.AgentConfig
+	var cfg agentmodel.AgentConfig
 	if err := s.db.WithContext(ctx).Where("room_id = ?", room.ID).First(&cfg).Error; err == nil {
 		detail.AgentConfig = cfg
 	} else {
-		detail.AgentConfig = models.DefaultAgentConfig(room.ID)
+		detail.AgentConfig = agentmodel.DefaultAgentConfig(room.ID)
 	}
 
-	var violations []models.ModerationEvent
+	var violations []adminmodel.ModerationEvent
 	_ = s.db.WithContext(ctx).Where("room_id = ?", room.ID).Order("created_at DESC").Limit(20).Find(&violations).Error
 	detail.Violations = moderationItems(violations)
 
@@ -216,7 +219,7 @@ type RoomAction struct {
 
 // ApplyAction 执行冻结、解散、成员管理等房间管理动作。
 func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action RoomAction) error {
-	var room models.Room
+	var room roomsmodel.Room
 	if err := s.db.WithContext(ctx).First(&room, roomID).Error; err != nil {
 		return err
 	}
@@ -228,7 +231,7 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 	case "unfreeze":
 		room.Status = 0
 	case "disband":
-		if err := s.db.WithContext(ctx).Delete(&models.Room{}, roomID).Error; err != nil {
+		if err := s.db.WithContext(ctx).Delete(&roomsmodel.Room{}, roomID).Error; err != nil {
 			return err
 		}
 		if s.runtime != nil {
@@ -247,7 +250,7 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 		room.ModerationEnabled = false
 	case "remove_member":
 		if action.TargetUserID > 0 {
-			if err := s.db.WithContext(ctx).Where("room_id = ? AND user_id = ?", roomID, action.TargetUserID).Delete(&models.RoomMember{}).Error; err != nil {
+			if err := s.db.WithContext(ctx).Where("room_id = ? AND user_id = ?", roomID, action.TargetUserID).Delete(&roomsmodel.RoomMember{}).Error; err != nil {
 				return err
 			}
 			if s.runtime != nil {
@@ -281,17 +284,17 @@ func (s *RoomService) ApplyAction(ctx context.Context, roomID int64, action Room
 }
 
 func (s *RoomService) updateMemberRole(ctx context.Context, roomID, userID int64, role int8, action RoomAction) error {
-	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).
+	err := s.db.WithContext(ctx).Model(&roomsmodel.RoomMember{}).
 		Where("room_id = ? AND user_id = ?", roomID, userID).
 		Update("role", role).Error
 	if err != nil {
 		return err
 	}
-	room := models.Room{ID: roomID}
+	room := roomsmodel.Room{ID: roomID}
 	return s.writeRoomAudit(ctx, room, room, action)
 }
 
-func (s *RoomService) writeRoomAudit(ctx context.Context, before, after models.Room, action RoomAction) error {
+func (s *RoomService) writeRoomAudit(ctx context.Context, before, after roomsmodel.Room, action RoomAction) error {
 	if s.audit == nil {
 		return nil
 	}
@@ -310,7 +313,7 @@ func (s *RoomService) writeRoomAudit(ctx context.Context, before, after models.R
 	})
 }
 
-func roomAuditItem(room models.Room) map[string]any {
+func roomAuditItem(room roomsmodel.Room) map[string]any {
 	return map[string]any{
 		"id":                 room.ID,
 		"name":               room.Name,
@@ -329,7 +332,7 @@ func (s *RoomService) countMembersByIDs(ctx context.Context, roomIDs []int64) (m
 		RoomID int64
 		Count  int64
 	}
-	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).
+	err := s.db.WithContext(ctx).Model(&roomsmodel.RoomMember{}).
 		Select("room_id, COUNT(*) AS count").
 		Where("room_id IN ?", roomIDs).
 		Group("room_id").
@@ -348,7 +351,7 @@ func (s *RoomService) onlineMemberCounts(ctx context.Context, roomIDs []int64) (
 	if len(roomIDs) == 0 {
 		return out, nil
 	}
-	var members []models.RoomMember
+	var members []roomsmodel.RoomMember
 	if err := s.db.WithContext(ctx).Where("room_id IN ?", roomIDs).Find(&members).Error; err != nil {
 		return nil, err
 	}
@@ -379,7 +382,7 @@ func (s *RoomService) countRoomViolationsByIDs(ctx context.Context, roomIDs []in
 		RoomID int64
 		Count  int64
 	}
-	err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+	err := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{}).
 		Select("room_id, COUNT(*) AS count").
 		Where("room_id IN ? AND created_at >= ?", roomIDs, since).
 		Group("room_id").
@@ -395,7 +398,7 @@ func (s *RoomService) countRoomViolationsByIDs(ctx context.Context, roomIDs []in
 
 func (s *RoomService) countMembers(ctx context.Context, roomID int64) (int64, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).Where("room_id = ?", roomID).Count(&count).Error
+	err := s.db.WithContext(ctx).Model(&roomsmodel.RoomMember{}).Where("room_id = ?", roomID).Count(&count).Error
 	return count, err
 }
 
@@ -414,7 +417,7 @@ func (s *RoomService) countOnlineMembers(ctx context.Context, roomID int64) (int
 }
 
 func (s *RoomService) roomMembers(ctx context.Context, roomID int64) ([]RoomMemberItem, error) {
-	var members []models.RoomMember
+	var members []roomsmodel.RoomMember
 	if err := s.db.WithContext(ctx).Where("room_id = ?", roomID).Find(&members).Error; err != nil {
 		return nil, err
 	}
@@ -428,7 +431,7 @@ func (s *RoomService) roomMembers(ctx context.Context, roomID int64) ([]RoomMemb
 		}
 	}
 
-	var users []models.User
+	var users []usersmodel.User
 	if err := s.db.WithContext(ctx).Select("id, username").Where("id IN ?", userIDs).Find(&users).Error; err != nil {
 		return nil, err
 	}
@@ -452,7 +455,7 @@ func (s *RoomService) roomMembers(ctx context.Context, roomID int64) ([]RoomMemb
 
 func (s *RoomService) countRoomViolations(ctx context.Context, roomID int64, since time.Time) (int64, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+	err := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{}).
 		Where("room_id = ? AND created_at >= ?", roomID, since).
 		Count(&count).Error
 	return count, err

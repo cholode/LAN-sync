@@ -12,10 +12,11 @@ import (
 	agentv1 "lan-im-go/proto/agent/v1"
 
 	"lan-im-go/config"
-	"lan-im-go/models"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
+	messagesmodel "lan-im-go/services/messages/models"
+	usersmodel "lan-im-go/services/users/models"
+
 	"lan-im-go/services/gateway/websocket"
+	"lan-im-go/shared/observability/logger"
 )
 
 // Server 是 Go 侧的 IMService，供 Python Agent 工具回调，
@@ -23,12 +24,27 @@ import (
 type Server struct {
 	agentv1.UnimplementedIMServiceServer
 
-	hub *core.Hub
+	hub      *core.Hub
+	users    UserReader
+	members  MembershipWriter
+	messages MessageReader
 }
 
 // NewServer 创建 IMService 的 gRPC 服务端实现。
-func NewServer(hub *core.Hub) *Server {
-	return &Server{hub: hub}
+func NewServer(hub *core.Hub, users UserReader, members MembershipWriter, messages MessageReader) *Server {
+	return &Server{hub: hub, users: users, members: members, messages: messages}
+}
+
+type UserReader interface {
+	GetByID(int64) (*usersmodel.User, error)
+}
+
+type MembershipWriter interface {
+	RemoveMember(roomID, userID int64) error
+}
+
+type MessageReader interface {
+	GetMessagesByTimeRange(roomID int64, start, end time.Time, limit int) ([]messagesmodel.Message, error)
 }
 
 // Start 在 addr 上监听，直至 ctx 被取消。
@@ -46,7 +62,7 @@ func (s *Server) Start(ctx context.Context, addr string) error {
 		grpcServer.GracefulStop()
 	}()
 
-	pkg.Infof("[IMService] gRPC 服务监听 %s", addr)
+	logger.Infof("[IMService] gRPC 服务监听 %s", addr)
 	return grpcServer.Serve(lis)
 }
 
@@ -63,12 +79,12 @@ func (s *Server) FetchMessages(ctx context.Context, req *agentv1.FetchMessagesRe
 		return &agentv1.FetchMessagesResponse{Messages: []*agentv1.MessageRecord{}}, nil
 	}
 
-	msgs, err := repository.Message.GetMessagesByTimeRange(req.GetRoomId(), start, end, limit)
+	msgs, err := s.messages.GetMessagesByTimeRange(req.GetRoomId(), start, end, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	names := resolveUserNames(msgs)
+	names := s.resolveUserNames(msgs)
 	out := make([]*agentv1.MessageRecord, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, &agentv1.MessageRecord{
@@ -85,7 +101,7 @@ func (s *Server) FetchMessages(ctx context.Context, req *agentv1.FetchMessagesRe
 
 // KickUser 将成员移出群聊并强制关闭其实时连接。
 func (s *Server) KickUser(ctx context.Context, req *agentv1.KickUserRequest) (*agentv1.KickUserResponse, error) {
-	if err := repository.RoomMember.RemoveMember(req.GetRoomId(), req.GetUserId()); err != nil {
+	if err := s.members.RemoveMember(req.GetRoomId(), req.GetUserId()); err != nil {
 		return &agentv1.KickUserResponse{
 			Removed: false,
 			Message: fmt.Sprintf("remove member failed: %v", err),
@@ -137,7 +153,7 @@ func (s *Server) disconnectUser(userID int64) {
 	s.hub.Kick(userID)
 }
 
-func resolveUserNames(msgs []models.Message) map[int64]string {
+func (s *Server) resolveUserNames(msgs []messagesmodel.Message) map[int64]string {
 	names := make(map[int64]string, len(msgs))
 	seen := make(map[int64]struct{}, len(msgs))
 
@@ -148,7 +164,7 @@ func resolveUserNames(msgs []models.Message) map[int64]string {
 		seen[m.SenderID] = struct{}{}
 
 		name := fmt.Sprintf("用户%d", m.SenderID)
-		if user, err := repository.User.GetByID(m.SenderID); err == nil && user != nil && user.Username != "" {
+		if user, err := s.users.GetByID(m.SenderID); err == nil && user != nil && user.Username != "" {
 			name = user.Username
 		}
 		names[m.SenderID] = name

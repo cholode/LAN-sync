@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"lan-im-go/cache"
-	"lan-im-go/models"
+	messagesmodel "lan-im-go/services/messages/models"
 )
 
 // chatHistoryMsgDTO 历史消息 API 输出：避免 DeletedAt 等内部字段；id 用 JSON 字符串防止前端 Number 精度丢失（雪花 ID）
@@ -103,7 +103,7 @@ func (m *Module) GetChatHistory() gin.HandlerFunc {
 		// 缓存未命中时，异步回填 Redis
 		if cursorMsgID == 0 && len(dbMsgs) > 0 {
 			// HTTP 响应返回后请求上下文会取消，回填使用独立的短超时上下文。
-			go func(messages []*models.Message) {
+			go func(messages []*messagesmodel.Message) {
 				fillCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				cache.BackfillRoomCache(fillCtx, messages)

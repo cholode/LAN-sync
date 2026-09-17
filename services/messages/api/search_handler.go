@@ -1,6 +1,7 @@
 package messages
 
 import (
+	messagerepo "lan-im-go/services/messages/repository"
 	"net/http"
 	"strconv"
 	"strings"
@@ -8,9 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
 	"lan-im-go/services/messages/search"
+	"lan-im-go/shared/observability/logger"
 )
 
 // SearchMessages 通过 Elasticsearch 搜索已归档的聊天室消息。
@@ -70,16 +70,16 @@ func (m *Module) SearchMessages() gin.HandlerFunc {
 				return
 			}
 			if searchErr != nil {
-				pkg.Warnf("[Search] Elasticsearch query failed, falling back to message store: %v", searchErr)
+				logger.Warnf("[Search] Elasticsearch query failed, falling back to message store: %v", searchErr)
 			}
 		}
 
-		messages, total, err := m.Repository.SearchMessages(repository.MessageSearchParams{
+		messages, total, err := m.Repository.SearchMessages(messagerepo.MessageSearchParams{
 			RoomID: roomID, Keyword: keyword, SenderID: params.SenderID,
 			Start: params.Start, End: params.End, Offset: params.From, Limit: params.Size,
 		})
 		if err != nil {
-			pkg.Warnf("[Search] message store fallback failed: %v", err)
+			logger.Warnf("[Search] message store fallback failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "search failed"})
 			return
 		}

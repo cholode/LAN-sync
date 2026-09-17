@@ -11,8 +11,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
-	"lan-im-go/repository"
+	messagesmodel "lan-im-go/services/messages/models"
+
 	"lan-im-go/services/messages/storage"
 )
 
@@ -34,15 +34,15 @@ type CompleteUploadRequest struct {
 // 管理端只消费这里生成的文件记录，用于审核与删除。
 type FileService struct {
 	db         *gorm.DB
-	membership repository.RoomMemberRepository
+	membership MembershipReader
 	storage    storage.Provider
 }
 
-func NewFileService(db *gorm.DB, membership repository.RoomMemberRepository, provider storage.Provider) *FileService {
+func NewFileService(db *gorm.DB, membership MembershipReader, provider storage.Provider) *FileService {
 	return &FileService{db: db, membership: membership, storage: provider}
 }
 
-func (s *FileService) CompleteUpload(ctx context.Context, userID int64, req CompleteUploadRequest) (*models.FileRecord, error) {
+func (s *FileService) CompleteUpload(ctx context.Context, userID int64, req CompleteUploadRequest) (*messagesmodel.FileRecord, error) {
 	objectKey, err := normalizeObjectKey(req.ObjectKey)
 	if err != nil || !objectKeyBelongsToUser(objectKey, userID) {
 		return nil, ErrInvalidFileKey
@@ -57,7 +57,7 @@ func (s *FileService) CompleteUpload(ctx context.Context, userID int64, req Comp
 		}
 	}
 
-	var existing models.FileRecord
+	var existing messagesmodel.FileRecord
 	err = s.db.WithContext(ctx).Where("object_key = ?", objectKey).First(&existing).Error
 	if err == nil {
 		if existing.UploaderID != userID {
@@ -79,7 +79,7 @@ func (s *FileService) CompleteUpload(ctx context.Context, userID int64, req Comp
 		return nil, err
 	}
 
-	record := &models.FileRecord{
+	record := &messagesmodel.FileRecord{
 		ObjectKey:    objectKey,
 		OriginalName: path.Base(strings.TrimSpace(req.OriginalName)),
 		SHA256:       strings.TrimSpace(req.SHA256),
@@ -96,7 +96,7 @@ func (s *FileService) CompleteUpload(ctx context.Context, userID int64, req Comp
 }
 
 func (s *FileService) DownloadURLByID(ctx context.Context, userID, fileID int64) (string, error) {
-	var record models.FileRecord
+	var record messagesmodel.FileRecord
 	if err := s.db.WithContext(ctx).First(&record, fileID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", ErrFileNotFound
@@ -111,7 +111,7 @@ func (s *FileService) DownloadURLByObjectKey(ctx context.Context, userID int64, 
 	if err != nil {
 		return "", err
 	}
-	var record models.FileRecord
+	var record messagesmodel.FileRecord
 	if err := s.db.WithContext(ctx).Where("object_key = ?", cleanKey).First(&record).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", ErrFileNotFound
@@ -121,7 +121,7 @@ func (s *FileService) DownloadURLByObjectKey(ctx context.Context, userID int64, 
 	return s.authorizedDownloadURL(ctx, userID, &record)
 }
 
-func (s *FileService) authorizedDownloadURL(ctx context.Context, userID int64, record *models.FileRecord) (string, error) {
+func (s *FileService) authorizedDownloadURL(ctx context.Context, userID int64, record *messagesmodel.FileRecord) (string, error) {
 	if record.Status != "uploaded" {
 		return "", ErrFileNotFound
 	}

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"lan-im-go/models"
+	auth "lan-im-go/shared/auth"
 )
 
 // adminHasPermission 从当前请求上下文中获取角色并校验权限。
@@ -18,7 +18,7 @@ func adminHasPermission(c *gin.Context, permission string) bool {
 	if !ok {
 		return false
 	}
-	return models.HasPermission(role, permission)
+	return auth.HasPermission(role, permission)
 }
 
 // requireActionPermission 在合并的 action 接口内根据具体操作做粒度更细的权限控制。
@@ -34,9 +34,9 @@ func requireActionPermission(c *gin.Context, permission string) bool {
 func userActionPermission(action string) string {
 	switch action {
 	case "ban", "unban":
-		return models.PermUserBan
+		return auth.PermUserBan
 	case "role_super_admin", "role_moderator", "role_operator", "role_user":
-		return models.PermUserRoleUpdate
+		return auth.PermUserRoleUpdate
 	default:
 		return ""
 	}
@@ -46,13 +46,13 @@ func userActionPermission(action string) string {
 func roomActionPermission(action string) string {
 	switch action {
 	case "freeze", "unfreeze", "remove_member", "set_admin", "transfer_owner":
-		return models.PermRoomFreeze
+		return auth.PermRoomFreeze
 	case "disband":
-		return models.PermRoomDelete
+		return auth.PermRoomDelete
 	case "agent_enable", "agent_disable":
-		return models.PermAgentConfig
+		return auth.PermAgentConfig
 	case "moderation_enable", "moderation_disable":
-		return models.PermModerationReview
+		return auth.PermModerationReview
 	default:
 		return ""
 	}

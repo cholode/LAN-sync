@@ -9,7 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"lan-im-go/models"
+	agentmodel "lan-im-go/services/agent/models"
+	roomsmodel "lan-im-go/services/rooms/models"
 )
 
 // RoomAgentHandler 只管理当前群聊的 Agent 绑定，不删除其他群聊共用的 Bot 账号。
@@ -23,7 +24,7 @@ func RoomAgentHandler(db *gorm.DB, action string, leaveRoom ...func(int64, int64
 		code := http.StatusInternalServerError
 		var removedUserIDs []int64
 		err = db.Transaction(func(tx *gorm.DB) error {
-			var room models.Room
+			var room roomsmodel.Room
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&room, roomID).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					code = http.StatusNotFound
@@ -31,7 +32,7 @@ func RoomAgentHandler(db *gorm.DB, action string, leaveRoom ...func(int64, int64
 				}
 				return err
 			}
-			var member models.RoomMember
+			var member roomsmodel.RoomMember
 			if c.GetInt8("user_role") != 1 && room.CreatorID != c.GetInt64("user_id") {
 				if err := tx.Where("room_id = ? AND user_id = ?", roomID, c.GetInt64("user_id")).First(&member).Error; err != nil || member.Role < 2 {
 					code = http.StatusForbidden
@@ -83,12 +84,12 @@ func RoomAgentHandler(db *gorm.DB, action string, leaveRoom ...func(int64, int64
 					removedUserIDs = append(removedUserIDs, room.BotUserID)
 				}
 				if len(removedUserIDs) > 0 {
-					if err := tx.Where("room_id = ? AND user_id IN ?", roomID, removedUserIDs).Delete(&models.RoomMember{}).Error; err != nil {
+					if err := tx.Where("room_id = ? AND user_id IN ?", roomID, removedUserIDs).Delete(&roomsmodel.RoomMember{}).Error; err != nil {
 						return err
 					}
 				}
-				if tx.Migrator().HasTable(&models.AgentConfig{}) {
-					if err := tx.Where("room_id = ?", roomID).Delete(&models.AgentConfig{}).Error; err != nil {
+				if tx.Migrator().HasTable(&agentmodel.AgentConfig{}) {
+					if err := tx.Where("room_id = ?", roomID).Delete(&agentmodel.AgentConfig{}).Error; err != nil {
 						return err
 					}
 				}

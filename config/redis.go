@@ -3,7 +3,7 @@ package config
 import (
 	"context"
 
-	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 
 	"github.com/go-redis/redis/v8"
@@ -30,8 +30,8 @@ func InitRedis() {
 
 	if err := RedisClient.Ping(context.Background()).Err(); err != nil {
 		metrics.SetRedisUp(false)
-		pkg.Fatalf("Redis 链路断开，启动失败：%v", err)
+		logger.Fatalf("Redis 链路断开，启动失败：%v", err)
 	}
 	metrics.SetRedisUp(true)
-	pkg.Infoln("Redis 准备就绪")
+	logger.Infoln("Redis 准备就绪")
 }

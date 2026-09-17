@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	agentmodel "lan-im-go/services/agent/models"
 )
 
 // RAGService 提供 RAG 查询记录管理。
@@ -35,7 +35,7 @@ type RAGQueryRecord struct {
 
 // ListQueries 分页查询 RAG 查询记录。
 func (s *RAGService) ListQueries(ctx context.Context, page, pageSize int, roomID int64) ([]RAGQueryRecord, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.RAGQueryLog{})
+	query := s.db.WithContext(ctx).Model(&agentmodel.RAGQueryLog{})
 	if roomID > 0 {
 		query = query.Where("room_id = ?", roomID)
 	}
@@ -45,7 +45,7 @@ func (s *RAGService) ListQueries(ctx context.Context, page, pageSize int, roomID
 		return nil, 0, err
 	}
 
-	var logs []models.RAGQueryLog
+	var logs []agentmodel.RAGQueryLog
 	if err := query.Order("query_time DESC").
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).

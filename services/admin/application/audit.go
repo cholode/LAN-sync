@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	adminmodel "lan-im-go/services/admin/models"
 )
 
 // AuditService 负责记录管理员操作审计日志。
@@ -52,8 +52,8 @@ type AuditListQuery struct {
 }
 
 // List 分页查询审计日志。
-func (s *AuditService) List(ctx context.Context, q AuditListQuery) ([]models.AdminAuditLog, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.AdminAuditLog{})
+func (s *AuditService) List(ctx context.Context, q AuditListQuery) ([]adminmodel.AdminAuditLog, int64, error) {
+	query := s.db.WithContext(ctx).Model(&adminmodel.AdminAuditLog{})
 	if q.Keyword != "" {
 		like := q.Keyword + "%"
 		query = query.Where("action LIKE ? OR target_type LIKE ? OR target_id LIKE ? OR admin_username LIKE ?", like, like, like, like)
@@ -85,7 +85,7 @@ func (s *AuditService) List(ctx context.Context, q AuditListQuery) ([]models.Adm
 		return nil, 0, err
 	}
 
-	var rows []models.AdminAuditLog
+	var rows []adminmodel.AdminAuditLog
 	if err := query.Order("id DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
@@ -95,7 +95,7 @@ func (s *AuditService) List(ctx context.Context, q AuditListQuery) ([]models.Adm
 func (s *AuditService) Log(ctx context.Context, entry AuditEntry) error {
 	before := marshalAuditData(entry.BeforeData)
 	after := marshalAuditData(entry.AfterData)
-	record := &models.AdminAuditLog{
+	record := &adminmodel.AdminAuditLog{
 		AdminUserID:   entry.AdminUserID,
 		AdminUsername: entry.AdminUsername,
 		Action:        entry.Action,

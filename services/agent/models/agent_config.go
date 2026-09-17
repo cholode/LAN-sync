@@ -9,8 +9,8 @@ import (
 // AgentConfig 群 Agent 配置模型
 // 每个启用 Agent 的群拥有一条配置记录
 type AgentConfig struct {
-	ID     int64  `gorm:"primaryKey;autoIncrement"`
-	RoomID int64  `gorm:"type:bigint;uniqueIndex;not null;comment:'所属群ID'"`
+	ID     int64 `gorm:"primaryKey;autoIncrement"`
+	RoomID int64 `gorm:"type:bigint;uniqueIndex;not null;comment:'所属群ID'"`
 
 	// 基础配置
 	SystemPrompt string  `gorm:"type:text;comment:'自定义系统提示词'"`
@@ -21,11 +21,11 @@ type AgentConfig struct {
 	ModelName    string  `gorm:"type:varchar(64);default:'deepseek-chat';comment:'LLM 模型名'"`
 
 	// RAG 配置
-	RAGEnabled       bool    `gorm:"type:tinyint(1);default:1;comment:'是否启用 RAG'"`
-	TopK             int     `gorm:"type:int;default:5;comment:'RAG 检索返回条数'"`
-	SimilarityThold  float64 `gorm:"type:decimal(3,2);default:0.70;comment:'相似度阈值'"`
-	RerankEnabled    bool    `gorm:"type:tinyint(1);default:1;comment:'是否启用重排序'"`
-	MaxChunkTokens   int     `gorm:"type:int;default:4000;comment:'注入上下文的最大 Token'"`
+	RAGEnabled      bool    `gorm:"type:tinyint(1);default:1;comment:'是否启用 RAG'"`
+	TopK            int     `gorm:"type:int;default:5;comment:'RAG 检索返回条数'"`
+	SimilarityThold float64 `gorm:"type:decimal(3,2);default:0.70;comment:'相似度阈值'"`
+	RerankEnabled   bool    `gorm:"type:tinyint(1);default:1;comment:'是否启用重排序'"`
+	MaxChunkTokens  int     `gorm:"type:int;default:4000;comment:'注入上下文的最大 Token'"`
 
 	// 分块策略配置
 	TopicChunkMinMsgs int    `gorm:"type:int;default:30;comment:'话题分块触发的最小消息数'"`

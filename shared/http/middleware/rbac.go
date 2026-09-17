@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"lan-im-go/models"
+	auth "lan-im-go/shared/auth"
 )
 
 // RequireAdmin 校验当前用户是否为管理员角色，例如 super_admin、moderator 或 operator。
@@ -12,7 +12,7 @@ import (
 func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, ok := getUserRole(c)
-		if !ok || !models.IsAdminRole(role) {
+		if !ok || !auth.IsAdminRole(role) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，无法访问管理后台"})
 			c.Abort()
 			return
@@ -23,11 +23,11 @@ func RequireAdmin() gin.HandlerFunc {
 }
 
 // RequirePermission 校验当前管理员是否拥有指定权限。
-// 例如：admin.PATCH("/users/:id/ban", middleware.RequirePermission(models.PermUserBan), handler)
+// 例如：admin.PATCH("/users/:id/ban", middleware.RequirePermission(auth.PermUserBan), handler)
 func RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, ok := getUserRole(c)
-		if !ok || !models.HasPermission(role, permission) {
+		if !ok || !auth.HasPermission(role, permission) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，无法执行该操作"})
 			c.Abort()
 			return
@@ -48,7 +48,7 @@ func RequireAnyPermission(permissions ...string) gin.HandlerFunc {
 		}
 		allowed := false
 		for _, permission := range permissions {
-			if models.HasPermission(role, permission) {
+			if auth.HasPermission(role, permission) {
 				allowed = true
 				break
 			}

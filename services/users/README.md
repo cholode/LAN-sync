@@ -1,7 +1,9 @@
 # Users service migration target
 
-User, friendship, room and membership repositories still live in the root
-`repository` package because the compatibility backend accesses them directly.
-They will move here after a users gRPC contract is introduced. Keeping this
-boundary explicit avoids pretending that an in-process repository is already
-a separately deployable service.
+User repository interfaces and their GORM implementation live in `repository/`.
+Room and membership repositories belong to `services/rooms/repository`.
+
+Gateway/Admin composition roots construct this repository and inject it through
+consumer-owned interfaces. No root repository facade or global user repository
+remains. Users is not yet a separately deployed service: a users service
+contract and remote adapters are still needed for database ownership isolation.

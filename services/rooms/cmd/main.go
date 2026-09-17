@@ -11,12 +11,12 @@ import (
 	"gorm.io/gorm"
 
 	"lan-im-go/config"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
 	roomapi "lan-im-go/services/rooms/api"
 	"lan-im-go/services/rooms/application"
 	roomevents "lan-im-go/services/rooms/events"
+	"lan-im-go/services/rooms/repository"
 	"lan-im-go/shared/http/middleware"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 )
 
@@ -30,11 +30,11 @@ func main() {
 	}
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		pkg.Fatalf("[Room Service] MySQL 连接失败: %v", err)
+		logger.Fatalf("[Room Service] MySQL 连接失败: %v", err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
-		pkg.Fatalf("[Room Service] 获取数据库连接池失败: %v", err)
+		logger.Fatalf("[Room Service] 获取数据库连接池失败: %v", err)
 	}
 	defer sqlDB.Close()
 	sqlDB.SetMaxIdleConns(50)
@@ -71,8 +71,8 @@ func main() {
 		Addr: ":" + port, Handler: router, ReadTimeout: 5 * time.Second,
 		ReadHeaderTimeout: 3 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 15 * time.Second,
 	}
-	pkg.Infof("[Room Service] 服务启动，监听端口 :%s", port)
+	logger.Infof("[Room Service] 服务启动，监听端口 :%s", port)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		pkg.Fatalf("[Room Service] 启动失败: %v", err)
+		logger.Fatalf("[Room Service] 启动失败: %v", err)
 	}
 }

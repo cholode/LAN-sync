@@ -4,6 +4,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	messagerepo "lan-im-go/services/messages/repository"
 	"net/http"
 	"os"
 	"time"
@@ -13,16 +14,17 @@ import (
 	"gorm.io/gorm"
 	"lan-im-go/config"
 	"lan-im-go/infrastructure"
-	"lan-im-go/repository"
-	messages "lan-im-go/services/messages/api"
+	messageapp "lan-im-go/services/messages/application"
+	roomrepo "lan-im-go/services/rooms/repository"
+
 	"lan-im-go/services/messages/search"
 	"lan-im-go/shared/observability/metrics"
 )
 
 type Dependencies struct {
 	DB         *gorm.DB
-	Messages   repository.MessageRepository
-	Membership repository.RoomMemberRepository
+	Messages   messagerepo.MessageRepository
+	Membership messageapp.MembershipReader
 }
 
 // Open 复用已有消息数据；建表仍由现有主进程负责，避免多个服务并发迁移。
@@ -46,12 +48,12 @@ func Open(ctx context.Context) (*Dependencies, error) {
 	metrics.RegisterMySQLPoolMetrics(sqlDB)
 	metrics.RegisterGORMMetrics(db, "mysql")
 	config.InitRedis()
-	deps.Messages = messages.NewMySQLRepository(db)
+	deps.Messages = messagerepo.NewMySQLRepository(db)
 	if os.Getenv("MESSAGE_STORE") == "mongo" {
 		infrastructure.InitMongo()
-		deps.Messages = messages.NewMongoRepository(infrastructure.MessageCollection)
+		deps.Messages = messagerepo.NewMongoRepository(infrastructure.MessageCollection)
 	}
-	deps.Membership = repository.NewRoomMemberRepoImpl(db)
+	deps.Membership = roomrepo.NewRoomMemberRepoImpl(db)
 	if err := search.Init(ctx); err != nil {
 		deps.Close()
 		return nil, err

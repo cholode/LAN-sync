@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	adminmodel "lan-im-go/services/admin/models"
 )
 
 // ModerationService 为 Dashboard 提供内容审核统计。
@@ -82,7 +82,7 @@ func (s *ModerationService) Overview(ctx context.Context) (ModerationOverview, e
 		Violations int64 `gorm:"column:violations"`
 		Pending    int64 `gorm:"column:pending"`
 	}
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+	if err := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{}).
 		Select(`COUNT(*) AS total,
 			COALESCE(SUM(CASE WHEN model_result <> ? THEN 1 ELSE 0 END), 0) AS violations,
 			COALESCE(SUM(CASE WHEN review_status = ? THEN 1 ELSE 0 END), 0) AS pending`, "safe", "pending").
@@ -117,7 +117,7 @@ func (s *ModerationService) Dashboard(ctx context.Context) (*ModerationDashboard
 		Revoked       int64 `gorm:"column:revoked"`
 		ToolFailures  int64 `gorm:"column:tool_failures"`
 	}
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+	if err := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{}).
 		Select(`COUNT(*) AS total,
 			COALESCE(SUM(CASE WHEN model_result <> ? THEN 1 ELSE 0 END), 0) AS violations,
 			COALESCE(SUM(CASE WHEN penalty_status = ? THEN 1 ELSE 0 END), 0) AS kicks,
@@ -132,7 +132,7 @@ func (s *ModerationService) Dashboard(ctx context.Context) (*ModerationDashboard
 	}
 
 	var categoryRows []CategoryCount
-	if err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+	if err := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{}).
 		Select("category, COUNT(*) AS count").
 		Where("created_at >= ?", start).
 		Group("category").
@@ -141,7 +141,7 @@ func (s *ModerationService) Dashboard(ctx context.Context) (*ModerationDashboard
 		return nil, err
 	}
 
-	var recent []models.ModerationEvent
+	var recent []adminmodel.ModerationEvent
 	if err := s.db.WithContext(ctx).Where("model_result <> ?", "safe").
 		Order("created_at DESC").
 		Limit(20).
@@ -169,7 +169,7 @@ func (s *ModerationService) Dashboard(ctx context.Context) (*ModerationDashboard
 	}, nil
 }
 
-func moderationItems(events []models.ModerationEvent) []ModerationEventItem {
+func moderationItems(events []adminmodel.ModerationEvent) []ModerationEventItem {
 	out := make([]ModerationEventItem, 0, len(events))
 	for _, item := range events {
 		out = append(out, moderationItem(item))
@@ -177,7 +177,7 @@ func moderationItems(events []models.ModerationEvent) []ModerationEventItem {
 	return out
 }
 
-func moderationItem(item models.ModerationEvent) ModerationEventItem {
+func moderationItem(item adminmodel.ModerationEvent) ModerationEventItem {
 	return ModerationEventItem{
 		ID:            item.ID,
 		MessageID:     item.MessageID,
@@ -216,7 +216,7 @@ type ModerationListQuery struct {
 
 // ListEvents 分页查询审核事件。
 func (s *ModerationService) ListEvents(ctx context.Context, q ModerationListQuery) ([]ModerationEventItem, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.ModerationEvent{})
+	query := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{})
 	if q.UserID > 0 {
 		query = query.Where("user_id = ?", q.UserID)
 	}
@@ -247,7 +247,7 @@ func (s *ModerationService) ListEvents(ctx context.Context, q ModerationListQuer
 		return nil, 0, err
 	}
 
-	var events []models.ModerationEvent
+	var events []adminmodel.ModerationEvent
 	if err := query.Order("created_at DESC").
 		Offset((q.Page - 1) * q.PageSize).
 		Limit(q.PageSize).
@@ -260,7 +260,7 @@ func (s *ModerationService) ListEvents(ctx context.Context, q ModerationListQuer
 
 // GetEvent 获取审核事件详情。
 func (s *ModerationService) GetEvent(ctx context.Context, id int64) (*ModerationEventItem, error) {
-	var event models.ModerationEvent
+	var event adminmodel.ModerationEvent
 	if err := s.db.WithContext(ctx).First(&event, id).Error; err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ type ModerationAction struct {
 
 // ApplyAction 执行警告、禁言、踢出、封禁等审核处理动作。
 func (s *ModerationService) ApplyAction(ctx context.Context, id int64, action ModerationAction) error {
-	var event models.ModerationEvent
+	var event adminmodel.ModerationEvent
 	if err := s.db.WithContext(ctx).First(&event, id).Error; err != nil {
 		return err
 	}

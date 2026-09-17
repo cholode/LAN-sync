@@ -1,4 +1,4 @@
-package messages
+package repository
 
 import (
 	"context"
@@ -9,15 +9,14 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"lan-im-go/models"
-	"lan-im-go/repository"
+	messagesmodel "lan-im-go/services/messages/models"
 )
 
 type mongoMessageRepo struct {
 	collection *mongo.Collection
 }
 
-func NewMongoRepository(collection *mongo.Collection) repository.MessageRepository {
+func NewMongoRepository(collection *mongo.Collection) MessageRepository {
 	return &mongoMessageRepo{collection: collection}
 }
 
@@ -30,11 +29,11 @@ func notDeletedFilter() bson.M {
 	}
 }
 
-func (r *mongoMessageRepo) SaveMessage(msg *models.Message) error {
-	return r.SaveMessageBatch([]*models.Message{msg})
+func (r *mongoMessageRepo) SaveMessage(msg *messagesmodel.Message) error {
+	return r.SaveMessageBatch([]*messagesmodel.Message{msg})
 }
 
-func (r *mongoMessageRepo) SaveMessageBatch(msgs []*models.Message) error {
+func (r *mongoMessageRepo) SaveMessageBatch(msgs []*messagesmodel.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -75,11 +74,11 @@ func (r *mongoMessageRepo) SaveMessageBatch(msgs []*models.Message) error {
 		return err
 	}
 	defer cursor.Close(ctx)
-	var docs []models.MessageDocument
+	var docs []messagesmodel.MessageDocument
 	if err := cursor.All(ctx, &docs); err != nil {
 		return err
 	}
-	byKey := make(map[models.MessageRequestKey]*models.Message, len(docs))
+	byKey := make(map[messagesmodel.MessageRequestKey]*messagesmodel.Message, len(docs))
 	for i := range docs {
 		msg := docs[i].ToMessage()
 		byKey[msg.RequestKey()] = msg
@@ -89,21 +88,21 @@ func (r *mongoMessageRepo) SaveMessageBatch(msgs []*models.Message) error {
 		if stored == nil {
 			return mongo.ErrNoDocuments
 		}
-		if err := models.ReconcileMessage(msg, stored); err != nil {
+		if err := messagesmodel.ReconcileMessage(msg, stored); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *mongoMessageRepo) GetHistoryByCursor(roomID int64, cursorMsgID int64, limit int) ([]*models.Message, error) {
+func (r *mongoMessageRepo) GetHistoryByCursor(roomID int64, cursorMsgID int64, limit int) ([]*messagesmodel.Message, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	filter := notDeletedFilter()
 	filter["room_id"] = roomID
 	if cursorMsgID > 0 {
-		var cursorDoc models.MessageDocument
+		var cursorDoc messagesmodel.MessageDocument
 		err := r.collection.FindOne(ctx, bson.M{"_id": cursorMsgID, "room_id": roomID}).Decode(&cursorDoc)
 		if err == nil {
 			older := bson.A{
@@ -146,12 +145,12 @@ func (r *mongoMessageRepo) GetHistoryByCursor(roomID int64, cursorMsgID int64, l
 	}
 	defer cursor.Close(ctx)
 
-	var docs []models.MessageDocument
+	var docs []messagesmodel.MessageDocument
 	if err := cursor.All(ctx, &docs); err != nil {
 		return nil, err
 	}
 
-	out := make([]*models.Message, 0, len(docs))
+	out := make([]*messagesmodel.Message, 0, len(docs))
 	for i := len(docs) - 1; i >= 0; i-- {
 		out = append(out, docs[i].ToMessage())
 	}
@@ -176,7 +175,7 @@ func (r *mongoMessageRepo) SoftDeleteUserMessagesInRoom(roomID int64, userID int
 	return err
 }
 
-func (r *mongoMessageRepo) GetMessagesByTimeRange(roomID int64, start, end time.Time, limit int) ([]models.Message, error) {
+func (r *mongoMessageRepo) GetMessagesByTimeRange(roomID int64, start, end time.Time, limit int) ([]messagesmodel.Message, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -199,12 +198,12 @@ func (r *mongoMessageRepo) GetMessagesByTimeRange(roomID int64, start, end time.
 	}
 	defer cursor.Close(ctx)
 
-	var docs []models.MessageDocument
+	var docs []messagesmodel.MessageDocument
 	if err := cursor.All(ctx, &docs); err != nil {
 		return nil, err
 	}
 
-	out := make([]models.Message, 0, len(docs))
+	out := make([]messagesmodel.Message, 0, len(docs))
 	for i := range docs {
 		if msg := docs[i].ToMessage(); msg != nil {
 			out = append(out, *msg)
@@ -213,7 +212,7 @@ func (r *mongoMessageRepo) GetMessagesByTimeRange(roomID int64, start, end time.
 	return out, nil
 }
 
-func (r *mongoMessageRepo) GetMessagesAfterID(roomID int64, sinceID int64, limit int) ([]models.Message, error) {
+func (r *mongoMessageRepo) GetMessagesAfterID(roomID int64, sinceID int64, limit int) ([]messagesmodel.Message, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -233,12 +232,12 @@ func (r *mongoMessageRepo) GetMessagesAfterID(roomID int64, sinceID int64, limit
 	}
 	defer cursor.Close(ctx)
 
-	var docs []models.MessageDocument
+	var docs []messagesmodel.MessageDocument
 	if err := cursor.All(ctx, &docs); err != nil {
 		return nil, err
 	}
 
-	out := make([]models.Message, 0, len(docs))
+	out := make([]messagesmodel.Message, 0, len(docs))
 	for i := range docs {
 		if msg := docs[i].ToMessage(); msg != nil {
 			out = append(out, *msg)
@@ -259,7 +258,7 @@ func (r *mongoMessageRepo) CountMessagesAfterID(roomID int64, sinceID int64) (in
 	return r.collection.CountDocuments(ctx, filter)
 }
 
-func (r *mongoMessageRepo) SearchMessages(params repository.MessageSearchParams) ([]*models.Message, int64, error) {
+func (r *mongoMessageRepo) SearchMessages(params MessageSearchParams) ([]*messagesmodel.Message, int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -304,11 +303,11 @@ func (r *mongoMessageRepo) SearchMessages(params repository.MessageSearchParams)
 	}
 	defer cursor.Close(ctx)
 
-	var docs []models.MessageDocument
+	var docs []messagesmodel.MessageDocument
 	if err := cursor.All(ctx, &docs); err != nil {
 		return nil, 0, err
 	}
-	messages := make([]*models.Message, 0, len(docs))
+	messages := make([]*messagesmodel.Message, 0, len(docs))
 	for i := range docs {
 		if msg := docs[i].ToMessage(); msg != nil {
 			messages = append(messages, msg)
@@ -317,4 +316,4 @@ func (r *mongoMessageRepo) SearchMessages(params repository.MessageSearchParams)
 	return messages, total, nil
 }
 
-var _ repository.MessageRepository = (*mongoMessageRepo)(nil)
+var _ MessageRepository = (*mongoMessageRepo)(nil)

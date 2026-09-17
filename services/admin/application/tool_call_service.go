@@ -6,7 +6,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	agentmodel "lan-im-go/services/agent/models"
+	roomsmodel "lan-im-go/services/rooms/models"
+	usersmodel "lan-im-go/services/users/models"
 )
 
 // ToolCallService 管理 Agent Tool Calling 运行记录。
@@ -32,14 +34,14 @@ type ToolCallListQuery struct {
 
 // ToolCallListItem 带用户名和群名的展示项。
 type ToolCallListItem struct {
-	models.ToolCallLog
+	agentmodel.ToolCallLog
 	Username string `json:"username"`
 	RoomName string `json:"room_name"`
 }
 
 // List 分页查询 Tool Call 记录。
 func (s *ToolCallService) List(ctx context.Context, q ToolCallListQuery) ([]ToolCallListItem, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.ToolCallLog{})
+	query := s.db.WithContext(ctx).Model(&agentmodel.ToolCallLog{})
 	if q.ToolName != "" {
 		query = query.Where("tool_name = ?", q.ToolName)
 	}
@@ -64,7 +66,7 @@ func (s *ToolCallService) List(ctx context.Context, q ToolCallListQuery) ([]Tool
 		return nil, 0, err
 	}
 
-	var rows []models.ToolCallLog
+	var rows []agentmodel.ToolCallLog
 	if err := query.Order("id DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
@@ -102,7 +104,7 @@ func (s *ToolCallService) Record(ctx context.Context, input RecordInput) error {
 		input.FinishedAt = time.Now()
 	}
 	latency := float64(input.FinishedAt.Sub(input.StartedAt).Microseconds()) / 1000.0
-	record := &models.ToolCallLog{
+	record := &agentmodel.ToolCallLog{
 		ToolCallID:     input.ToolCallID,
 		UserID:         input.UserID,
 		RoomID:         input.RoomID,
@@ -119,7 +121,7 @@ func (s *ToolCallService) Record(ctx context.Context, input RecordInput) error {
 }
 
 func (s *ToolCallService) username(ctx context.Context, userID int64) string {
-	var user models.User
+	var user usersmodel.User
 	if err := s.db.WithContext(ctx).Select("username").First(&user, userID).Error; err == nil {
 		return user.Username
 	}
@@ -127,7 +129,7 @@ func (s *ToolCallService) username(ctx context.Context, userID int64) string {
 }
 
 func (s *ToolCallService) roomName(ctx context.Context, roomID int64) string {
-	var room models.Room
+	var room roomsmodel.Room
 	if err := s.db.WithContext(ctx).Select("name").First(&room, roomID).Error; err == nil {
 		return room.Name
 	}

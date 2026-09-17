@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 
-	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/logger"
 )
 
 const Channel = "im:room:events"
@@ -47,11 +47,11 @@ func (n *RedisNotifier) DisbandRoom(roomID int64) {
 func (n *RedisNotifier) publish(event Event) {
 	payload, err := json.Marshal(event)
 	if err != nil {
-		pkg.Errorf("[Room Service] 房间事件序列化失败: %v", err)
+		logger.Errorf("[Room Service] 房间事件序列化失败: %v", err)
 		return
 	}
 	if err := n.client.Publish(context.Background(), Channel, payload).Err(); err != nil {
 		// 数据库已经提交，通知失败不应把成功操作伪装成事务失败；用户重连时会从数据库恢复订阅。
-		pkg.Errorf("[Room Service] 房间事件发布失败: %v", err)
+		logger.Errorf("[Room Service] 房间事件发布失败: %v", err)
 	}
 }

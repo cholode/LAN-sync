@@ -9,7 +9,10 @@ import (
 	"gorm.io/gorm"
 
 	"lan-im-go/cache"
-	"lan-im-go/models"
+	adminmodel "lan-im-go/services/admin/models"
+	roomsmodel "lan-im-go/services/rooms/models"
+	usersmodel "lan-im-go/services/users/models"
+	auth "lan-im-go/shared/auth"
 )
 
 // UserService 提供用户管理查询与操作。
@@ -56,7 +59,7 @@ type UserListItem struct {
 // ListUsers 分页查询用户列表。
 // ListUsers 分页查询用户，并用批量查询避免列表页 N+1。
 func (s *UserService) ListUsers(ctx context.Context, q UserListQuery) ([]UserListItem, int64, error) {
-	query := s.db.WithContext(ctx).Model(&models.User{})
+	query := s.db.WithContext(ctx).Model(&usersmodel.User{})
 	if q.Keyword != "" {
 		if userID, err := strconv.ParseInt(q.Keyword, 10, 64); err == nil {
 			query = query.Where("id = ?", userID)
@@ -82,7 +85,7 @@ func (s *UserService) ListUsers(ctx context.Context, q UserListQuery) ([]UserLis
 		return nil, 0, err
 	}
 
-	var users []models.User
+	var users []usersmodel.User
 	if err := query.Order("id DESC").
 		Offset((q.Page - 1) * q.PageSize).
 		Limit(q.PageSize).
@@ -106,7 +109,7 @@ func (s *UserService) ListUsers(ctx context.Context, q UserListQuery) ([]UserLis
 			ID:             user.ID,
 			Username:       user.Username,
 			Role:           user.Role,
-			RoleName:       models.RoleName(user.Role),
+			RoleName:       auth.RoleName(user.Role),
 			CreatedAt:      user.CreatedAt,
 			LastLoginAt:    user.LastLoginAt,
 			LastActiveAt:   user.LastActiveAt,
@@ -151,7 +154,7 @@ type UserRoomItem struct {
 
 // GetUserDetail 获取用户详情。
 func (s *UserService) GetUserDetail(ctx context.Context, userID int64) (*UserDetail, error) {
-	var user models.User
+	var user usersmodel.User
 	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
 		return nil, err
 	}
@@ -160,7 +163,7 @@ func (s *UserService) GetUserDetail(ctx context.Context, userID int64) (*UserDet
 		ID:             user.ID,
 		Username:       user.Username,
 		Role:           user.Role,
-		RoleName:       models.RoleName(user.Role),
+		RoleName:       auth.RoleName(user.Role),
 		Status:         user.Status,
 		CreatedAt:      user.CreatedAt,
 		LastLoginAt:    user.LastLoginAt,
@@ -177,7 +180,7 @@ func (s *UserService) GetUserDetail(ctx context.Context, userID int64) (*UserDet
 	detail.ViolationCount, _ = s.countUserViolations(ctx, user.ID)
 	detail.Rooms, _ = s.userRooms(ctx, user.ID)
 
-	var violations []models.ModerationEvent
+	var violations []adminmodel.ModerationEvent
 	_ = s.db.WithContext(ctx).Where("user_id = ?", user.ID).Order("created_at DESC").Limit(20).Find(&violations).Error
 	detail.Violations = moderationItems(violations)
 
@@ -196,7 +199,7 @@ type UserAction struct {
 
 // ApplyAction 执行封禁、解封、角色调整、强制下线等用户管理动作。
 func (s *UserService) ApplyAction(ctx context.Context, userID int64, action UserAction) error {
-	var user models.User
+	var user usersmodel.User
 	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
 		return err
 	}
@@ -207,13 +210,13 @@ func (s *UserService) ApplyAction(ctx context.Context, userID int64, action User
 	case "unban":
 		user.Status = 0
 	case "role_super_admin":
-		user.Role = models.RoleSuperAdmin
+		user.Role = auth.RoleSuperAdmin
 	case "role_moderator":
-		user.Role = models.RoleModerator
+		user.Role = auth.RoleModerator
 	case "role_operator":
-		user.Role = models.RoleOperator
+		user.Role = auth.RoleOperator
 	case "role_user":
-		user.Role = models.RoleUser
+		user.Role = auth.RoleUser
 	default:
 		return fmt.Errorf("不支持的用户操作: %s", action.Action)
 	}
@@ -230,7 +233,7 @@ func (s *UserService) ApplyAction(ctx context.Context, userID int64, action User
 	return s.writeUserAudit(ctx, before, user, action)
 }
 
-func (s *UserService) writeUserAudit(ctx context.Context, before, after models.User, action UserAction) error {
+func (s *UserService) writeUserAudit(ctx context.Context, before, after usersmodel.User, action UserAction) error {
 	if s.audit == nil {
 		return nil
 	}
@@ -249,7 +252,7 @@ func (s *UserService) writeUserAudit(ctx context.Context, before, after models.U
 	})
 }
 
-func userAuditItem(user models.User) map[string]any {
+func userAuditItem(user usersmodel.User) map[string]any {
 	return map[string]any{
 		"id":       user.ID,
 		"username": user.Username,
@@ -267,7 +270,7 @@ func (s *UserService) countUserRoomsByIDs(ctx context.Context, userIDs []int64) 
 		UserID int64
 		Count  int64
 	}
-	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).
+	err := s.db.WithContext(ctx).Model(&roomsmodel.RoomMember{}).
 		Select("user_id, COUNT(*) AS count").
 		Where("user_id IN ?", userIDs).
 		Group("user_id").
@@ -290,7 +293,7 @@ func (s *UserService) countUserViolationsByIDs(ctx context.Context, userIDs []in
 		UserID int64
 		Count  int64
 	}
-	err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).
+	err := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{}).
 		Select("user_id, COUNT(*) AS count").
 		Where("user_id IN ?", userIDs).
 		Group("user_id").
@@ -306,13 +309,13 @@ func (s *UserService) countUserViolationsByIDs(ctx context.Context, userIDs []in
 
 func (s *UserService) countUserRooms(ctx context.Context, userID int64) (int64, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Model(&models.RoomMember{}).Where("user_id = ?", userID).Count(&count).Error
+	err := s.db.WithContext(ctx).Model(&roomsmodel.RoomMember{}).Where("user_id = ?", userID).Count(&count).Error
 	return count, err
 }
 
 func (s *UserService) countUserViolations(ctx context.Context, userID int64) (int64, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Model(&models.ModerationEvent{}).Where("user_id = ?", userID).Count(&count).Error
+	err := s.db.WithContext(ctx).Model(&adminmodel.ModerationEvent{}).Where("user_id = ?", userID).Count(&count).Error
 	return count, err
 }
 
@@ -324,7 +327,7 @@ func (s *UserService) userRooms(ctx context.Context, userID int64) ([]UserRoomIt
 	}
 	var rows []row
 	err := s.db.WithContext(ctx).
-		Model(&models.RoomMember{}).
+		Model(&roomsmodel.RoomMember{}).
 		Select("room_members.room_id, rooms.name AS room_name, room_members.role").
 		Joins("INNER JOIN rooms ON rooms.id = room_members.room_id AND rooms.deleted_at = 0").
 		Where("room_members.user_id = ?", userID).

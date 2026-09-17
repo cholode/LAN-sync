@@ -1,7 +1,8 @@
 package middleware
 
 import (
-	"lan-im-go/pkg"
+	"lan-im-go/shared/auth"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 
 	"net/http"
@@ -28,13 +29,13 @@ func JWTAuth() gin.HandlerFunc {
 		}
 		var tokenString string
 		// 1. 从标准HTTP请求头中获取Token
-		pkg.Infof("[JWT认证] 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
+		logger.Infof("[JWT认证] 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" {
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				tokenString = parts[1]
-				pkg.Infof("从请求头提取Token成功")
+				logger.Infof("从请求头提取Token成功")
 			} else {
 				recordAuthFailure("invalid_authorization_header")
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "请求头Token格式非法"})
@@ -44,22 +45,22 @@ func JWTAuth() gin.HandlerFunc {
 		} else {
 			// 2. 从URL参数中获取Token（兼容WebSocket握手）
 			tokenString = c.Query("token")
-			pkg.Infof("从URL参数提取Token成功")
+			logger.Infof("从URL参数提取Token成功")
 		}
 
 		// 3. 校验Token是否存在
 		if tokenString == "" {
 			recordAuthFailure("missing_token")
-			pkg.Infof("Token凭证为空")
+			logger.Infof("Token凭证为空")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未提供Token凭证，访问被拒绝"})
 			c.Abort()
 			return
 		}
 
-		claims, err := pkg.ParseToken(tokenString)
+		claims, err := auth.ParseToken(tokenString)
 		if err != nil {
 			recordAuthFailure("invalid_token")
-			pkg.Infof("Token解析失败\n")
+			logger.Infof("Token解析失败\n")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token解析失败"})
 			c.Abort()
 			return

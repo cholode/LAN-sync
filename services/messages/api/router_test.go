@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"lan-im-go/models"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
+	messagesmodel "lan-im-go/services/messages/models"
+
+	messagerepo "lan-im-go/services/messages/repository"
+	"lan-im-go/shared/auth"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,7 +31,6 @@ func TestIndependentMessageRoutesRequireAuthentication(t *testing.T) {
 }
 
 type membershipStub struct {
-	repository.RoomMemberRepository
 	allowed bool
 }
 
@@ -38,14 +38,14 @@ func (s membershipStub) CheckIsMember(roomID, userID int64) (bool, error) {
 	return s.allowed && roomID == 7 && userID == 9, nil
 }
 
-type historyStub struct{ repository.MessageRepository }
+type historyStub struct{ messagerepo.MessageRepository }
 
-func (historyStub) GetHistoryByCursor(roomID, cursor int64, limit int) ([]*models.Message, error) {
-	return []*models.Message{{ID: 9007199254740993, RoomID: roomID, SenderID: 9, Content: "拆分后接口兼容"}}, nil
+func (historyStub) GetHistoryByCursor(roomID, cursor int64, limit int) ([]*messagesmodel.Message, error) {
+	return []*messagesmodel.Message{{ID: 9007199254740993, RoomID: roomID, SenderID: 9, Content: "拆分后接口兼容"}}, nil
 }
 
 func TestIndependentHistoryPreservesMembershipAndMessageShape(t *testing.T) {
-	token, err := pkg.GenerateToken(9, 0)
+	token, err := auth.GenerateToken(9, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

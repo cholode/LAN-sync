@@ -5,20 +5,21 @@ package messages
 import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"lan-im-go/repository"
+
 	messageapp "lan-im-go/services/messages/application"
+	messagerepo "lan-im-go/services/messages/repository"
 	"lan-im-go/services/messages/storage"
 )
 
 // Module 包含消息 HTTP 查询所需的契约。
 type Module struct {
-	Repository repository.MessageRepository
-	Membership repository.RoomMemberRepository
+	Repository messagerepo.MessageRepository
+	Membership messageapp.MembershipReader
 	Files      *messageapp.FileService
 	Storage    storage.Provider
 }
 
-func NewModule(repo repository.MessageRepository, membership repository.RoomMemberRepository, db *gorm.DB, provider storage.Provider) *Module {
+func NewModule(repo messagerepo.MessageRepository, membership messageapp.MembershipReader, db *gorm.DB, provider storage.Provider) *Module {
 	return &Module{
 		Repository: repo,
 		Membership: membership,

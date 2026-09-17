@@ -8,7 +8,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	messagesmodel "lan-im-go/services/messages/models"
+	roomsmodel "lan-im-go/services/rooms/models"
 )
 
 // MessageStatsStore 为 Dashboard 提供消息统计，支持 MySQL 与 MongoDB。
@@ -64,7 +65,7 @@ func newMySQLMessageStats(db *gorm.DB) MessageStatsStore {
 }
 
 func (s *mysqlMessageStats) notDeleted(db *gorm.DB) *gorm.DB {
-	return db.Model(&models.Message{}).Where("deleted_at = 0")
+	return db.Model(&messagesmodel.Message{}).Where("deleted_at = 0")
 }
 
 func (s *mysqlMessageStats) CountMessages(ctx context.Context, start, end time.Time) (int64, error) {
@@ -103,7 +104,7 @@ func (s *mysqlMessageStats) CountPrivateGroupMessages(ctx context.Context, start
 	}
 	var rows []row
 	err := s.db.WithContext(ctx).
-		Model(&models.Message{}).
+		Model(&messagesmodel.Message{}).
 		Select("rooms.type AS room_type, COUNT(*) AS count").
 		Joins("INNER JOIN rooms ON rooms.id = messages.room_id AND rooms.deleted_at = 0").
 		Where("messages.deleted_at = 0 AND messages.created_at >= ? AND messages.created_at < ?", start, end).
@@ -363,7 +364,7 @@ func (s *mongoMessageStats) CountMessagesByType(ctx context.Context, start, end 
 func (s *mongoMessageStats) roomIDsByType(ctx context.Context, roomType int8) ([]int64, error) {
 	var ids []int64
 	err := s.db.WithContext(ctx).
-		Model(&models.Room{}).
+		Model(&roomsmodel.Room{}).
 		Where("type = ?", roomType).
 		Pluck("id", &ids).Error
 	return ids, err

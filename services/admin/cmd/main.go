@@ -1,6 +1,7 @@
 package main
 
 import (
+	userrepo "lan-im-go/services/users/repository"
 	"net/http"
 	"os"
 	"time"
@@ -10,12 +11,11 @@ import (
 
 	"lan-im-go/config"
 	"lan-im-go/infrastructure"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
+
 	adminapi "lan-im-go/services/admin/api"
 	"lan-im-go/services/admin/control"
-	"lan-im-go/services/messages/api"
 	"lan-im-go/shared/http/middleware"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 )
 
@@ -34,13 +34,13 @@ func main() {
 	defer config.RedisClient.Close()
 
 	infrastructure.InitDatabase(dsn)
-	messageRepo := messages.NewMySQLRepository(infrastructure.DB)
+
 	if os.Getenv("MESSAGE_STORE") == "mongo" {
 		infrastructure.InitMongo()
 		defer infrastructure.CloseMongo()
-		messageRepo = messages.NewMongoRepository(infrastructure.MessageCollection)
+
 	}
-	repository.InitRepositories(infrastructure.DB, messageRepo)
+
 	adminapi.InitFileStorage()
 
 	controlAddr := os.Getenv("ADMIN_CONTROL_GRPC_ADDR")
@@ -49,10 +49,11 @@ func main() {
 	}
 	runtimeClient, err := admincontrol.NewGRPCClient(controlAddr, os.Getenv("ADMIN_CONTROL_TOKEN"))
 	if err != nil {
-		pkg.Fatalf("创建 AdminControl gRPC 客户端失败: %v", err)
+		logger.Fatalf("创建 AdminControl gRPC 客户端失败: %v", err)
 	}
 	defer runtimeClient.Close()
 	adminModule := adminapi.NewModule(adminapi.ModuleDependencies{
+		Users:             userrepo.NewUserRepoImpl(infrastructure.DB),
 		DB:                infrastructure.DB,
 		MessageCollection: infrastructure.MessageCollection,
 		MessageStore:      os.Getenv("MESSAGE_STORE"),
@@ -89,8 +90,8 @@ func main() {
 		IdleTimeout:       15 * time.Second,
 	}
 
-	pkg.Infof("管理端服务启动成功，监听端口 :%s", port)
+	logger.Infof("管理端服务启动成功，监听端口 :%s", port)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		pkg.Fatalf("管理端服务启动失败: %v", err)
+		logger.Fatalf("管理端服务启动失败: %v", err)
 	}
 }

@@ -59,11 +59,12 @@ cd frontend && npm install && npm run dev
 ├── deploy/          # Nginx 与部署配置
 ├── docs/            # 项目文档
 ├── infrastructure/  # 过渡期数据库初始化
-├── models/          # 过渡期共享数据模型
-├── pkg/             # 公共工具（JWT、日志）
 ├── proto/           # protobuf 定义
-├── repository/      # 过渡期共享数据访问层
-├── services/        # Gateway、Messages、Files、Admin、Agent、Users
-├── shared/          # 指标、任务池和 HTTP 中间件
+├── services/        # 各业务服务，数据模型位于所属服务的 models/
+├── shared/          # 跨服务公共能力
+│   ├── auth/        # JWT 签发、解析、角色权限及测试
+│   ├── concurrency/ # 任务池
+│   ├── http/        # HTTP 中间件
+│   └── observability/ # logger 日志与 metrics 指标
 └── frontend/        # 前端 SPA
 ```

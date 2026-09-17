@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
-	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 )
 
@@ -37,21 +37,21 @@ func InitMongo() {
 
 	client, err := mongo.Connect(options.Client().ApplyURI(uri).SetMonitor(metrics.NewMongoCommandMonitor("mongo")))
 	if err != nil {
-		pkg.Fatalf("[MongoDB] 连接配置失败: %v", err)
+		logger.Fatalf("[MongoDB] 连接配置失败: %v", err)
 	}
 
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		pkg.Fatalf("[MongoDB] Ping 失败: %v", err)
+		logger.Fatalf("[MongoDB] Ping 失败: %v", err)
 	}
 
 	MongoClient = client
 	MessageCollection = client.Database(database).Collection("messages")
 
 	if err := ensureMessageIndexes(ctx); err != nil {
-		pkg.Fatalf("[MongoDB] 消息索引创建失败: %v", err)
+		logger.Fatalf("[MongoDB] 消息索引创建失败: %v", err)
 	}
 
-	pkg.Infof("[MongoDB] 连接成功, database=%s collection=messages", database)
+	logger.Infof("[MongoDB] 连接成功, database=%s collection=messages", database)
 }
 
 func ensureMessageIndexes(ctx context.Context) error {

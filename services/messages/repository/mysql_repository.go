@@ -1,28 +1,27 @@
-package messages
+package repository
 
 import (
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"lan-im-go/models"
-	"lan-im-go/repository"
+	messagesmodel "lan-im-go/services/messages/models"
 )
 
 type messageRepoImpl struct {
 	db *gorm.DB
 }
 
-func NewMySQLRepository(db *gorm.DB) repository.MessageRepository {
+func NewMySQLRepository(db *gorm.DB) MessageRepository {
 	return &messageRepoImpl{db: db}
 }
 
-func (r *messageRepoImpl) SaveMessage(msg *models.Message) error {
-	return r.SaveMessageBatch([]*models.Message{msg})
+func (r *messageRepoImpl) SaveMessage(msg *messagesmodel.Message) error {
+	return r.SaveMessageBatch([]*messagesmodel.Message{msg})
 }
 
 // 批量保存消息（高性能写入）
-func (r *messageRepoImpl) SaveMessageBatch(msgs []*models.Message) error {
+func (r *messageRepoImpl) SaveMessageBatch(msgs []*messagesmodel.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -35,11 +34,11 @@ func (r *messageRepoImpl) SaveMessageBatch(msgs []*models.Message) error {
 		for _, msg := range msgs {
 			keys = append(keys, msg.ClientMsgID)
 		}
-		var persisted []models.Message
+		var persisted []messagesmodel.Message
 		if err := tx.Unscoped().Where("client_msg_id IN ?", keys).Find(&persisted).Error; err != nil {
 			return err
 		}
-		byKey := make(map[models.MessageRequestKey]models.Message, len(persisted))
+		byKey := make(map[messagesmodel.MessageRequestKey]messagesmodel.Message, len(persisted))
 		for _, msg := range persisted {
 			byKey[msg.RequestKey()] = msg
 		}
@@ -48,7 +47,7 @@ func (r *messageRepoImpl) SaveMessageBatch(msgs []*models.Message) error {
 			if !ok {
 				return gorm.ErrRecordNotFound
 			}
-			if err := models.ReconcileMessage(msg, &stored); err != nil {
+			if err := messagesmodel.ReconcileMessage(msg, &stored); err != nil {
 				return err
 			}
 		}
@@ -58,13 +57,13 @@ func (r *messageRepoImpl) SaveMessageBatch(msgs []*models.Message) error {
 
 // GetHistoryByCursor 基于游标分页查询历史消息
 // 新消息按群序号分页；未编号的旧消息排在新链路消息之前。
-func (r *messageRepoImpl) GetHistoryByCursor(roomID int64, cursorMsgID int64, limit int) ([]*models.Message, error) {
-	var messages []*models.Message
-	query := r.db.Model(&models.Message{}).Where("room_id = ?", roomID)
+func (r *messageRepoImpl) GetHistoryByCursor(roomID int64, cursorMsgID int64, limit int) ([]*messagesmodel.Message, error) {
+	var messages []*messagesmodel.Message
+	query := r.db.Model(&messagesmodel.Message{}).Where("room_id = ?", roomID)
 
 	if cursorMsgID > 0 {
 		// 游标只允许定位当前群，不能使用另一群的序号改变分页范围。
-		var cursor models.Message
+		var cursor messagesmodel.Message
 		if err := r.db.Unscoped().Where("id = ? AND room_id = ?", cursorMsgID, roomID).Select("room_seq").First(&cursor).Error; err == nil {
 			if cursor.RoomSeq > 0 {
 				query = query.Where("(room_seq < ? OR room_seq IS NULL OR (room_seq = ? AND id < ?))", cursor.RoomSeq, cursor.RoomSeq, cursorMsgID)
@@ -89,9 +88,9 @@ func (r *messageRepoImpl) GetHistoryByCursor(roomID int64, cursorMsgID int64, li
 
 // SoftDeleteUserMessagesInRoom 软删除指定用户在群聊内的所有消息
 // GetMessagesByTimeRange 返回 created_at 在 [start, end) 范围内的消息，按升序排列。
-func (r *messageRepoImpl) GetMessagesByTimeRange(roomID int64, start, end time.Time, limit int) ([]models.Message, error) {
-	var messages []models.Message
-	err := r.db.Model(&models.Message{}).
+func (r *messageRepoImpl) GetMessagesByTimeRange(roomID int64, start, end time.Time, limit int) ([]messagesmodel.Message, error) {
+	var messages []messagesmodel.Message
+	err := r.db.Model(&messagesmodel.Message{}).
 		Where("room_id = ? AND created_at >= ? AND created_at < ?", roomID, start, end).
 		Order("created_at ASC, id ASC").
 		Limit(limit).
@@ -100,9 +99,9 @@ func (r *messageRepoImpl) GetMessagesByTimeRange(roomID int64, start, end time.T
 }
 
 // GetMessagesAfterID 返回 id 大于 sinceID 的消息，按升序排列。
-func (r *messageRepoImpl) GetMessagesAfterID(roomID int64, sinceID int64, limit int) ([]models.Message, error) {
-	var messages []models.Message
-	query := r.db.Model(&models.Message{}).Where("room_id = ?", roomID)
+func (r *messageRepoImpl) GetMessagesAfterID(roomID int64, sinceID int64, limit int) ([]messagesmodel.Message, error) {
+	var messages []messagesmodel.Message
+	query := r.db.Model(&messagesmodel.Message{}).Where("room_id = ?", roomID)
 	if sinceID > 0 {
 		query = query.Where("id > ?", sinceID)
 	}
@@ -113,7 +112,7 @@ func (r *messageRepoImpl) GetMessagesAfterID(roomID int64, sinceID int64, limit 
 // CountMessagesAfterID 统计 id 大于 sinceID 的消息数量。
 func (r *messageRepoImpl) CountMessagesAfterID(roomID int64, sinceID int64) (int64, error) {
 	var count int64
-	query := r.db.Model(&models.Message{}).Where("room_id = ?", roomID)
+	query := r.db.Model(&messagesmodel.Message{}).Where("room_id = ?", roomID)
 	if sinceID > 0 {
 		query = query.Where("id > ?", sinceID)
 	}
@@ -121,8 +120,8 @@ func (r *messageRepoImpl) CountMessagesAfterID(roomID int64, sinceID int64) (int
 	return count, err
 }
 
-func (r *messageRepoImpl) SearchMessages(params repository.MessageSearchParams) ([]*models.Message, int64, error) {
-	query := r.db.Model(&models.Message{}).Where("room_id = ?", params.RoomID)
+func (r *messageRepoImpl) SearchMessages(params MessageSearchParams) ([]*messagesmodel.Message, int64, error) {
+	query := r.db.Model(&messagesmodel.Message{}).Where("room_id = ?", params.RoomID)
 	if params.Keyword != "" {
 		// LOCATE 会把 %、_ 和反斜杠视为普通用户输入，而不是 LIKE 通配符。
 		query = query.Where("LOCATE(?, content) > 0", params.Keyword)
@@ -151,7 +150,7 @@ func (r *messageRepoImpl) SearchMessages(params repository.MessageSearchParams) 
 		offset = 0
 	}
 
-	var messages []*models.Message
+	var messages []*messagesmodel.Message
 	err := query.Order("created_at DESC, id DESC").Offset(offset).Limit(limit).Find(&messages).Error
 	return messages, total, err
 }
@@ -160,7 +159,7 @@ func (r *messageRepoImpl) SoftDeleteUserMessagesInRoom(roomID int64, userID int6
 	// 采用软删除而非物理删除：
 	// 1. 保留数据记录，满足数据追溯需求
 	// 2. 避免物理删除导致的数据库索引结构变动，保证高并发场景下的数据库性能稳定
-	return r.db.Model(&models.Message{}).
+	return r.db.Model(&messagesmodel.Message{}).
 		Where("room_id = ? AND sender_id = ?", roomID, userID).
 		Update("deleted_at", gorm.Expr("NOW()")).Error
 }

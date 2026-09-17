@@ -7,8 +7,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
-	"lan-im-go/repository"
+	roomsmodel "lan-im-go/services/rooms/models"
+	"lan-im-go/services/rooms/repository"
 )
 
 var (
@@ -38,12 +38,12 @@ func NewService(rooms repository.RoomRepository, members repository.RoomMemberRe
 	return &Service{rooms: rooms, members: members, runtime: runtime}
 }
 
-func (s *Service) CreateRoom(name string, creatorID int64) (*models.Room, error) {
+func (s *Service) CreateRoom(name string, creatorID int64) (*roomsmodel.Room, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, ErrInvalidRoomName
 	}
-	room := &models.Room{Name: name, CreatorID: creatorID, Type: 2, LastActiveAt: time.Now().UTC()}
+	room := &roomsmodel.Room{Name: name, CreatorID: creatorID, Type: 2, LastActiveAt: time.Now().UTC()}
 	if err := s.rooms.CreateRoomWithCreator(room, creatorID); err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (s *Service) JoinedRooms(userID int64) ([]repository.JoinedRoom, error) {
 	return s.rooms.GetJoinedRoomsWithRole(userID)
 }
 
-func (s *Service) SearchRooms(keyword string, offset, limit int) ([]*models.Room, int64, error) {
+func (s *Service) SearchRooms(keyword string, offset, limit int) ([]*roomsmodel.Room, int64, error) {
 	if offset < 0 {
 		offset = 0
 	}

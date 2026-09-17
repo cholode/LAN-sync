@@ -4,15 +4,16 @@ import (
 	"context"
 	"lan-im-go/config"
 	"lan-im-go/infrastructure"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
 	adminservice "lan-im-go/services/admin/application"
 	"lan-im-go/services/admin/control"
 	"lan-im-go/services/gateway/grpc"
 	"lan-im-go/services/gateway/http"
 	"lan-im-go/services/gateway/websocket"
-	"lan-im-go/services/messages/api"
+	messagerepo "lan-im-go/services/messages/repository"
+	roomrepo "lan-im-go/services/rooms/repository"
+	userrepo "lan-im-go/services/users/repository"
 	"lan-im-go/shared/concurrency/taskpool"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 	"net/http"
 	_ "net/http/pprof"
@@ -43,9 +44,9 @@ func main() {
 		}
 		http.Handle(metricsPath, metrics.Handler())
 		go func() {
-			pkg.Infof("[系统启动] 指标与pprof管理服务监听 %s", metricsAddr)
+			logger.Infof("[系统启动] 指标与pprof管理服务监听 %s", metricsAddr)
 			if err := http.ListenAndServe(metricsAddr, nil); err != nil {
-				pkg.Fatalf("[致命错误] 指标服务启动失败: %v", err)
+				logger.Fatalf("[致命错误] 指标服务启动失败: %v", err)
 			}
 		}()
 	}
@@ -56,7 +57,7 @@ func main() {
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
 		dsn = "root:123456@tcp(127.0.0.1:3306)/lan_im?charset=utf8mb4&parseTime=True&loc=UTC"
-		pkg.Infoln("[警告] 未检测到DB_DSN环境变量，使用本地默认配置连接MySQL")
+		logger.Infoln("[警告] 未检测到DB_DSN环境变量，使用本地默认配置连接MySQL")
 	}
 
 	config.InitRedis()
@@ -67,19 +68,20 @@ func main() {
 	defer config.KafkaProducer.Close()
 
 	infrastructure.InitDatabase(dsn)
-	messageRepo := messages.NewMySQLRepository(infrastructure.DB)
+	messageRepo := messagerepo.NewMySQLRepository(infrastructure.DB)
 	if os.Getenv("MESSAGE_STORE") == "mongo" {
 		infrastructure.InitMongo()
 		defer infrastructure.CloseMongo()
-		messageRepo = messages.NewMongoRepository(infrastructure.MessageCollection)
+		messageRepo = messagerepo.NewMongoRepository(infrastructure.MessageCollection)
 	}
 	taskpool.Init(0) // 0 表示使用默认工作协程数
 
 	// ================================
 	// 阶段2：数据访问层初始化
 	// ================================
-	repository.InitRepositories(infrastructure.DB, messageRepo)
-	pkg.Infoln("[系统就绪] 数据访问层(DAL)初始化完成")
+	userRepo := userrepo.NewUserRepoImpl(infrastructure.DB)
+	memberRepo := roomrepo.NewRoomMemberRepoImpl(infrastructure.DB)
+	logger.Infoln("[系统就绪] 数据访问层(DAL)初始化完成")
 
 	// ================================
 	// 阶段3：统一处理退出信号；消息归档由独立 Worker 运行
@@ -95,17 +97,17 @@ func main() {
 	go hub.Run(ctx)
 	go core.StartGlobalListener(ctx, hub)
 	go core.StartRoomEventListener(ctx, hub)
-	pkg.Infoln("[系统就绪] WebSocket核心引擎启动完成")
+	logger.Infoln("[系统就绪] WebSocket核心引擎启动完成")
 
 	// Python Agent 服务通过 Kafka 独立消费消息。Go 侧只保留其调用的 IMService。
 	imGRPCAddr := os.Getenv("IM_GRPC_ADDR")
 	if imGRPCAddr == "" {
 		imGRPCAddr = "0.0.0.0:50052"
 	}
-	imSrv := imservice.NewServer(hub)
+	imSrv := imservice.NewServer(hub, userRepo, memberRepo, messageRepo)
 	go func() {
 		if err := imSrv.Start(ctx, imGRPCAddr); err != nil {
-			pkg.Fatalf("[致命错误] IMService gRPC 服务启动失败: %v", err)
+			logger.Fatalf("[致命错误] IMService gRPC 服务启动失败: %v", err)
 		}
 	}()
 
@@ -121,7 +123,7 @@ func main() {
 		adminControlServer := admincontrol.NewServer(localAdminRuntime)
 		go func() {
 			if err := adminControlServer.Start(ctx, adminControlAddr, os.Getenv("ADMIN_CONTROL_TOKEN")); err != nil {
-				pkg.Fatalf("[致命错误] AdminControl gRPC 服务启动失败: %v", err)
+				logger.Fatalf("[致命错误] AdminControl gRPC 服务启动失败: %v", err)
 			}
 		}()
 	}
@@ -132,7 +134,7 @@ func main() {
 	// ================================
 	// 阶段6：HTTP 服务与路由配置
 	// ================================
-	r := gateways.NewRouter(gateways.Dependencies{Hub: hub, DB: infrastructure.DB,
+	r := gateways.NewRouter(gateways.Dependencies{Users: userRepo, Membership: memberRepo, Hub: hub, DB: infrastructure.DB,
 		ErrorService: errorService, FrontendDir: "./frontend/dist"})
 
 	// ================================
@@ -151,10 +153,10 @@ func main() {
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 
-	pkg.Infof("[系统启动] LAN-IM 服务端启动成功，监听端口 :%s", port)
+	logger.Infof("[系统启动] LAN-IM 服务端启动成功，监听端口 :%s", port)
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		pkg.Fatalf("[致命错误] 服务启动失败: %v", err)
+		logger.Fatalf("[致命错误] 服务启动失败: %v", err)
 	}
 
 	cancel()

@@ -4,7 +4,8 @@ import (
 	"errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"lan-im-go/models"
+	roomsmodel "lan-im-go/services/rooms/models"
+	usersmodel "lan-im-go/services/users/models"
 )
 
 type roomMemberRepoImpl struct {
@@ -17,7 +18,7 @@ func NewRoomMemberRepoImpl(db *gorm.DB) RoomMemberRepository {
 
 // AddMember 添加群成员 ✅【终极修复】冲突自动忽略，永远不报错
 func (r *roomMemberRepoImpl) AddMember(roomID, userID int64, role int8) error {
-	member := &models.RoomMember{
+	member := &roomsmodel.RoomMember{
 		RoomID: roomID,
 		UserID: userID,
 		Role:   role,
@@ -31,7 +32,7 @@ func (r *roomMemberRepoImpl) AddMember(roomID, userID int64, role int8) error {
 }
 
 func (r *roomMemberRepoImpl) RemoveMember(roomID, userID int64) error {
-	result := r.db.Where("room_id = ? AND user_id = ?", roomID, userID).Delete(&models.RoomMember{})
+	result := r.db.Where("room_id = ? AND user_id = ?", roomID, userID).Delete(&roomsmodel.RoomMember{})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -43,13 +44,13 @@ func (r *roomMemberRepoImpl) RemoveMember(roomID, userID int64) error {
 
 func (r *roomMemberRepoImpl) GetUserRoomIDs(userID int64) ([]int64, error) {
 	var roomIDs []int64
-	err := r.db.Model(&models.RoomMember{}).Where("user_id = ?", userID).Pluck("room_id", &roomIDs).Error
+	err := r.db.Model(&roomsmodel.RoomMember{}).Where("user_id = ?", userID).Pluck("room_id", &roomIDs).Error
 	return roomIDs, err
 }
 
 func (r *roomMemberRepoImpl) CheckIsMember(roomID, userID64 int64) (bool, error) {
 	var count int64
-	err := r.db.Model(&models.RoomMember{}).
+	err := r.db.Model(&roomsmodel.RoomMember{}).
 		Where("room_id = ? AND user_id = ?", roomID, userID64).
 		Limit(1).
 		Count(&count).Error
@@ -57,7 +58,7 @@ func (r *roomMemberRepoImpl) CheckIsMember(roomID, userID64 int64) (bool, error)
 }
 
 func (r *roomMemberRepoImpl) GetMemberRole(roomID, userID int64) (int8, bool, error) {
-	var m models.RoomMember
+	var m roomsmodel.RoomMember
 	err := r.db.Where("room_id = ? AND user_id = ?", roomID, userID).First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -68,16 +69,16 @@ func (r *roomMemberRepoImpl) GetMemberRole(roomID, userID int64) (int8, bool, er
 	return m.Role, true, nil
 }
 
-func (r *roomMemberRepoImpl) GetRoomMembers(roomID int64) ([]*models.User, error) {
+func (r *roomMemberRepoImpl) GetRoomMembers(roomID int64) ([]*usersmodel.User, error) {
 	var userIDs []int64
 	// 使用 Model(RoomMember) 由 GORM 自动排除 room_members 的软删行；勿手写 users.deleted_at IS NULL（毫秒软删为 0 非 NULL）
-	if err := r.db.Model(&models.RoomMember{}).Where("room_id = ?", roomID).Pluck("user_id", &userIDs).Error; err != nil {
+	if err := r.db.Model(&roomsmodel.RoomMember{}).Where("room_id = ?", roomID).Pluck("user_id", &userIDs).Error; err != nil {
 		return nil, err
 	}
 	if len(userIDs) == 0 {
-		return []*models.User{}, nil
+		return []*usersmodel.User{}, nil
 	}
-	var users []*models.User
+	var users []*usersmodel.User
 	if err := r.db.Where("id IN ?", userIDs).Find(&users).Error; err != nil {
 		return nil, err
 	}
@@ -87,7 +88,7 @@ func (r *roomMemberRepoImpl) GetRoomMembers(roomID int64) ([]*models.User, error
 // GetRoomMembersWithRoles 一次联表查询群成员资料及角色，避免逐成员查询角色造成 N+1。
 func (r *roomMemberRepoImpl) GetRoomMembersWithRoles(roomID int64) ([]RoomMemberWithRole, error) {
 	var rows []RoomMemberWithRole
-	err := r.db.Model(&models.RoomMember{}).
+	err := r.db.Model(&roomsmodel.RoomMember{}).
 		Select("users.id, users.username, users.avatar, room_members.role AS member_role").
 		Joins("INNER JOIN users ON users.id = room_members.user_id AND users.deleted_at = 0").
 		Where("room_members.room_id = ? AND room_members.deleted_at = 0", roomID).

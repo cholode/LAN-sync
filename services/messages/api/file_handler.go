@@ -13,8 +13,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"lan-im-go/pkg"
 	messageapp "lan-im-go/services/messages/application"
+	"lan-im-go/shared/observability/logger"
 )
 
 type preSignUploadRequest struct {
@@ -40,7 +40,7 @@ func (m *Module) PreSignUpload(c *gin.Context) {
 	defer cancel()
 	uploadURL, err := m.Storage.PreSignedUploadURL(ctx, objectKey, 15*time.Minute)
 	if err != nil {
-		pkg.Errorf("[消息文件] 生成上传链接失败: %v", err)
+		logger.Errorf("[消息文件] 生成上传链接失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成上传链接失败"})
 		return
 	}
@@ -110,7 +110,7 @@ func writeFileError(c *gin.Context, err error, fallback string) {
 	case errors.Is(err, messageapp.ErrFileNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	default:
-		pkg.Errorf("[消息文件] %s: %v", fallback, err)
+		logger.Errorf("[消息文件] %s: %v", fallback, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fallback})
 	}
 }

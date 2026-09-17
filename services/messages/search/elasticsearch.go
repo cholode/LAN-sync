@@ -14,8 +14,8 @@ import (
 	elasticsearch "github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 
-	"lan-im-go/models"
-	"lan-im-go/pkg"
+	messagesmodel "lan-im-go/services/messages/models"
+	"lan-im-go/shared/observability/logger"
 )
 
 var (
@@ -95,7 +95,7 @@ func Enabled() bool {
 func Init(ctx context.Context) error {
 	enabled = strings.EqualFold(os.Getenv("ES_ENABLED"), "true")
 	if !enabled {
-		pkg.Infoln("[Elasticsearch] disabled, message search will use the primary message store")
+		logger.Infoln("[Elasticsearch] disabled, message search will use the primary message store")
 		return nil
 	}
 
@@ -134,7 +134,7 @@ func Init(ctx context.Context) error {
 		return err
 	}
 
-	pkg.Infof("[Elasticsearch] connected, addr=%s index=%s", addr, indexName)
+	logger.Infof("[Elasticsearch] connected, addr=%s index=%s", addr, indexName)
 	return nil
 }
 
@@ -174,7 +174,7 @@ func ensureMessageIndex(ctx context.Context) error {
 
 // IndexMessages 从调用方视角异步批量索引归档消息。
 // Kafka 归档器应在消息持久化后调用此函数。
-func IndexMessages(ctx context.Context, msgs []*models.Message) error {
+func IndexMessages(ctx context.Context, msgs []*messagesmodel.Message) error {
 	if !enabled || esClient == nil || len(msgs) == 0 {
 		return nil
 	}
@@ -340,7 +340,7 @@ func SearchMessages(ctx context.Context, roomID int64, params SearchParams) (*Se
 	return out, nil
 }
 
-func toMessageDoc(msg *models.Message) messageDoc {
+func toMessageDoc(msg *messagesmodel.Message) messageDoc {
 	doc := messageDoc{
 		RoomSeq:     msg.RoomSeq,
 		ID:          msg.ID,

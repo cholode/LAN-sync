@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"lan-im-go/models"
+	agentmodel "lan-im-go/services/agent/models"
 )
 
 // AgentConfigService 管理全局 Agent 配置及其版本回滚。
@@ -45,8 +45,8 @@ type GlobalAgentConfigInput struct {
 	ToolCallingPrompt      string  `json:"tool_calling_prompt"`
 }
 
-func defaultGlobalAgentConfig() *models.GlobalAgentConfig {
-	return &models.GlobalAgentConfig{
+func defaultGlobalAgentConfig() *agentmodel.GlobalAgentConfig {
+	return &agentmodel.GlobalAgentConfig{
 		ID:                     1,
 		GlobalEnabled:          true,
 		DefaultModel:           "deepseek-chat",
@@ -66,8 +66,8 @@ func defaultGlobalAgentConfig() *models.GlobalAgentConfig {
 	}
 }
 
-func (s *AgentConfigService) getOrCreate(ctx context.Context) (*models.GlobalAgentConfig, error) {
-	var cfg models.GlobalAgentConfig
+func (s *AgentConfigService) getOrCreate(ctx context.Context) (*agentmodel.GlobalAgentConfig, error) {
+	var cfg agentmodel.GlobalAgentConfig
 	err := s.db.WithContext(ctx).First(&cfg, 1).Error
 	if err == nil {
 		return &cfg, nil
@@ -83,12 +83,12 @@ func (s *AgentConfigService) getOrCreate(ctx context.Context) (*models.GlobalAge
 }
 
 // Get 获取当前全局 Agent 配置。
-func (s *AgentConfigService) Get(ctx context.Context) (*models.GlobalAgentConfig, error) {
+func (s *AgentConfigService) Get(ctx context.Context) (*agentmodel.GlobalAgentConfig, error) {
 	return s.getOrCreate(ctx)
 }
 
 // Update 更新全局 Agent 配置，并记录修改前后版本。
-func (s *AgentConfigService) Update(ctx context.Context, input GlobalAgentConfigInput, action AuditAction) (*models.GlobalAgentConfig, error) {
+func (s *AgentConfigService) Update(ctx context.Context, input GlobalAgentConfigInput, action AuditAction) (*agentmodel.GlobalAgentConfig, error) {
 	cfg, err := s.getOrCreate(ctx)
 	if err != nil {
 		return nil, err
@@ -183,17 +183,17 @@ func (s *AgentConfigService) Update(ctx context.Context, input GlobalAgentConfig
 
 // HistoryItem 配置历史记录。
 type HistoryItem struct {
-	models.AgentConfigHistory
+	agentmodel.AgentConfigHistory
 }
 
 // History 分页查询配置历史。
 func (s *AgentConfigService) History(ctx context.Context, page, pageSize int) ([]HistoryItem, int64, error) {
 	var total int64
-	query := s.db.WithContext(ctx).Model(&models.AgentConfigHistory{}).Where("config_id = ?", 1)
+	query := s.db.WithContext(ctx).Model(&agentmodel.AgentConfigHistory{}).Where("config_id = ?", 1)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	var rows []models.AgentConfigHistory
+	var rows []agentmodel.AgentConfigHistory
 	if err := query.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
@@ -205,8 +205,8 @@ func (s *AgentConfigService) History(ctx context.Context, page, pageSize int) ([
 }
 
 // Rollback 回滚到上一个版本，并写入新的历史记录。
-func (s *AgentConfigService) Rollback(ctx context.Context, action AuditAction) (*models.GlobalAgentConfig, error) {
-	var latest models.AgentConfigHistory
+func (s *AgentConfigService) Rollback(ctx context.Context, action AuditAction) (*agentmodel.GlobalAgentConfig, error) {
+	var latest agentmodel.AgentConfigHistory
 	if err := s.db.WithContext(ctx).Where("config_id = ?", 1).Order("id DESC").First(&latest).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("没有可回滚的历史版本")
@@ -253,10 +253,10 @@ func (s *AgentConfigService) Rollback(ctx context.Context, action AuditAction) (
 
 func (s *AgentConfigService) appendHistory(ctx context.Context, tx *gorm.DB, configID int64, before, after string, action AuditAction) error {
 	var maxVersion int64
-	if err := tx.Model(&models.AgentConfigHistory{}).Where("config_id = ?", configID).Select("COALESCE(MAX(version), 0)").Scan(&maxVersion).Error; err != nil {
+	if err := tx.Model(&agentmodel.AgentConfigHistory{}).Where("config_id = ?", configID).Select("COALESCE(MAX(version), 0)").Scan(&maxVersion).Error; err != nil {
 		return err
 	}
-	record := &models.AgentConfigHistory{
+	record := &agentmodel.AgentConfigHistory{
 		ConfigID:      configID,
 		Version:       maxVersion + 1,
 		BeforeData:    before,
@@ -268,7 +268,7 @@ func (s *AgentConfigService) appendHistory(ctx context.Context, tx *gorm.DB, con
 	return tx.Create(record).Error
 }
 
-func afterJSON(cfg *models.GlobalAgentConfig) string {
+func afterJSON(cfg *agentmodel.GlobalAgentConfig) string {
 	raw, _ := json.Marshal(cfg)
 	return string(raw)
 }

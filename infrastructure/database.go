@@ -4,8 +4,12 @@ import (
 	"os"
 	"time"
 
-	"lan-im-go/models"
-	"lan-im-go/pkg"
+	adminmodel "lan-im-go/services/admin/models"
+	agentmodel "lan-im-go/services/agent/models"
+	messagesmodel "lan-im-go/services/messages/models"
+	roomsmodel "lan-im-go/services/rooms/models"
+	usersmodel "lan-im-go/services/users/models"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 
 	"gorm.io/driver/mysql"
@@ -24,13 +28,13 @@ func InitDatabase(dsn string) {
 		// Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		pkg.Fatalf("[错误] MySQL 连接失败，请检查DSN配置: %v", err)
+		logger.Fatalf("[错误] MySQL 连接失败，请检查DSN配置: %v", err)
 	}
 
 	// 2. 配置数据库连接池参数
 	sqlDB, err := DB.DB()
 	if err != nil {
-		pkg.Fatalf("[错误] 获取底层数据库连接失败: %v", err)
+		logger.Fatalf("[错误] 获取底层数据库连接失败: %v", err)
 	}
 	sqlDB.SetMaxIdleConns(200)
 	sqlDB.SetMaxOpenConns(1000)
@@ -38,39 +42,39 @@ func InitDatabase(dsn string) {
 	metrics.RegisterMySQLPoolMetrics(sqlDB)
 
 	// 3. 自动同步数据模型至数据库表结构
-	pkg.Infoln("开始同步数据库表结构...")
+	logger.Infoln("开始同步数据库表结构...")
 	migrateModels := []interface{}{
-		&models.User{},
-		&models.Room{},
-		&models.RoomMember{},
-		&models.AgentConfig{},
-		&models.RAGChunk{},
-		&models.AdminAuditLog{},
-		&models.RAGQueryLog{},
-		&models.ModerationEvent{},
-		&models.FileRecord{},
-		&models.GlobalAgentConfig{},
-		&models.AgentConfigHistory{},
-		&models.ToolCallLog{},
-		&models.SystemErrorLog{},
-		&models.AlertEvent{},
+		&usersmodel.User{},
+		&roomsmodel.Room{},
+		&roomsmodel.RoomMember{},
+		&agentmodel.AgentConfig{},
+		&agentmodel.RAGChunk{},
+		&adminmodel.AdminAuditLog{},
+		&agentmodel.RAGQueryLog{},
+		&adminmodel.ModerationEvent{},
+		&messagesmodel.FileRecord{},
+		&agentmodel.GlobalAgentConfig{},
+		&agentmodel.AgentConfigHistory{},
+		&agentmodel.ToolCallLog{},
+		&adminmodel.SystemErrorLog{},
+		&adminmodel.AlertEvent{},
 	}
 	if os.Getenv("MESSAGE_STORE") != "mongo" {
-		migrateModels = append(migrateModels, &models.Message{})
+		migrateModels = append(migrateModels, &messagesmodel.Message{})
 	}
 
 	err = DB.AutoMigrate(migrateModels...)
 	if err != nil {
-		pkg.Fatalf("[错误] 数据库表结构同步失败: %v", err)
+		logger.Fatalf("[错误] 数据库表结构同步失败: %v", err)
 	}
 	// 新联合唯一索引创建后再移除旧全局索引，允许不同用户复用客户端凭证。
-	if os.Getenv("MESSAGE_STORE") != "mongo" && DB.Migrator().HasIndex(&models.Message{}, "idx_client_msg_id") {
-		if err := DB.Migrator().DropIndex(&models.Message{}, "idx_client_msg_id"); err != nil {
-			pkg.Fatalf("消息幂等索引迁移失败: %v", err)
+	if os.Getenv("MESSAGE_STORE") != "mongo" && DB.Migrator().HasIndex(&messagesmodel.Message{}, "idx_client_msg_id") {
+		if err := DB.Migrator().DropIndex(&messagesmodel.Message{}, "idx_client_msg_id"); err != nil {
+			logger.Fatalf("消息幂等索引迁移失败: %v", err)
 		}
 	}
 
 	metrics.RegisterGORMMetrics(DB, "mysql")
 
-	pkg.Infoln("MySQL 连接成功，表结构同步完成，连接池配置生效！")
+	logger.Infoln("MySQL 连接成功，表结构同步完成，连接池配置生效！")
 }

@@ -1,4 +1,4 @@
-package pkg
+package logger
 
 import (
 	"fmt"
@@ -19,6 +19,11 @@ type Formatter struct {
 
 func newLogger() *logrus.Logger {
 	l := logrus.New()
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("LAN_IM_LOG_LEVEL")), "off") {
+		l.SetOutput(io.Discard)
+		l.SetLevel(logrus.PanicLevel)
+		return l
+	}
 
 	// 开发环境用文本格式（带颜色），生产环境用 JSON
 	env := os.Getenv("LAN_IM_ENV")
@@ -85,4 +90,4 @@ func Errorf(format string, args ...interface{}) { WithCaller().Errorf(format, ar
 func Fatal(args ...interface{})                 { WithCaller().Fatal(args...) }
 func Fatalf(format string, args ...interface{}) { WithCaller().Fatalf(format, args...) }
 
-func Infoln(args ...interface{})                 { WithCaller().Infoln(args...) }
+func Infoln(args ...interface{}) { WithCaller().Infoln(args...) }
