@@ -6,11 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"lan-im-go/services/gateway/websocket"
-	//"lan-im-go/models"
+	//
 	"context"
 	"lan-im-go/cache"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
+
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 	"net/http"
 	"sync"
@@ -36,7 +36,7 @@ var upgrader = websocket.Upgrader{
 
 var CurrentNodeID = metrics.NodeID()
 
-func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
+func (h *Handler) WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pipelineStartedAt := time.Now()
 		if value, exists := c.Get("ws_pipeline_started_at"); exists {
@@ -53,16 +53,16 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 
 		userID, exists := c.Get("user_id")
 		if !exists {
-			pkg.Infof("user identity missing\n")
+			logger.Infof("user identity missing\n")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "identity invalid"})
 			return
 		}
 		realUserID := userID.(int64)
 		membershipStartedAt := time.Now()
-		roomIDs, err := repository.RoomMember.GetUserRoomIDs(realUserID)
+		roomIDs, err := h.Membership.GetUserRoomIDs(realUserID)
 		if err != nil {
 			metrics.ObserveWSConnectionStage(metrics.WSStageMembership, membershipStartedAt, "failed")
-			pkg.Infof("[connection failed] load rooms failed UID:%d Err:%v", realUserID, err)
+			logger.Infof("[connection failed] load rooms failed UID:%d Err:%v", realUserID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load joined rooms"})
 			return
 		}
@@ -72,11 +72,11 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			metrics.ObserveWSConnectionStage(metrics.WSStageUpgrade, upgradeStartedAt, "failed")
-			pkg.Infof("[connection failed] WebSocket upgrade error UID:%d Err:%v", realUserID, err)
+			logger.Infof("[connection failed] WebSocket upgrade error UID:%d Err:%v", realUserID, err)
 			return
 		}
 		metrics.ObserveWSConnectionStage(metrics.WSStageUpgrade, upgradeStartedAt, "success")
-		pkg.Infof("WebSocket connected UID:%d\n", realUserID)
+		logger.Infof("WebSocket connected UID:%d\n", realUserID)
 		connStart := time.Now()
 		metrics.WSConnected()
 
@@ -84,7 +84,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			Hub:           hub,
 			UserID:        realUserID,
 			Conn:          conn,
-			Send:          make(chan []byte, 512),
+			Send:          make(chan core.OutboundMessage, 512),
 			ConnID:        fmt.Sprintf("%d-%d", realUserID, time.Now().UnixNano()),
 			RemoteIP:      c.ClientIP(),
 			UserAgent:     c.Request.UserAgent(),
@@ -103,7 +103,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		onlineResult := "success"
 		if err := cache.SetUserConnectionOnline(ctxOnline, realUserID, CurrentNodeID, client.ConnID); err != nil {
 			onlineResult = "failed"
-			pkg.Infof("[online warn] UID:%d Redis online state failed: %v", realUserID, err)
+			logger.Infof("[online warn] UID:%d Redis online state failed: %v", realUserID, err)
 		}
 		cancelOnline()
 		metrics.ObserveWSConnectionStage(metrics.WSStageRedisOnline, redisOnlineStartedAt, onlineResult)
@@ -113,7 +113,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 		}
 
 		go func() {
-			if user, err := repository.User.GetByID(realUserID); err == nil && user != nil {
+			if user, err := h.Users.GetByID(realUserID); err == nil && user != nil {
 				client.SetUsername(user.Username)
 			}
 		}()
@@ -126,7 +126,7 @@ func WsEndpoint(hub *core.Hub) gin.HandlerFunc {
 			ctxDel, cancelDel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancelDel()
 			if err := cache.SetUserConnectionOffline(ctxDel, realUserID, CurrentNodeID, client.ConnID); err != nil {
-				pkg.Infof("[offline warn] UID:%d Redis offline state failed: %v", realUserID, err)
+				logger.Infof("[offline warn] UID:%d Redis offline state failed: %v", realUserID, err)
 			}
 		}()
 

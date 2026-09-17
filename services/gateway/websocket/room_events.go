@@ -7,8 +7,8 @@ import (
 	"github.com/go-redis/redis/v8"
 
 	"lan-im-go/config"
-	"lan-im-go/pkg"
 	roomevents "lan-im-go/services/rooms/events"
+	"lan-im-go/shared/observability/logger"
 )
 
 // StartRoomEventListener 将独立 Room Service 的成员变更同步到本机 Hub。
@@ -16,7 +16,7 @@ func StartRoomEventListener(ctx context.Context, hub *Hub) {
 	pubsub := config.RedisClient.Subscribe(ctx, roomevents.Channel)
 	defer pubsub.Close()
 	if _, err := pubsub.Receive(ctx); err != nil {
-		pkg.Errorf("[Gateway] 订阅房间事件失败: %v", err)
+		logger.Errorf("[Gateway] 订阅房间事件失败: %v", err)
 		return
 	}
 
@@ -31,7 +31,7 @@ func StartRoomEventListener(ctx context.Context, hub *Hub) {
 			}
 			var event roomevents.Event
 			if err := json.Unmarshal([]byte(message.Payload), &event); err != nil {
-				pkg.Errorf("[Gateway] 无法解析房间事件: %v", err)
+				logger.Errorf("[Gateway] 无法解析房间事件: %v", err)
 				continue
 			}
 			switch event.Type {
@@ -42,7 +42,7 @@ func StartRoomEventListener(ctx context.Context, hub *Hub) {
 			case roomevents.RoomDisbanded:
 				hub.DisbandRoom(event.RoomID)
 			default:
-				pkg.Errorf("[Gateway] 忽略未知房间事件: %s", event.Type)
+				logger.Errorf("[Gateway] 忽略未知房间事件: %s", event.Type)
 			}
 		}
 	}

@@ -7,23 +7,36 @@ import (
 	"lan-im-go/cache"
 	"lan-im-go/config"
 	"lan-im-go/shared/observability/metrics"
+	"os"
 	"sync"
 	"sync/atomic"
-	//"lan-im-go/models"
-	"lan-im-go/pkg"
+	//messagesmodel "lan-im-go/services/messages/models"
+	"lan-im-go/shared/observability/logger"
 	"strconv"
 	"time"
 )
+
+func heartbeatEnabled() bool {
+	raw, ok := os.LookupEnv("WS_HEARTBEAT_ENABLED")
+	if !ok || raw == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(raw)
+	return err != nil || enabled
+}
 
 // CurrentGatewayNodeID 当前网关节点 ID，用于标记该连接所属的服务节点。
 var CurrentGatewayNodeID = metrics.NodeID()
 
 const (
 	// WebSocket 配置参数
-	writeWait      = 10 * time.Second    // 写入超时时间
-	pongWait       = 30 * time.Second    // 客户端心跳响应超时时间
-	pingPeriod     = (pongWait * 9) / 10 // 服务端心跳发送频率
-	maxMessageSize = 4096                // 限制单条消息最大长度，防止超大消息占用过多内存
+	writeWait             = 10 * time.Second    // 写入超时时间
+	pongWait              = 30 * time.Second    // 客户端心跳响应超时时间
+	pingPeriod            = (pongWait * 9) / 10 // 服务端心跳发送频率
+	maxMessageSize        = 4096                // 限制单条消息最大长度，防止超大消息占用过多内存
+	writeBatchWindow      = 20 * time.Millisecond
+	writeBatchMaxMessages = 64
+	writeBatchMaxBytes    = 64 * 1024
 )
 
 // Client 客户端连接实体
@@ -31,7 +44,7 @@ type Client struct {
 	Hub    *Hub
 	UserID int64
 	Conn   *websocket.Conn
-	Send   chan []byte
+	Send   chan OutboundMessage
 
 	usernameMu sync.RWMutex
 	username   string
@@ -50,6 +63,12 @@ type Client struct {
 
 	lastReadAt  atomic.Int64
 	lastWriteAt atomic.Int64
+}
+
+// OutboundMessage 保留消息进入 Gateway 的服务端时间，用于统计纯服务端链路延迟。
+type OutboundMessage struct {
+	Payload          []byte
+	GatewayArrivedAt time.Time
 }
 
 // SetLastRead 记录客户端最近一次读取消息的时间。
@@ -131,14 +150,14 @@ func (c *Client) closeSend() {
 }
 
 // TrySend 非阻塞地向客户端发送队列投递消息，发送队列已关闭时返回 false。
-func (c *Client) TrySend(payload []byte) bool {
+func (c *Client) TrySend(payload []byte, gatewayArrivedAt time.Time) bool {
 	c.sendMu.RLock()
 	defer c.sendMu.RUnlock()
 	if c.sendClosed {
 		return false
 	}
 	select {
-	case c.Send <- payload:
+	case c.Send <- OutboundMessage{Payload: payload, GatewayArrivedAt: gatewayArrivedAt}:
 		return true
 	default:
 		return false
@@ -153,23 +172,26 @@ func (c *Client) ReadPump() {
 	}()
 
 	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.Conn.SetPongHandler(func(string) error {
+	if heartbeatEnabled() {
 		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
+		c.Conn.SetPongHandler(func(string) error {
+			c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+			return nil
+		})
+	}
 
 	for {
 		messageType, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			metrics.ObserveWSReadError(err)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				pkg.Infof("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
+				logger.Infof("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
 			}
 			break
 		}
+		gatewayArrivedAt := time.Now()
 		metrics.ObserveWSReadMessage(messageType)
-		c.SetLastRead(time.Now())
+		c.SetLastRead(gatewayArrivedAt)
 
 		// 1. 强制要求前端上报 ClientMsgID
 		var payload struct {
@@ -179,12 +201,12 @@ func (c *Client) ReadPump() {
 		}
 
 		if err := json.Unmarshal(message, &payload); err != nil {
-			pkg.Infof("[消息解析失败] 用户 %d 发送了非法格式: %v", c.UserID, err)
+			logger.Infof("[消息解析失败] 用户 %d 发送了非法格式: %v", c.UserID, err)
 			continue
 		}
 
 		if payload.ClientMsgID == "" {
-			pkg.Infof("[非法调用] 用户 %d 缺失防重发凭证，已拒绝处理", c.UserID)
+			logger.Infof("[非法调用] 用户 %d 缺失防重发凭证，已拒绝处理", c.UserID)
 			continue
 		}
 
@@ -197,18 +219,19 @@ func (c *Client) ReadPump() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 
 		// 将消息的物化投递任务完全甩给底层中间件
-		err = config.KafkaProducer.HandleIncomingMessage(
+		err = config.KafkaProducer.HandleIncomingMessageAt(
 			ctx,
 			roomIDStr,
 			int(c.UserID),
 			payload.Content,
 			payload.ClientMsgID,
+			gatewayArrivedAt,
 		)
 		cancel()
 
 		if err != nil {
 			// 如果 Kafka 发生严重物理宕机，需要考虑降级策略或通知客户端发送失败
-			pkg.Infof("无法投递至 Kafka，消息丢弃: %v", err)
+			logger.Infof("无法投递至 Kafka，消息丢弃: %v", err)
 			// 可选：向当前客户端回复系统异常错误码
 			continue
 		}
@@ -235,10 +258,10 @@ func (c *Client) ReadPump() {
 
 // 	for {
 // 		messageType, message, err := c.Conn.ReadMessage()
-// 		pkg.Infof("收到客户端消息：%s\n", message)
+// 		logger.Infof("收到客户端消息：%s\n", message)
 // 		if err != nil {
 // 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-// 				pkg.Infof("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
+// 				logger.Infof("[消息读取异常] 用户 %d 连接异常断开: %v", c.UserID, err)
 // 			}
 // 			break
 // 		}
@@ -248,9 +271,9 @@ func (c *Client) ReadPump() {
 // 			RoomID  int64  `json:"room_id"`
 // 			Content string `json:"content"`
 // 		}
-// 		var msg models.Message
+// 		var msg messagesmodel.Message
 // 		if err := json.Unmarshal(message, &payload); err != nil {
-// 			pkg.Infof("[消息解析失败] 用户 %d 发送了非法的 JSON 格式消息", c.UserID)
+// 			logger.Infof("[消息解析失败] 用户 %d 发送了非法的 JSON 格式消息", c.UserID)
 // 			continue
 // 		}
 // 		// 安全校验：用户ID从服务端获取，禁止客户端伪造身份
@@ -268,47 +291,136 @@ func (c *Client) ReadPump() {
 // WritePump 发送消息：从消息中心接收数据并发送给客户端
 // WebSocket写入操作非并发安全，仅允许单个协程执行
 func (c *Client) WritePump() {
-	ticker := time.NewTicker(pingPeriod)
+	var pingTicker *time.Ticker
+	var pingC <-chan time.Time
+	if heartbeatEnabled() {
+		pingTicker = time.NewTicker(pingPeriod)
+		pingC = pingTicker.C
+	}
+	flushTimer := time.NewTimer(time.Hour)
+	if !flushTimer.Stop() {
+		<-flushTimer.C
+	}
+
+	var flushC <-chan time.Time
+	batch := make([]OutboundMessage, 0, writeBatchMaxMessages)
+	batchBytes := 0
+
+	stopFlushTimer := func() {
+		if flushC == nil {
+			return
+		}
+		if !flushTimer.Stop() {
+			select {
+			case <-flushTimer.C:
+			default:
+			}
+		}
+		flushC = nil
+	}
+
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+
+		c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+		w, err := c.Conn.NextWriter(websocket.TextMessage)
+		if err != nil {
+			return err
+		}
+
+		for i, message := range batch {
+			if i > 0 {
+				if _, err = w.Write([]byte{'\n'}); err != nil {
+					_ = w.Close()
+					return err
+				}
+			}
+			if _, err = w.Write(message.Payload); err != nil {
+				_ = w.Close()
+				return err
+			}
+		}
+		if err = w.Close(); err != nil {
+			return err
+		}
+
+		leftGatewayAt := time.Now()
+		metrics.ObserveWSWriteBatch(websocket.TextMessage, len(batch))
+		transitMessages := 0
+		transitSeconds := 0.0
+		oldestSeconds := 0.0
+		for _, message := range batch {
+			if message.GatewayArrivedAt.IsZero() {
+				continue
+			}
+			seconds := leftGatewayAt.Sub(message.GatewayArrivedAt).Seconds()
+			if seconds < 0 {
+				continue
+			}
+			transitMessages++
+			transitSeconds += seconds
+			if seconds > oldestSeconds {
+				oldestSeconds = seconds
+			}
+		}
+		metrics.ObserveGatewayFrameTransit(transitMessages, transitSeconds, oldestSeconds)
+		c.SetLastWrite(leftGatewayAt)
+		for i := range batch {
+			batch[i] = OutboundMessage{}
+		}
+		batch = batch[:0]
+		batchBytes = 0
+		metrics.SetWSSendQueueBacklog(0)
+		return nil
+	}
+
 	defer func() {
-		ticker.Stop()
+		if pingTicker != nil {
+			pingTicker.Stop()
+		}
+		stopFlushTimer()
 		c.Conn.Close()
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// 消息通道已关闭，断开客户端连接
+				stopFlushTimer()
+				if err := flush(); err != nil {
+					metrics.ObserveWSWriteError(err)
+					return
+				}
+				c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			// 写入消息数据
-			w, err := c.Conn.NextWriter(websocket.TextMessage)
-			if err != nil {
+			batch = append(batch, message)
+			batchBytes += len(message.Payload)
+			metrics.SetWSSendQueueBacklog(len(c.Send) + len(batch))
+			if len(batch) == 1 {
+				flushTimer.Reset(writeBatchWindow)
+				flushC = flushTimer.C
+			}
+			if len(batch) >= writeBatchMaxMessages || batchBytes >= writeBatchMaxBytes {
+				stopFlushTimer()
+				if err := flush(); err != nil {
+					metrics.ObserveWSWriteError(err)
+					return
+				}
+			}
+
+		case <-flushC:
+			flushC = nil
+			if err := flush(); err != nil {
 				metrics.ObserveWSWriteError(err)
 				return
 			}
-			w.Write(message)
-			metrics.ObserveWSWriteMessage(websocket.TextMessage)
-			c.SetLastWrite(time.Now())
 
-			// 批量写入优化：合并积压消息，减少系统IO调用
-			n := len(c.Send)
-			metrics.SetWSSendQueueBacklog(n)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.Send)
-				metrics.ObserveWSWriteMessage(websocket.TextMessage)
-				metrics.SetWSSendQueueBacklog(0)
-			}
-
-			if err := w.Close(); err != nil {
-				metrics.ObserveWSWriteError(err)
-				return
-			}
-		case <-ticker.C:
+		case <-pingC:
 			// 定时发送心跳包，维持连接存活
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {

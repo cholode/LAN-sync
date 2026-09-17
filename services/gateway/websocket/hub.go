@@ -14,9 +14,9 @@ import (
 
 	"lan-im-go/config"
 	"lan-im-go/contracts/events"
-	"lan-im-go/models"
-	"lan-im-go/pkg"
+	messagesmodel "lan-im-go/services/messages/models"
 	"lan-im-go/shared/concurrency/taskpool"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 )
 
@@ -57,7 +57,7 @@ type hubShard struct {
 	users map[int64]*Client
 	rooms map[int64]map[*Client]bool
 
-	forward    chan *models.Message
+	forward    chan *messagesmodel.Message
 	killClient chan *Client
 }
 
@@ -94,11 +94,11 @@ func NewHubWithShards(shardCount int) *Hub {
 			id:         i,
 			users:      make(map[int64]*Client),
 			rooms:      make(map[int64]map[*Client]bool),
-			forward:    make(chan *models.Message, 1024),
+			forward:    make(chan *messagesmodel.Message, 1024),
 			killClient: make(chan *Client, 64),
 		}
 	}
-	pkg.Infof(
+	logger.Infof(
 		"[Gateway FanoutPool] ready workers=%d threshold=%d batch_size=%d",
 		workerCount,
 		hub.fanoutThreshold,
@@ -151,7 +151,7 @@ func (s *hubShard) run(ctx context.Context) {
 		case msg := <-s.forward:
 			payload, err := json.Marshal(msg)
 			if err != nil {
-				pkg.Infof("[Local Hub 异常] 无法序列化消息 %v", err)
+				logger.Infof("[Local Hub 异常] 无法序列化消息 %v", err)
 				continue
 			}
 			s.dispatchMessage(msg, payload)
@@ -327,7 +327,7 @@ func (h *Hub) DisbandRoom(roomID int64) {
 }
 
 // Publish 将跨节点消息投递到房间对应分片。
-func (h *Hub) Publish(msg *models.Message) {
+func (h *Hub) Publish(msg *messagesmodel.Message) {
 	if msg == nil {
 		return
 	}
@@ -472,25 +472,25 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 	_, err := pubsub.Receive(ctx)
 	metrics.ObserveRedisPubSub("im:broadcast:room:*", "subscribe", err)
 	if err != nil {
-		pkg.Fatalf("[物理阻断] Redis Pub/Sub 全局总线连接失败: %v", err)
+		logger.Fatalf("[物理阻断] Redis Pub/Sub 全局总线连接失败: %v", err)
 	}
 
-	pkg.Infoln("[全局中枢] Redis 跨节点广播总线本地监听实例已成功点火...")
+	logger.Infoln("[全局中枢] Redis 跨节点广播总线本地监听实例已成功点火...")
 
 	ch := pubsub.Channel(redis.WithChannelSize(10000))
 	for {
 		select {
 		case <-ctx.Done():
-			pkg.Infoln("[全局中枢] 收到系统关闭信号，Redis 监听协程安全退出")
+			logger.Infoln("[全局中枢] 收到系统关闭信号，Redis 监听协程安全退出")
 			return
 		case redisMsg := <-ch:
 			envelope, err := protocol.Unmarshal([]byte(redisMsg.Payload))
 			if err != nil {
-				pkg.Infof("[data dirty] cross-node broadcast parse failed: %v", err)
+				logger.Infof("[data dirty] cross-node broadcast parse failed: %v", err)
 				continue
 			}
 
-			msg := &models.Message{
+			msg := &messagesmodel.Message{
 				ID:          envelope.MessageID,
 				RoomSeq:     envelope.RoomSeq,
 				RoomID:      envelope.RoomID,
@@ -506,7 +506,7 @@ func StartGlobalListener(ctx context.Context, localHub *Hub) {
 }
 
 // dispatchMessage 将消息分发给房间内所有客户端。
-func (s *hubShard) dispatchMessage(msg *models.Message, payload []byte) {
+func (s *hubShard) dispatchMessage(msg *messagesmodel.Message, payload []byte) {
 	s.mu.RLock()
 	clients := make([]*Client, 0, len(s.rooms[msg.RoomID]))
 	for client := range s.rooms[msg.RoomID] {
@@ -526,7 +526,7 @@ func (s *hubShard) dispatchMessage(msg *models.Message, payload []byte) {
 	if len(clients) < s.hub.fanoutThreshold {
 		dispatched := 0
 		for _, client := range clients {
-			if client.TrySend(payload) {
+			if client.TrySend(payload, msg.CreatedAt) {
 				dispatched++
 			} else {
 				metrics.ObserveHubQueueDrop(msg.RoomID, "client_send_full")
@@ -555,7 +555,7 @@ func (s *hubShard) dispatchMessage(msg *models.Message, payload []byte) {
 		task := func() {
 			defer batches.Done()
 			for _, client := range batch {
-				if client.TrySend(payload) {
+				if client.TrySend(payload, msg.CreatedAt) {
 					dispatched.Add(1)
 					continue
 				}

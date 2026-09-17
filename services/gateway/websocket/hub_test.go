@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"lan-im-go/models"
+	messagesmodel "lan-im-go/services/messages/models"
 	"sync"
 	"testing"
 	"time"
@@ -34,7 +34,7 @@ func clientFor(hub *Hub, userID int64) *Client {
 	return &Client{
 		Hub:    hub,
 		UserID: userID,
-		Send:   make(chan []byte, 256),
+		Send:   make(chan OutboundMessage, 256),
 	}
 }
 
@@ -86,7 +86,7 @@ func TestHub_ForwardMessage(t *testing.T) {
 
 	hub.Register(client, []int64{100})
 
-	msg := &models.Message{
+	msg := &messagesmodel.Message{
 		RoomID:      100,
 		SenderID:    2,
 		Content:     "hello",
@@ -97,9 +97,9 @@ func TestHub_ForwardMessage(t *testing.T) {
 	hub.Publish(msg)
 
 	select {
-	case raw := <-client.Send:
-		var received models.Message
-		if err := json.Unmarshal(raw, &received); err != nil {
+	case outbound := <-client.Send:
+		var received messagesmodel.Message
+		if err := json.Unmarshal(outbound.Payload, &received); err != nil {
 			t.Fatalf("failed to unmarshal forwarded message: %v", err)
 		}
 		if received.Content != "hello" {
@@ -123,7 +123,7 @@ func TestHub_ForwardMessageToMultipleClients(t *testing.T) {
 		hub.Register(client, []int64{100})
 	}
 
-	msg := &models.Message{
+	msg := &messagesmodel.Message{
 		RoomID:      100,
 		SenderID:    99,
 		Content:     "broadcast",
@@ -163,7 +163,7 @@ func TestHub_LargeRoomFanoutPreservesMessageOrder(t *testing.T) {
 	}
 
 	for sequence := 1; sequence <= 2; sequence++ {
-		hub.Publish(&models.Message{
+		hub.Publish(&messagesmodel.Message{
 			RoomID:      600,
 			SenderID:    999,
 			Content:     "fanout",
@@ -176,9 +176,9 @@ func TestHub_LargeRoomFanoutPreservesMessageOrder(t *testing.T) {
 	for _, client := range clients {
 		for sequence := 1; sequence <= 2; sequence++ {
 			select {
-			case raw := <-client.Send:
-				var received models.Message
-				if err := json.Unmarshal(raw, &received); err != nil {
+			case outbound := <-client.Send:
+				var received messagesmodel.Message
+				if err := json.Unmarshal(outbound.Payload, &received); err != nil {
 					t.Fatalf("unmarshal fanout message: %v", err)
 				}
 				want := fmt.Sprintf("msg-%d", sequence)
