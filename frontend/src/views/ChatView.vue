@@ -333,9 +333,9 @@ function enrichMessage(m) {
   }
 }
 
-function scrollToBottom() {
+function scrollToBottom(behavior = 'smooth') {
   nextTick(() => {
-    if (!historySearchActive.value) msgBox.value?.scrollTo({ top: msgBox.value.scrollHeight, behavior: 'smooth' })
+    if (!historySearchActive.value) msgBox.value?.scrollTo({ top: msgBox.value.scrollHeight, behavior })
   })
 }
 
@@ -370,7 +370,7 @@ async function selectRoom(r) {
   members.value = memberRes.status === 'fulfilled' ? normalizeList(memberRes.value) : []
   // 历史请求期间可能已经收到实时消息，合并而不是覆盖，避免丢气泡或重复展示。
   messages.value = mergeMessages((msgRes.status === 'fulfilled' ? normalizeList(msgRes.value) : []).map(enrichMessage), messages.value)
-  scrollToBottom()
+  scrollToBottom('instant')
 }
 
 async function toggleAgent() { await changeAgent(false) }
