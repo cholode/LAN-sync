@@ -31,6 +31,19 @@ scrape_configs:
           - backend:6060
         labels:
           service: backend
+          node_id: gateway-1
+          project: lan-im-go
+      - targets:
+          - gateway-2:6060
+        labels:
+          service: backend
+          node_id: gateway-2
+          project: lan-im-go
+      - targets:
+          - gateway-3:6060
+        labels:
+          service: backend
+          node_id: gateway-3
           project: lan-im-go
 
   - job_name: lan-im-agent-api

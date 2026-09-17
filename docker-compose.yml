@@ -137,7 +137,7 @@ services:
           memory: 4G
 
   # --- [4] 业务算力层：Go Backend ---
-  backend:
+  backend: &gateway-service
     build:
       context: .
       dockerfile: services/gateway/Dockerfile.monolith
@@ -219,6 +219,18 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+
+  gateway-2:
+    <<: *gateway-service
+    container_name: im-gateway-2
+    ports: []
+    command: ["/bin/sh", "-c", "NODE_ID=gateway-2 exec /app/im-server"]
+
+  gateway-3:
+    <<: *gateway-service
+    container_name: im-gateway-3
+    ports: []
+    command: ["/bin/sh", "-c", "NODE_ID=gateway-3 exec /app/im-server"]
 
   # 编号状态只保存在内存中：禁止扩容，不自动重启，不提供崩溃恢复保证。
   message-sequencer:
@@ -619,6 +631,8 @@ services:
         hard: 65535
     depends_on:
       - backend
+      - gateway-2
+      - gateway-3
       - admin-service
       - room-service
       - message-service
