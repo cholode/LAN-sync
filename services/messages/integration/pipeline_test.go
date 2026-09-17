@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	messagerepo "lan-im-go/services/messages/repository"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -17,20 +18,19 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	protocol "lan-im-go/contracts/events"
-	"lan-im-go/models"
-	"lan-im-go/repository"
-	messages "lan-im-go/services/messages/api"
+	messagesmodel "lan-im-go/services/messages/models"
+
 	"lan-im-go/services/messages/archiver"
 	"lan-im-go/services/messages/producer"
 	"lan-im-go/services/messages/sequencer"
 )
 
 type bothStores struct {
-	repository.MessageRepository
-	second repository.MessageRepository
+	messagerepo.MessageRepository
+	second messagerepo.MessageRepository
 }
 
-func (s bothStores) SaveMessageBatch(batch []*models.Message) error {
+func (s bothStores) SaveMessageBatch(batch []*messagesmodel.Message) error {
 	if err := s.MessageRepository.SaveMessageBatch(batch); err != nil {
 		return err
 	}
@@ -81,10 +81,10 @@ func TestSequencedPipeline(t *testing.T) {
 	}
 	sqlDB, _ := db.DB()
 	defer sqlDB.Close()
-	if err := db.AutoMigrate(&models.Message{}); err != nil {
+	if err := db.AutoMigrate(&messagesmodel.Message{}); err != nil {
 		t.Fatal(err)
 	}
-	mysqlRepo := messages.NewMySQLRepository(db)
+	mysqlRepo := messagerepo.NewMySQLRepository(db)
 	mc, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestSequencedPipeline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mongoRepo := messages.NewMongoRepository(collection)
+	mongoRepo := messagerepo.NewMongoRepository(collection)
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer rdb.Close()
 	newReader := func(name, group string) *kafka.Reader {
@@ -173,11 +173,11 @@ func TestSequencedPipeline(t *testing.T) {
 	}
 	// 广播完成后才启动归档，证明数据库不在实时推送的依赖路径上。
 	var before int64
-	db.Model(&models.Message{}).Where("room_id = ?", 1).Count(&before)
+	db.Model(&messagesmodel.Message{}).Where("room_id = ?", 1).Count(&before)
 	if before != 0 {
 		t.Fatal("测试数据库并非空白隔离数据库")
 	}
-	defer db.Unscoped().Where("room_id = ?", 1).Delete(&models.Message{})
+	defer db.Unscoped().Where("room_id = ?", 1).Delete(&messagesmodel.Message{})
 	worker, err := archiver.NewWorker([]string{broker}, topic, "unused", rdb, bothStores{mysqlRepo, mongoRepo})
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func TestSequencedPipeline(t *testing.T) {
 	if err := <-archiveDone; err != nil {
 		t.Fatal(err)
 	}
-	for name, repo := range map[string]repository.MessageRepository{"mysql": mysqlRepo, "mongo": mongoRepo} {
+	for name, repo := range map[string]messagerepo.MessageRepository{"mysql": mysqlRepo, "mongo": mongoRepo} {
 		t.Run(name, func(t *testing.T) {
 			rows, err := repo.GetHistoryByCursor(1, 0, 20)
 			if err != nil || len(rows) != 3 {
@@ -216,13 +216,13 @@ func TestSequencedPipeline(t *testing.T) {
 				}
 			}
 			original := *rows[0]
-			if err := repo.SaveMessageBatch([]*models.Message{&original, &original}); err != nil {
+			if err := repo.SaveMessageBatch([]*messagesmodel.Message{&original, &original}); err != nil {
 				t.Fatal(err)
 			}
 			conflict := original
 			conflict.ID++
 			conflict.Content = "冲突内容"
-			if err := repo.SaveMessageBatch([]*models.Message{&conflict}); err == nil {
+			if err := repo.SaveMessageBatch([]*messagesmodel.Message{&conflict}); err == nil {
 				t.Fatal("正式消息冲突未被拒绝")
 			}
 			older, err := repo.GetHistoryByCursor(1, rows[2].ID, 1)
@@ -232,7 +232,7 @@ func TestSequencedPipeline(t *testing.T) {
 		})
 	}
 	// 历史时间倒置也不能改变群序号排序。
-	if err := db.Model(&models.Message{}).Where("room_id = ? AND room_seq = ?", 1, 1).Update("created_at", time.Now().Add(time.Hour)).Error; err != nil {
+	if err := db.Model(&messagesmodel.Message{}).Where("room_id = ? AND room_seq = ?", 1, 1).Update("created_at", time.Now().Add(time.Hour)).Error; err != nil {
 		t.Fatal(err)
 	}
 	rows, err := mysqlRepo.GetHistoryByCursor(1, 0, 20)

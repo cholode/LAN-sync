@@ -101,7 +101,15 @@ func RecordWSReadMessage() {
 
 // RecordWSWriteMessage 记录一条写入 WebSocket 的消息。
 func RecordWSWriteMessage() {
-	wsWriteWindow.Add(time.Now().Unix())
+	RecordWSWriteMessages(1)
+}
+
+// RecordWSWriteMessages 批量记录写入 WebSocket 的业务消息，避免合帧后逐条争用统计锁。
+func RecordWSWriteMessages(count int) {
+	if count <= 0 {
+		return
+	}
+	wsWriteWindow.AddN(time.Now().Unix(), int64(count))
 }
 
 // SetWSSendQueueBacklog 更新发送队列积压量。
@@ -203,11 +211,18 @@ func newSecondWindow(size int) *secondWindow {
 }
 
 func (w *secondWindow) Add(now int64) {
+	w.AddN(now, 1)
+}
+
+func (w *secondWindow) AddN(now, count int64) {
+	if count <= 0 {
+		return
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	idx := int(now % int64(len(w.buckets)))
 	if now == w.lastSec {
-		w.buckets[idx]++
+		w.buckets[idx] += count
 		return
 	}
 	if now > w.lastSec {
@@ -221,7 +236,7 @@ func (w *secondWindow) Add(now int64) {
 			w.buckets[clearIdx] = 0
 		}
 	}
-	w.buckets[idx] = 1
+	w.buckets[idx] = count
 	w.lastSec = now
 	w.lastIndex = idx
 }

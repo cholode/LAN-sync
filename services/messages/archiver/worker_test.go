@@ -9,7 +9,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	protocol "lan-im-go/contracts/events"
-	"lan-im-go/models"
+	messagesmodel "lan-im-go/services/messages/models"
 )
 
 type readerStub struct {
@@ -50,8 +50,8 @@ func TestWorkerFlushesPartialBatchBeforeExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	r := &readerStub{messages: records(t, 3), cancel: cancel}
-	var saved []*models.Message
-	w := &Worker{reader: r, topic: "test", saveBatch: func(batch []*models.Message) error {
+	var saved []*messagesmodel.Message
+	w := &Worker{reader: r, topic: "test", saveBatch: func(batch []*messagesmodel.Message) error {
 		saved = append(saved, batch...)
 		return nil
 	}}
@@ -76,7 +76,7 @@ func TestWorkerStopsBeforeReadingNextBatchOnWriteFailure(t *testing.T) {
 	defer cancel()
 	r := &readerStub{messages: records(t, batchSize+1), cancel: cancel}
 	want := errors.New("数据库暂不可用")
-	w := &Worker{reader: r, topic: "test", saveBatch: func([]*models.Message) error { return want }}
+	w := &Worker{reader: r, topic: "test", saveBatch: func([]*messagesmodel.Message) error { return want }}
 	if err := w.Start(ctx); !errors.Is(err, want) {
 		t.Fatalf("未返回写入错误: %v", err)
 	}

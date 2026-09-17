@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"lan-im-go/contracts/events"
-	"lan-im-go/models"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
+	messagesmodel "lan-im-go/services/messages/models"
+	messagerepo "lan-im-go/services/messages/repository"
+
 	"lan-im-go/services/messages/search"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 	"strconv"
 	"time"
@@ -24,7 +25,7 @@ type Worker struct {
 	topic     string
 	partition int
 	offsetKey string
-	saveBatch func([]*models.Message) error
+	saveBatch func([]*messagesmodel.Message) error
 }
 
 // messageReader 隔离 Kafka 客户端，便于验证停机刷新与批次提交顺序。
@@ -34,7 +35,7 @@ type messageReader interface {
 	Lag() int64
 }
 
-func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client, repo repository.MessageRepository) (*Worker, error) {
+func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client, repo messagerepo.MessageRepository) (*Worker, error) {
 	const partition = 0
 	offsetKey := fmt.Sprintf("im:kafka:offset:{%s}:%d", topic, partition)
 
@@ -44,7 +45,7 @@ func NewWorker(brokers []string, topic string, groupID string, rdb *redis.Client
 		if err == nil {
 			if saved, parseErr := strconv.ParseInt(val, 10, 64); parseErr == nil {
 				startOffset = saved + 1
-				pkg.Infof("[Archiver] 从 Redis 恢复 offset=%d, 起始位置=%d", saved, startOffset)
+				logger.Infof("[Archiver] 从 Redis 恢复 offset=%d, 起始位置=%d", saved, startOffset)
 			}
 		}
 	}
@@ -93,7 +94,7 @@ type cachedMsg struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*models.Message) {
+func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*messagesmodel.Message) {
 	if w.rdb == nil || len(msgs) == 0 {
 		return
 	}
@@ -126,7 +127,7 @@ func (w *Worker) pushLatestToRedis(ctx context.Context, msgs []*models.Message) 
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
-		pkg.Infof("[Archiver] Redis 热点缓存写入失败: %v", err)
+		logger.Infof("[Archiver] Redis 热点缓存写入失败: %v", err)
 	}
 }
 
@@ -140,9 +141,9 @@ func (w *Worker) saveOffset(ctx context.Context, offset int64) error {
 func (w *Worker) Start(ctx context.Context) error {
 	defer w.reader.Close()
 
-	pkg.Infof("[Archiver] 稳态消费者已启动（分区直读模式 1000条/500ms + Redis offset）")
+	logger.Infof("[Archiver] 稳态消费者已启动（分区直读模式 1000条/500ms + Redis offset）")
 
-	msgBatch := make([]*models.Message, 0, batchSize)
+	msgBatch := make([]*messagesmodel.Message, 0, batchSize)
 	var lastOffset int64
 
 	flush := func(flushCtx context.Context) error {
@@ -158,13 +159,13 @@ func (w *Worker) Start(ctx context.Context) error {
 			return fmt.Errorf("归档批次写入失败: %w", err)
 		}
 		if err := search.IndexMessages(flushCtx, msgBatch); err != nil {
-			pkg.Warnf("[Archiver] 搜索索引写入失败，主存储已完成: %v", err)
+			logger.Warnf("[Archiver] 搜索索引写入失败，主存储已完成: %v", err)
 		}
 		w.pushLatestToRedis(flushCtx, msgBatch)
 		if err := w.saveOffset(flushCtx, lastOffset); err != nil {
 			return fmt.Errorf("归档游标保存失败: %w", err)
 		}
-		pkg.Infof("[Archiver] 批量写入成功: %d 条 offset=%d", count, lastOffset)
+		logger.Infof("[Archiver] 批量写入成功: %d 条 offset=%d", count, lastOffset)
 		msgBatch = msgBatch[:0]
 		return nil
 	}
@@ -181,7 +182,7 @@ func (w *Worker) Start(ctx context.Context) error {
 			if err := flush(flushCtx); err != nil {
 				return err
 			}
-			pkg.Infoln("[Archiver] 消费者安全退出")
+			logger.Infoln("[Archiver] 消费者安全退出")
 			return nil
 		case <-ticker.C:
 			if err := flush(ctx); err != nil {
@@ -199,7 +200,7 @@ func (w *Worker) Start(ctx context.Context) error {
 				continue
 			}
 			metrics.ObserveKafkaReadError(w.topic, err)
-			pkg.Infof("[Archiver] Kafka 读取异常: %v", err)
+			logger.Infof("[Archiver] Kafka 读取异常: %v", err)
 			continue
 		}
 		metrics.ObserveKafkaConsume(w.topic, readStart, nil)
@@ -213,7 +214,7 @@ func (w *Worker) Start(ctx context.Context) error {
 		if envelope.MessageID <= 0 || envelope.RoomSeq <= 0 {
 			return fmt.Errorf("正式消息缺少编号 offset=%d，禁止归档时重新编号", m.Offset)
 		}
-		msgBatch = append(msgBatch, &models.Message{
+		msgBatch = append(msgBatch, &messagesmodel.Message{
 			ID:          envelope.MessageID,
 			RoomSeq:     envelope.RoomSeq,
 			RoomID:      envelope.RoomID,

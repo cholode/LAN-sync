@@ -34,10 +34,15 @@ type RedisConfig struct {
 }
 
 type KafkaConfig struct {
-	Brokers       []string
-	Topic         string
-	IngressTopic  string
-	ArchiverGroup string
+	Brokers               []string
+	Topic                 string
+	IngressTopic          string
+	ArchiverGroup         string
+	ProducerBatchMessages int
+	ProducerBatchBytes    int
+	ProducerBatchWait     time.Duration
+	ProducerQueueCapacity int
+	ProducerWriteTimeout  time.Duration
 }
 
 var (
@@ -64,10 +69,15 @@ func Messaging() MessagingConfig {
 				WriteTimeout: envDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
 			},
 			Kafka: KafkaConfig{
-				Brokers:       splitNonEmpty(brokersValue),
-				Topic:         envString("KAFKA_TOPIC", defaultKafkaTopic),
-				IngressTopic:  envString("KAFKA_INGRESS_TOPIC", "im_chat_messages_ingress_v1"),
-				ArchiverGroup: envString("KAFKA_ARCHIVER_GROUP", defaultKafkaArchiverGroup),
+				Brokers:               splitNonEmpty(brokersValue),
+				Topic:                 envString("KAFKA_TOPIC", defaultKafkaTopic),
+				IngressTopic:          envString("KAFKA_INGRESS_TOPIC", "im_chat_messages_ingress_v1"),
+				ArchiverGroup:         envString("KAFKA_ARCHIVER_GROUP", defaultKafkaArchiverGroup),
+				ProducerBatchMessages: envInt("KAFKA_PRODUCER_BATCH_MESSAGES", 1000),
+				ProducerBatchBytes:    envInt("KAFKA_PRODUCER_BATCH_BYTES", 1<<20),
+				ProducerBatchWait:     envDuration("KAFKA_PRODUCER_BATCH_WAIT", 5*time.Millisecond),
+				ProducerQueueCapacity: envInt("KAFKA_PRODUCER_QUEUE_CAPACITY", 20000),
+				ProducerWriteTimeout:  envDuration("KAFKA_PRODUCER_WRITE_TIMEOUT", 10*time.Second),
 			},
 		}
 	})

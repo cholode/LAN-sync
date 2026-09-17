@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/kafka-go"
 	"lan-im-go/config"
-	protocol "lan-im-go/contracts/events"
 	"lan-im-go/services/messages/runtime"
 	"lan-im-go/services/messages/sequencer"
 	"lan-im-go/shared/observability/metrics"
@@ -44,20 +44,31 @@ func run() error {
 	defer reader.Close()
 	relay := kafka.NewReader(kafka.ReaderConfig{Brokers: cfg.Brokers, Topic: cfg.Topic, GroupID: "im_relay_" + cfg.Topic, MinBytes: 1, MaxBytes: 10e6, MaxWait: 20 * time.Millisecond, CommitInterval: 0})
 	defer relay.Close()
-	writer := &kafka.Writer{Addr: kafka.TCP(cfg.Brokers...), Topic: cfg.Topic, Balancer: &kafka.Hash{}, RequiredAcks: kafka.RequireAll, BatchTimeout: 5 * time.Millisecond}
+	// 本机阶梯测试的候选配置；低流量由时间窗口触发，不等待凑满 4000 条。
+	batch := sequencer.BatchOptions{MaxMessages: 4000, MaxBytes: 1 << 20, MaxWait: 5 * time.Millisecond}
+	writer := &kafka.Writer{Addr: kafka.TCP(cfg.Brokers...), Topic: cfg.Topic, Balancer: &kafka.Hash{}, RequiredAcks: kafka.RequireAll, BatchSize: batch.MaxMessages, BatchBytes: int64(batch.MaxBytes), BatchTimeout: batch.MaxWait}
 	defer writer.Close()
 	done := make(chan error, 3)
 	go func() {
-		done <- sequencer.Run(ctx, reader, func(ctx context.Context, msg kafka.Message) error { return writer.WriteMessages(ctx, msg) }, sequencer.New())
+		done <- sequencer.RunBatched(ctx, reader, writer.WriteMessages, sequencer.New(), batch)
 	}()
 	// 广播循环独立于编号与数据库归档，Redis 故障不会阻止编号结果写入 Kafka。
 	go func() {
-		done <- sequencer.Relay(ctx, relay, func(ctx context.Context, msg protocol.MessageEnvelope, value []byte) error {
-			channel := fmt.Sprintf("im:broadcast:room:%d", msg.RoomID)
-			err := config.RedisClient.Publish(ctx, channel, value).Err()
-			metrics.ObserveRedisPubSub(channel, "publish", err)
+		done <- sequencer.RelayBatched(ctx, relay, func(ctx context.Context, messages []sequencer.RelayMessage) error {
+			pipe := config.RedisClient.Pipeline()
+			defer pipe.Close()
+			commands := make([]*redis.IntCmd, len(messages))
+			for i, msg := range messages {
+				channel := fmt.Sprintf("im:broadcast:room:%d", msg.Message.RoomID)
+				commands[i] = pipe.Publish(ctx, channel, msg.Value)
+			}
+			_, err := pipe.Exec(ctx)
+			for i, command := range commands {
+				channel := fmt.Sprintf("im:broadcast:room:%d", messages[i].Message.RoomID)
+				metrics.ObserveRedisPubSub(channel, "publish", command.Err())
+			}
 			return err
-		})
+		}, batch)
 	}()
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics.Handler())

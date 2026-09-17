@@ -5,7 +5,7 @@ import (
 
 	"github.com/panjf2000/ants/v2"
 
-	"lan-im-go/pkg"
+	"lan-im-go/shared/observability/logger"
 )
 
 // Pool 是可独立持有的协程池，用于限制并发并复用 goroutine。
@@ -23,7 +23,7 @@ func New(workerSize int) (*Pool, error) {
 		workerSize,
 		ants.WithPreAlloc(true),
 		ants.WithPanicHandler(func(value interface{}) {
-			pkg.Errorf("[TaskPool] panic recovered: %v", value)
+			logger.Errorf("[TaskPool] panic recovered: %v", value)
 		}),
 	)
 	if err != nil {
@@ -78,10 +78,10 @@ func Init(workerSize int) {
 	globalPoolOnce.Do(func() {
 		pool, err := New(workerSize)
 		if err != nil {
-			pkg.Fatalf("[TaskPool] 初始化失败: %v", err)
+			logger.Fatalf("[TaskPool] 初始化失败: %v", err)
 		}
 		globalPool = pool
-		pkg.Infof("[TaskPool] 协程池已初始化, capacity=%d, running=%d", pool.Cap(), pool.Running())
+		logger.Infof("[TaskPool] 协程池已初始化, capacity=%d, running=%d", pool.Cap(), pool.Running())
 	})
 }
 
@@ -98,7 +98,7 @@ func Submit(task func()) error {
 // Go 提交任务到协程池，无返回值（便捷方法）
 func Go(task func()) {
 	if err := Submit(task); err != nil {
-		pkg.Errorf("[TaskPool] 提交失败: %v", err)
+		logger.Errorf("[TaskPool] 提交失败: %v", err)
 	}
 }
 
@@ -130,6 +130,6 @@ func Cap() int {
 func Release() {
 	if globalPool != nil {
 		globalPool.Release()
-		pkg.Infoln("[TaskPool] 协程池已释放")
+		logger.Infoln("[TaskPool] 协程池已释放")
 	}
 }
