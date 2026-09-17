@@ -1,0 +1,17 @@
+{
+  "run_id": "mu54llt6",
+  "connections": 10000,
+  "rooms": 100,
+  "senders_per_room": 10,
+  "rate_per_sender": 1,
+  "ramp_seconds": 120,
+  "send_seconds": 120,
+  "quiet_seconds": 60,
+  "launched_at": 1789625137578,
+  "k6_pid": 30740,
+  "t0": 1789625156280,
+  "exited_at": 1789625458431,
+  "code": 99,
+  "signal": null,
+  "capture_finished_at": 1789625475843
+}
