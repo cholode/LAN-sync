@@ -83,3 +83,22 @@ func TestCompareHonorsTimeout(t *testing.T) {
 		t.Fatalf("expected timeout, got %v", err)
 	}
 }
+
+func TestDisabledRateLimitStillBoundsBcrypt(t *testing.T) {
+	cfg := testConfig()
+	cfg.DisableRateLimit = true
+	p := NewLoginProtector(cfg)
+	for i := 0; i < 1000; i++ {
+		if err := p.Allow("127.0.0.1", "alice"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(p.ips) != 0 || len(p.pairs) != 0 {
+		t.Fatal("disabled limiter must not accumulate counters")
+	}
+	p.slots <- struct{}{}
+	defer func() { <-p.slots }()
+	if err := p.Compare(context.Background(), func() error { return nil }); !errors.Is(err, ErrBcryptBusy) {
+		t.Fatalf("bcrypt concurrency protection must remain active: %v", err)
+	}
+}

@@ -3,10 +3,11 @@ package api
 import (
 	"context"
 	"errors"
-	"lan-im-go/models"
-	"lan-im-go/pkg"
-	"lan-im-go/repository"
+	usersmodel "lan-im-go/services/users/models"
+
 	authsecurity "lan-im-go/services/auth/security"
+	"lan-im-go/shared/auth"
+	"lan-im-go/shared/observability/logger"
 	"lan-im-go/shared/observability/metrics"
 
 	"net/http"
@@ -24,6 +25,7 @@ var loginProtector = authsecurity.NewLoginProtector(loginProtectionConfig())
 
 func loginProtectionConfig() authsecurity.Config {
 	cfg := authsecurity.DefaultConfig()
+	cfg.DisableRateLimit = strings.EqualFold(strings.TrimSpace(os.Getenv("LOGIN_RATE_LIMIT_ENABLED")), "false")
 	cfg.IPLimit = positiveEnvInt("LOGIN_IP_LIMIT_PER_MINUTE", cfg.IPLimit)
 	cfg.PairLimit = positiveEnvInt("LOGIN_IP_USERNAME_LIMIT_PER_MINUTE", cfg.PairLimit)
 	cfg.BcryptConcurrent = positiveEnvInt("LOGIN_BCRYPT_CONCURRENCY", cfg.BcryptConcurrent)
@@ -50,7 +52,7 @@ type LoginRequest struct {
 }
 
 // LoginHandler 用户登录接口
-func LoginHandler(c *gin.Context) {
+func (h *Handler) LoginHandler(c *gin.Context) {
 	startedAt := time.Now()
 	result := "internal_error"
 	defer func() { metrics.ObserveLogin(startedAt, result) }()
@@ -58,7 +60,7 @@ func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	// 参数绑定与校验
 
-	pkg.Infof("登录界面进入成功\n")
+	logger.Infof("登录界面进入成功\n")
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		result = "invalid_request"
@@ -76,7 +78,7 @@ func LoginHandler(c *gin.Context) {
 	defer cancel()
 
 	// 根据用户名查询用户信息
-	user, err := repository.User.GetByUsernameContext(ctx, req.Username)
+	user, err := h.Users.GetByUsernameContext(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			result = "timeout"
@@ -111,22 +113,22 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 	// 密码校验：使用bcrypt对比加密密码，禁止明文验证
-	if user.Role != models.RoleUser {
+	if user.Role != auth.RoleUser {
 		result = "admin_login_required"
 		c.JSON(http.StatusForbidden, gin.H{"error": "管理员账号请使用管理后台登录"})
 		return
 	}
 
 	// 生成JWT身份令牌
-	token, err := pkg.GenerateToken(user.ID, user.Role)
+	token, err := auth.GenerateToken(user.ID, user.Role)
 	if err != nil {
 		result = "token_error"
-		pkg.Infof("token generate error: %v\n", err)
+		logger.Infof("token generate error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "令牌生成失败"})
 		return
 	}
 
-	pkg.Infof("%v 登录成功\n", user.Username)
+	logger.Infof("%v 登录成功\n", user.Username)
 	result = "success"
 	// 返回登录成功响应
 	c.JSON(http.StatusOK, gin.H{
@@ -149,7 +151,7 @@ type RegisterRequest struct {
 }
 
 // RegisterHandler 用户注册接口
-func RegisterHandler(c *gin.Context) {
+func (h *Handler) RegisterHandler(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数格式不合法：账号或密码长度不符合规范"})
@@ -157,7 +159,7 @@ func RegisterHandler(c *gin.Context) {
 	}
 
 	// 校验用户名是否已存在，减轻数据库压力
-	existingUser, _ := repository.User.GetByUsername(req.Username)
+	existingUser, _ := h.Users.GetByUsername(req.Username)
 	if existingUser != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "该用户名已被注册，请更换"})
 		return
@@ -171,7 +173,7 @@ func RegisterHandler(c *gin.Context) {
 	}
 
 	// 构建用户数据
-	user := &models.User{
+	user := &usersmodel.User{
 		Username: req.Username,
 		Password: string(hashedPassword),
 		Role:     0,  // 0=普通用户，默认权限
@@ -179,7 +181,7 @@ func RegisterHandler(c *gin.Context) {
 	}
 
 	// 用户数据入库，数据库唯一索引保障并发注册安全
-	if err := repository.User.CreateUser(user); err != nil {
+	if err := h.Users.CreateUser(user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "注册失败，并发冲突请重试"})
 		return
 	}

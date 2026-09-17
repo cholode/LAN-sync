@@ -16,6 +16,7 @@ var (
 )
 
 type Config struct {
+	DisableRateLimit bool
 	IPLimit          int
 	IPWindow         time.Duration
 	PairLimit        int
@@ -65,6 +66,9 @@ func NewLoginProtector(config Config) *LoginProtector {
 }
 
 func (p *LoginProtector) Allow(ip, username string) error {
+	if p.config.DisableRateLimit {
+		return nil
+	}
 	now := p.now()
 	username = normalizeUsername(username)
 	p.mu.Lock()
