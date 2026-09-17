@@ -1,0 +1,65 @@
+{
+  "services": {
+    "backend": {
+      "environment": {
+        "LAN_IM_LOG_LEVEL": "off",
+        "WS_HEARTBEAT_ENABLED": "true",
+        "KAFKA_INGRESS_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_ingress",
+        "KAFKA_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_sequenced",
+        "MONGO_DB": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436"
+      },
+      "logging": {
+        "driver": "none"
+      }
+    },
+    "gateway-2": {
+      "environment": {
+        "LAN_IM_LOG_LEVEL": "off",
+        "WS_HEARTBEAT_ENABLED": "true",
+        "KAFKA_INGRESS_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_ingress",
+        "KAFKA_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_sequenced",
+        "MONGO_DB": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436"
+      },
+      "logging": {
+        "driver": "none"
+      }
+    },
+    "message-sequencer": {
+      "ports": [
+        "16062:6062"
+      ],
+      "environment": {
+        "KAFKA_INGRESS_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_ingress",
+        "KAFKA_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_sequenced"
+      }
+    },
+    "gateway-3": {
+      "environment": {
+        "LAN_IM_LOG_LEVEL": "off",
+        "WS_HEARTBEAT_ENABLED": "true",
+        "KAFKA_INGRESS_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_ingress",
+        "KAFKA_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_sequenced",
+        "MONGO_DB": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436"
+      },
+      "logging": {
+        "driver": "none"
+      }
+    },
+    "nginx": {
+      "logging": {
+        "driver": "none"
+      }
+    },
+    "message-worker": {
+      "environment": {
+        "LAN_IM_LOG_LEVEL": "off",
+        "KAFKA_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_sequenced",
+        "KAFKA_INGRESS_TOPIC": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_ingress",
+        "MONGO_DB": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436"
+      },
+      "logging": {
+        "driver": "none"
+      }
+    }
+  }
+}

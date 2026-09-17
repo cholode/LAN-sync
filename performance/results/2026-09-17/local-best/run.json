@@ -1,0 +1,22 @@
+{
+  "run_id": "mu57ftnj",
+  "connections": 10000,
+  "rooms": 100,
+  "senders_per_room": 10,
+  "rate_per_sender": 1,
+  "ramp_seconds": 120,
+  "send_seconds": 120,
+  "quiet_seconds": 60,
+  "gateway_containers": [
+    "im-backend",
+    "im-gateway-2",
+    "im-gateway-3"
+  ],
+  "launched_at": 1789629906655,
+  "k6_pid": 42616,
+  "t0": 1789629918655,
+  "exited_at": 1789630221205,
+  "code": 0,
+  "signal": null,
+  "capture_finished_at": 1789630238213
+}

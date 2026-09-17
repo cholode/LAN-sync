@@ -1,6 +1,14 @@
 nginx_conf/
 .env
 data/
+# 2026-09-16 至 2026-09-17 临时压测结果；正式归档放在 performance/results/。
+data/load-*/
+data/perf-*/
+data/producer-batch-test-*/
+data/sequencer-bench-*/
+data/sequencer-sweep-*/
+performance/runs/
+performance/tmp/
 data_storage/
 frontend/node_modules/
 frontend/dist/

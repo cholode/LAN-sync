@@ -1,0 +1,35 @@
+{
+  "client_active_ping": true,
+  "ramp_disconnects_count_as_failures": false,
+  "log_driver": "none",
+  "elasticsearch_enabled": true,
+  "rate_per_sender": 1,
+  "send_seconds": 120,
+  "gateway_heartbeat_enabled": true,
+  "stopped_nonessential_services": [
+    "qdrant",
+    "minio",
+    "grafana",
+    "admin",
+    "admin-frontend",
+    "agent-service",
+    "agent-worker",
+    "message-service",
+    "room-service"
+  ],
+  "gateway_instances": 3,
+  "ramp_reconnect": "exponential 100ms to 5s with 20 percent jitter",
+  "topics": {
+    "output": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_sequenced",
+    "mongo_db": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436",
+    "ingress": "im_load_gateway3_e2e_20ms_reconnect_2m_20260917_152436_ingress"
+  },
+  "latency_definition": "gateway websocket read complete to gateway websocket frame write complete, aggregated across three gateways",
+  "gateway_containers": [
+    "im-backend",
+    "im-gateway-2",
+    "im-gateway-3"
+  ],
+  "websocket_batch_window_ms": 20,
+  "receive_only": false
+}

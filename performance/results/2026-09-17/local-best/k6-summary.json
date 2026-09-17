@@ -1,0 +1,159 @@
+{
+    "setup_data": {
+        "t0": 1789629918655
+    },
+    "root_group": {
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {},
+        "name": ""
+    },
+    "metrics": {
+        "load_ramp_connection_errors": {
+            "count": 0,
+            "rate": 0
+        },
+        "load_nonmonotonic_delivery": {
+            "rate": 0,
+            "count": 0
+        },
+        "load_opened": {
+            "count": 10000,
+            "rate": 32.178782214523586
+        },
+        "data_received": {
+            "count": 2531399123,
+            "rate": 8145734.107705301
+        },
+        "ws_msgs_received": {
+            "count": 2179509,
+            "rate": 7013.394544559409
+        },
+        "ws_session_duration": {
+            "max": 300669.2208,
+            "p(90)": 288514.90318,
+            "p(95)": 294508.565395,
+            "p(99)": 299300.837673,
+            "avg": 240538.94921254073,
+            "min": 180270.405,
+            "med": 240550.01185
+        },
+        "vus": {
+            "value": 8792,
+            "min": 8792,
+            "max": 10000
+        },
+        "load_sent": {
+            "count": 119999,
+            "rate": 386.1421686960616
+        },
+        "load_handshake_failures": {
+            "rate": 0,
+            "count": 0
+        },
+        "data_sent": {
+            "count": 16527098,
+            "rate": 53182.18871800884
+        },
+        "load_malformed_delivery": {
+            "count": 0,
+            "rate": 0
+        },
+        "load_received": {
+            "count": 11999900,
+            "rate": 38614.21686960616
+        },
+        "ws_connecting": {
+            "max": 32.5551,
+            "p(90)": 4.73281,
+            "p(95)": 5.1243,
+            "p(99)": 6.467215,
+            "avg": 3.728007620000004,
+            "min": 0.5314,
+            "med": 3.65125
+        },
+        "ws_msgs_sent": {
+            "count": 119999,
+            "rate": 386.1421686960616
+        },
+        "checks": {
+            "passes": 10000,
+            "fails": 0,
+            "thresholds": {
+                "rate==1": false
+            },
+            "value": 1
+        },
+        "vus_max": {
+            "value": 10000,
+            "min": 10000,
+            "max": 10000
+        },
+        "load_socket_errors": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "load_ramp_reconnects": {
+            "count": 0,
+            "rate": 0
+        },
+        "load_closed": {
+            "count": 10000,
+            "rate": 32.178782214523586
+        },
+        "ws_sessions": {
+            "count": 10000,
+            "rate": 32.178782214523586
+        },
+        "ws_ping": {
+            "p(99)": 1197.893,
+            "avg": 316.0871444321561,
+            "min": 0,
+            "med": 5.3642,
+            "max": 1511.3542,
+            "p(90)": 876.6001,
+            "p(95)": 996.0342
+        },
+        "load_handshake_ms": {
+            "p(99)": 7,
+            "avg": 3.8342,
+            "min": 1,
+            "med": 4,
+            "max": 32,
+            "p(90)": 5,
+            "p(95)": 5
+        },
+        "load_received_frames": {
+            "rate": 0,
+            "count": 0
+        },
+        "iteration_duration": {
+            "avg": 310477.9249051889,
+            "min": 309911.2651,
+            "med": 310493.04535000003,
+            "max": 310747.6868,
+            "p(90)": 310677.61854000005,
+            "p(95)": 310698.0468,
+            "p(99)": 310721.202129
+        },
+        "iterations": {
+            "count": 10000,
+            "rate": 32.178782214523586
+        },
+        "load_early_closed": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "load_send_slots_skipped": {
+            "count": 0,
+            "rate": 0
+        }
+    }
+}

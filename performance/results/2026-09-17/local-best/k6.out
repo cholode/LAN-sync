@@ -1,0 +1,54 @@
+
+
+  █ THRESHOLDS
+
+    checks
+    ✓ 'rate==1' rate=100.00%
+
+    load_early_closed
+    ✓ 'count==0' count=0
+
+    load_socket_errors
+    ✓ 'count==0' count=0
+
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 10000   32.178782/s
+    checks_succeeded...: 100.00% 10000 out of 10000
+    checks_failed......: 0.00%   0 out of 10000
+
+
+    CUSTOM
+    load_closed...................: 10000    32.178782/s
+    load_early_closed.............: 0        0/s
+    load_handshake_failures.......: 0        0/s
+    load_handshake_ms.............: avg=3.83ms   min=1ms     med=4ms    max=32ms    p(90)=5ms     p(95)=5ms      p(99)=7ms
+    load_malformed_delivery.......: 0        0/s
+    load_nonmonotonic_delivery....: 0        0/s
+    load_opened...................: 10000    32.178782/s
+    load_ramp_connection_errors...: 0        0/s
+    load_ramp_reconnects..........: 0        0/s
+    load_received.................: 11999900 38614.21687/s
+    load_received_frames..........: 0        0/s
+    load_send_slots_skipped.......: 0        0/s
+    load_sent.....................: 119999   386.142169/s
+    load_socket_errors............: 0        0/s
+
+    EXECUTION
+    iteration_duration............: avg=5m10s    min=5m9s    med=5m10s  max=5m10s   p(90)=5m10s   p(95)=5m10s    p(99)=5m10s
+    iterations....................: 10000    32.178782/s
+    vus...........................: 8792     min=8792      max=10000
+    vus_max.......................: 10000    min=10000     max=10000
+
+    NETWORK
+    data_received.................: 2.5 GB   8.1 MB/s
+    data_sent.....................: 17 MB    53 kB/s
+
+    WEBSOCKET
+    ws_connecting.................: avg=3.72ms   min=531.4µs med=3.65ms max=32.55ms p(90)=4.73ms  p(95)=5.12ms   p(99)=6.46ms
+    ws_msgs_received..............: 2179509  7013.394545/s
+    ws_msgs_sent..................: 119999   386.142169/s
+    ws_ping.......................: avg=316.08ms min=0s      med=5.36ms max=1.51s   p(90)=876.6ms p(95)=996.03ms p(99)=1.19s
+    ws_session_duration...........: avg=4m0s     min=3m0s    med=4m0s   max=5m0s    p(90)=4m48s   p(95)=4m54s    p(99)=4m59s
+    ws_sessions...................: 10000    32.178782/s

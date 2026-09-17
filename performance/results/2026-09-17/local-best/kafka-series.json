@@ -1,0 +1,197 @@
+[
+  {
+    "at": 1789630042822,
+    "seconds": 124.167,
+    "archiver_last_offset": 9419,
+    "relay": {
+      "committed": 8799,
+      "end": 8813,
+      "lag": 14
+    },
+    "sequencer": {
+      "committed": 8785,
+      "end": 8808,
+      "lag": 23
+    }
+  },
+  {
+    "at": 1789630057831,
+    "seconds": 139.176,
+    "archiver_last_offset": 23634,
+    "relay": {
+      "committed": 23829,
+      "end": 23917,
+      "lag": 88
+    },
+    "sequencer": {
+      "committed": 23735,
+      "end": 23880,
+      "lag": 145
+    }
+  },
+  {
+    "at": 1789630072834,
+    "seconds": 154.179,
+    "archiver_last_offset": 38757,
+    "relay": {
+      "committed": 38588,
+      "end": 38612,
+      "lag": 24
+    },
+    "sequencer": {
+      "committed": 38458,
+      "end": 38588,
+      "lag": 130
+    }
+  },
+  {
+    "at": 1789630087846,
+    "seconds": 169.191,
+    "archiver_last_offset": 53270,
+    "relay": {
+      "committed": 53774,
+      "end": 53817,
+      "lag": 43
+    },
+    "sequencer": {
+      "committed": 53714,
+      "end": 53783,
+      "lag": 69
+    }
+  },
+  {
+    "at": 1789630102847,
+    "seconds": 184.192,
+    "archiver_last_offset": 68358,
+    "relay": {
+      "committed": 69017,
+      "end": 69148,
+      "lag": 131
+    },
+    "sequencer": {
+      "committed": 68951,
+      "end": 69096,
+      "lag": 145
+    }
+  },
+  {
+    "at": 1789630117852,
+    "seconds": 199.197,
+    "archiver_last_offset": 83686,
+    "relay": {
+      "committed": 83803,
+      "end": 83809,
+      "lag": 6
+    },
+    "sequencer": {
+      "committed": 83769,
+      "end": 83801,
+      "lag": 32
+    }
+  },
+  {
+    "at": 1789630132854,
+    "seconds": 214.199,
+    "archiver_last_offset": 98601,
+    "relay": {
+      "committed": 98853,
+      "end": 98912,
+      "lag": 59
+    },
+    "sequencer": {
+      "committed": 98660,
+      "end": 98853,
+      "lag": 193
+    }
+  },
+  {
+    "at": 1789630147861,
+    "seconds": 229.206,
+    "archiver_last_offset": 113443,
+    "relay": {
+      "committed": 113623,
+      "end": 113704,
+      "lag": 81
+    },
+    "sequencer": {
+      "committed": 113623,
+      "end": 113703,
+      "lag": 80
+    }
+  },
+  {
+    "at": 1789630162875,
+    "seconds": 244.22,
+    "archiver_last_offset": 119998,
+    "relay": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    },
+    "sequencer": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    }
+  },
+  {
+    "at": 1789630177876,
+    "seconds": 259.221,
+    "archiver_last_offset": 119998,
+    "relay": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    },
+    "sequencer": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    }
+  },
+  {
+    "at": 1789630192879,
+    "seconds": 274.224,
+    "archiver_last_offset": 119998,
+    "relay": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    },
+    "sequencer": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    }
+  },
+  {
+    "at": 1789630207894,
+    "seconds": 289.239,
+    "archiver_last_offset": 119998,
+    "relay": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    },
+    "sequencer": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    }
+  },
+  {
+    "at": 1789630222895,
+    "seconds": 304.24,
+    "archiver_last_offset": 119998,
+    "relay": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    },
+    "sequencer": {
+      "committed": 119999,
+      "end": 119999,
+      "lag": 0
+    }
+  }
+]

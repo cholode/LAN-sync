@@ -1,0 +1,162 @@
+{
+  "run_id": "mu57ftnj",
+  "connections": 10000,
+  "rooms": 100,
+  "senders_per_room": 10,
+  "rate_per_sender": 1,
+  "ramp_seconds": 120,
+  "send_seconds": 120,
+  "quiet_seconds": 60,
+  "gateway_containers": [
+    "im-backend",
+    "im-gateway-2",
+    "im-gateway-3"
+  ],
+  "launched_at": 1789629906655,
+  "k6_pid": 42616,
+  "t0": 1789629918655,
+  "exited_at": 1789630221205,
+  "code": 0,
+  "signal": null,
+  "capture_finished_at": 1789630238213,
+  "opened": 10000,
+  "handshake_failures": 0,
+  "ramp_reconnects": 0,
+  "ramp_connection_errors": 0,
+  "closed": 10000,
+  "peak_server_connections": 10000,
+  "first_full_seconds": 121.489,
+  "final_server_connections": 0,
+  "planned_messages": 120000,
+  "client_sent": 119999,
+  "client_send_rate": 999.9916666666667,
+  "client_send_slots_skipped": 0,
+  "client_deliveries": 11999900,
+  "client_received_frames": 2179509,
+  "expected_deliveries_if_all_sent_delivered": 11999900,
+  "socket_errors": 0,
+  "early_closed": 0,
+  "nonmonotonic": 0,
+  "malformed": 0,
+  "gateway_message_transit_average_ms": 80.94444220610548,
+  "gateway_frame_oldest_average_ms": 84.93009589666222,
+  "gateway_frame_oldest_p95_ms": 190.86877984902168,
+  "gateway_frame_oldest_p99_ms": 273.8612148529729,
+  "server_read_delta": 119999,
+  "server_write_delta": 11999900,
+  "server_frame_delta": 2179509,
+  "average_messages_per_frame": 5.505781348000857,
+  "server_read_errors_delta": 10000,
+  "server_read_timeouts_delta": 0,
+  "server_write_errors_delta": 0,
+  "server_queue_drops_delta": 0,
+  "client_peak_working_set": 4133855232,
+  "client_peak_private": 4184051712,
+  "wsl_peak_working_set": 9976967168,
+  "windows_min_free_bytes": 4531134464,
+  "container_peaks": {
+    "im-message-worker": {
+      "memory": 18098421.76,
+      "cpuPercent": 20.8
+    },
+    "im-nginx": {
+      "memory": 840853094.4,
+      "cpuPercent": 135.46
+    },
+    "im-gateway-3": {
+      "memory": 482030387.2,
+      "cpuPercent": 103.88
+    },
+    "im-gateway-2": {
+      "memory": 481610956.8,
+      "cpuPercent": 106.4
+    },
+    "im-backend": {
+      "memory": 481715814.4,
+      "cpuPercent": 119.27
+    },
+    "im-message-sequencer": {
+      "memory": 89852477.44,
+      "cpuPercent": 43.87
+    },
+    "im-prometheus": {
+      "memory": 116287078.4,
+      "cpuPercent": 4.84
+    },
+    "im-mysql": {
+      "memory": 442918502.4,
+      "cpuPercent": 9.22
+    },
+    "kafka": {
+      "memory": 1289563930.624,
+      "cpuPercent": 259.34
+    },
+    "im-mongo": {
+      "memory": 539177779.2,
+      "cpuPercent": 134
+    },
+    "im-redis": {
+      "memory": 18360565.76,
+      "cpuPercent": 42.93
+    },
+    "im-elasticsearch": {
+      "memory": 1419486691.328,
+      "cpuPercent": 90.25
+    }
+  },
+  "gateway_samples": 164,
+  "gateway_raw_files": 492,
+  "prometheus_samples": 66,
+  "first_socket_error_sample_seconds": null,
+  "kafka": {
+    "max_sequencer_lag": 193,
+    "max_relay_lag": 131,
+    "around_send_end": {
+      "at": 1789630162875,
+      "seconds": 244.22,
+      "archiver_last_offset": 119998,
+      "relay": {
+        "committed": 119999,
+        "end": 119999,
+        "lag": 0
+      },
+      "sequencer": {
+        "committed": 119999,
+        "end": 119999,
+        "lag": 0
+      }
+    },
+    "around_disconnect": {
+      "at": 1789630222895,
+      "seconds": 304.24,
+      "archiver_last_offset": 119998,
+      "relay": {
+        "committed": 119999,
+        "end": 119999,
+        "lag": 0
+      },
+      "sequencer": {
+        "committed": 119999,
+        "end": 119999,
+        "lag": 0
+      }
+    },
+    "final_sample": {
+      "at": 1789630222895,
+      "seconds": 304.24,
+      "archiver_last_offset": 119998,
+      "relay": {
+        "committed": 119999,
+        "end": 119999,
+        "lag": 0
+      },
+      "sequencer": {
+        "committed": 119999,
+        "end": 119999,
+        "lag": 0
+      }
+    }
+  },
+  "sequencer_metric_samples": 164,
+  "mongo_archived_messages": 119999
+}

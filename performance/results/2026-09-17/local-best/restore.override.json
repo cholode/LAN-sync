@@ -1,0 +1,10 @@
+{
+  "services": {
+    "backend": {},
+    "gateway-2": {},
+    "message-sequencer": {},
+    "gateway-3": {},
+    "nginx": {},
+    "message-worker": {}
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "metrics": {
+    "load_closed": {
+      "count": 10000
+    },
+    "load_early_closed": {
+      "count": 0
+    },
+    "load_handshake_failures": {
+      "count": 0
+    },
+    "load_malformed_delivery": {
+      "count": 0
+    },
+    "load_nonmonotonic_delivery": {
+      "count": 0
+    },
+    "load_opened": {
+      "count": 10000
+    },
+    "load_ramp_connection_errors": {
+      "count": 0
+    },
+    "load_ramp_reconnects": {
+      "count": 0
+    },
+    "load_received": {
+      "count": 0
+    },
+    "load_received_frames": {
+      "count": 0
+    },
+    "load_send_slots_skipped": {
+      "count": 0
+    },
+    "load_sent": {
+      "count": 0
+    },
+    "load_server_pings": {
+      "count": 243530
+    },
+    "load_socket_errors": {
+      "count": 0
+    }
+  }
+}
