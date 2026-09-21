@@ -2,6 +2,58 @@
 
 LAN IM 是一个基于 Go 与 WebSocket 的即时通信项目，提供群聊、文件分享和 AI Agent 集成，并通过独立管理后台处理用户权限、群聊和内容治理。
 
+## 部署实测演示
+
+以下截图拍摄于 **2026 年 9 月 17 日**，展示服务器部署后的用户操作与 Grafana 监控。原图保存在 [`docs/screenshots/deployment`](docs/screenshots/deployment)，点击图片可查看大图。
+
+### 1. 注册与登录
+
+用户通过登录页进入 LAN IM 工作区；新用户可创建账号，注册成功后返回登录。
+
+![部署演示：用户登录页面](docs/screenshots/deployment/login.png)
+
+<details>
+<summary>查看注册成功与聊天工作区截图</summary>
+
+![部署演示：创建账号并显示注册成功提示](docs/screenshots/deployment/register.png)
+
+![部署演示：进入 helloworld 房间，WebSocket 显示实时连接](docs/screenshots/deployment/chat-workspace.png)
+
+</details>
+
+### 2. 双账号群聊与历史消息搜索
+
+`admin1` 与 `admin2` 在 `helloworld` 房间内互发消息。左侧提供创建群聊、按群号加入及会话搜索入口，顶部显示实时连接状态。
+
+![部署演示：两个账号在同一房间内收发消息](docs/screenshots/deployment/group-chat.png)
+
+在聊天记录中搜索 `hell`，可以检索到此前发送的 `helloworld` 消息。
+
+![部署演示：按关键词检索历史消息](docs/screenshots/deployment/message-search.png)
+
+### 3. 文件上传与下载
+
+通过附件入口选择本地文件，文件消息以链接形式展示在群聊中；点击 `使用说明.md` 后，浏览器下载列表显示已下载的文件。
+
+![部署演示：群聊文件链接与浏览器下载结果](docs/screenshots/deployment/file-download.png)
+
+<details>
+<summary>查看选择本地文件的操作截图</summary>
+
+![部署演示：通过附件入口选择本地文件](docs/screenshots/deployment/file-upload.png)
+
+</details>
+
+### 4. WebSocket 与 Gateway 监控
+
+Grafana 看板展示 WebSocket 连接数、建连请求速率、建连可用率及各阶段延迟。截图时连接数面板显示 **10K**，建连可用率面板显示 **100%**；这些数值仅描述截图时的监控状态，不代表万连接同时发送消息的吞吐量或持续压测结论。
+
+![部署演示：WebSocket 与 Gateway 看板，连接数显示 10K](docs/screenshots/deployment/grafana-gateway.png)
+
+运行总览同时展示 Backend CPU、内存、WebSocket 活跃连接与 Kafka Consumer Lag 的变化，便于对照连接增长与资源使用情况。
+
+![部署演示：CPU、内存、活跃连接与 Kafka 消费积压总览](docs/screenshots/deployment/grafana-overview.png)
+
 ## 功能演示
 
 以下截图展示用户端与管理端的实际界面（2026 年 9 月）。图片随仓库保存在 [`docs/screenshots`](docs/screenshots) 中，可直接在 GitHub README 中查看，点击图片可查看原图。
