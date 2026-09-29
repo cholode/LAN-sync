@@ -46,3 +46,45 @@ perf*/*.log
 
 services/agent/runtime/.tmp-test-deps/
 frontend/admin-dist/
+
+# 个人面试资料（保留本地文件，不纳入项目版本管理）
+/docs/interview/
+
+# 本地环境配置；示例配置继续纳入版本管理
+.env.*
+!.env.example
+!.env.*.example
+
+# 依赖、虚拟环境与工具缓存
+node_modules/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vite/
+*.tsbuildinfo
+
+# 本地编译、测试与覆盖率产物
+*.exe
+*.test
+*.test.exe
+/coverage.out
+/coverage.html
+/coverage/
+frontend/coverage/
+services/agent/runtime/.coverage
+services/agent/runtime/htmlcov/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编辑器、操作系统及临时文件
+.idea/
+*.swp
+*.swo
+*~
+~$*
+.DS_Store
+Thumbs.db
+Desktop.ini
