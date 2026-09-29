@@ -2,6 +2,102 @@
 
 LAN IM 是一个基于 Go 与 WebSocket 的即时通信项目，提供群聊、文件分享和 AI Agent 集成，并通过独立管理后台处理用户权限、群聊和内容治理。
 
+## 技术栈
+
+项目采用 **Vue 3 前端 + Go 业务服务 + Python Agent 服务**，通过 WebSocket 提供实时通信，通过 Kafka 解耦消息处理，通过 Redis 完成缓存、在线状态管理与广播。以下列出主要技术及其实际用途，第三方库的传递依赖以依赖清单为准。
+
+版本依据：Go 依赖见 [`go.mod`](go.mod)，前端依赖范围见 [`frontend/package.json`](frontend/package.json)（安装版本由 `package-lock.json` 锁定），Python 依赖下限见 [`requirements.txt`](services/agent/runtime/requirements.txt)，基础设施镜像标签见 [`docker-compose.yml`](docker-compose.yml)。`^`、`>=` 和 `latest` 均不表示固定安装版本。
+
+### 前端与管理后台
+
+用户端和管理端位于同一个 `frontend` 工程，通过独立入口、路由和构建配置提供聊天工作区与管理后台。
+
+| 技术 | 声明版本 / 形式 | 项目用途 |
+| --- | --- | --- |
+| JavaScript、HTML、CSS | ES Modules、Vue 单文件组件 | 页面交互、组件开发、主题与布局 |
+| Vue | `^3.5.0` | 用户端与管理后台的界面框架 |
+| Vue Router | `^4.5.0` | 登录、聊天和管理页面路由 |
+| Pinia | `^3.0.0` | 认证与界面状态管理 |
+| Vite / `@vitejs/plugin-vue` | `^6.0.0` / `^5.2.0` | 开发服务器、Vue 编译和前端构建 |
+| ECharts | `^5.5.0` | 管理后台统计图表 |
+| Lucide Vue Next | `^0.468.0` | 界面图标 |
+| Fetch API / WebSocket API | 浏览器原生 API | HTTP 接口请求、文件上传与实时消息收发 |
+| Node.js / npm | 管理端构建镜像为 Node.js 22 Alpine | 前端依赖安装、构建及辅助脚本执行 |
+
+### Go 后端与通信
+
+Go 服务包含 Gateway、认证、房间、消息查询、消息编号器、归档 Worker 和管理后台 API；公共能力放在 `shared`，消息事件契约放在 `contracts`。
+
+| 技术 | 声明版本 / 形式 | 项目用途 |
+| --- | --- | --- |
+| Go | `1.26.1` | 业务服务与并发消息处理 |
+| Gin / gin-contrib/cors | `1.12.0` / `1.7.6` | HTTP REST API、路由、中间件及跨域配置 |
+| Gorilla WebSocket | `1.5.3` | WebSocket 升级、长连接读写和心跳 |
+| Goroutine、Channel、`sync` / `atomic` | Go 标准库 | Hub 分片、连接管理、并发同步及计数 |
+| ants 协程池 | `2.12.1` | 群聊消息扇出任务调度 |
+| gRPC / Protocol Buffers | `1.81.1` / `1.36.11`（Go 库） | Agent 与 Go IMService 通信、管理运行时控制；Kafka 和 Redis 广播消息使用 protobuf 编码 |
+| JSON | 浏览器通信格式 | 前端 HTTP 请求和 WebSocket 消息载荷 |
+| kafka-go | `0.4.51` | Kafka 消息生产、编号处理和归档消费 |
+| go-redis/v8 | `8.11.5` | Redis 缓存、在线状态和 Pub/Sub 访问 |
+| GORM / MySQL Driver / soft_delete | `1.31.1` / `1.6.0` / `1.2.1` | MySQL 数据访问、模型映射和软删除 |
+| MongoDB Go Driver v2 | `2.5.0` | MongoDB 消息存储访问 |
+| Elasticsearch Go Client v8 | `8.17.0` | 消息索引与全文检索 |
+| MinIO Go SDK / 阿里云 OSS Go SDK | `7.2.1` / `3.0.2+incompatible` | 对象存储访问和预签名上传、下载 |
+| golang-jwt/v5 | `5.3.1` | JWT 身份认证，结合角色与权限校验保护业务和管理接口 |
+| bcrypt / `golang.org/x/time/rate` | `x/crypto` / `x/time` | 密码哈希校验与请求限流；登录另有 bcrypt 并发保护 |
+| Logrus | `1.9.4` | 服务日志记录 |
+
+### Python Agent 与 AI
+
+Agent 位于 [`services/agent/runtime`](services/agent/runtime)，API 与 Worker 分进程运行，承担 Bot 配置管理、内容审核、群聊问答、话题分块及检索增强生成（RAG）。
+
+| 技术 | 声明版本 / 形式 | 项目用途 |
+| --- | --- | --- |
+| Python | Docker 镜像 `3.11-slim` | Agent 服务运行环境 |
+| FastAPI / Uvicorn | `>=0.115` / `>=0.34` | Agent 管理 HTTP API 与 ASGI 服务 |
+| Pydantic | `>=2.10` | 请求与配置数据建模、校验 |
+| LangChain / LangGraph | `>=0.3` / `>=0.2` | 模型与工具集成、对话状态图和 Agent 编排 |
+| langchain-openai | `>=0.3` | 调用 OpenAI 兼容的模型接口，模型及服务地址可配置 |
+| Qdrant Client / langchain-qdrant | `>=1.13` / `>=0.2` | 向量检索相关依赖；当前 RAG 存储封装直接使用 Qdrant Client |
+| HTTPX | `>=0.27` | 调用 Embedding 等外部 HTTP 接口 |
+| aiokafka | `>=0.12` | Worker 异步消费 Kafka 消息 |
+| SQLAlchemy / aiomysql / PyMySQL | `>=2.0` / `>=0.2` / `>=1.1` | Agent 配置、Inbox 与工作流数据的 MySQL 访问 |
+| SQLGlot | `>=25.0` | 群聊数据库查询工具的 SQL 解析、白名单和群范围校验 |
+| grpcio / protobuf / grpcio-tools | `>=1.70` / `>=5.29` / `>=1.70` | 调用 Go IMService 与生成 Python 协议代码 |
+| PyYAML / python-dotenv | `>=6.0` / `>=1.0` | YAML 与环境配置支持 |
+
+LLM 和 Embedding 通过外部模型 API 接入，使用 `LLM_*`、`EMBED_*` 等配置指定服务、模型与凭据；本项目不包含模型训练流程。
+
+### 存储、消息中间件与部署
+
+| 技术 | 默认镜像标签 / 接入方式 | 项目用途 |
+| --- | --- | --- |
+| MySQL | `8.0` | 用户、房间、权限、Agent Inbox 等关系数据，以及可选的消息历史存储 |
+| MongoDB | `7.0` | 可选的消息历史存储，通过 `MESSAGE_STORE=mysql` 或 `mongo` 选择 |
+| Redis | `7.0-alpine` | 在线状态、缓存及跨 Gateway 的 Pub/Sub 消息广播 |
+| Apache Kafka | `latest`，KRaft 模式 | 待处理与正式消息主题，解耦编号、广播、归档和 Agent 消费 |
+| Elasticsearch | `8.17.0` | 历史消息全文索引与关键词检索 |
+| Qdrant | `latest` | 群聊话题分块的向量存储与相似度检索 |
+| MinIO / 阿里云 OSS | MinIO 为 `latest`；OSS 通过 SDK 接入 | 文件对象存储，通过 `STORAGE_BACKEND=minio` 或 `oss` 选择 |
+| Nginx | `alpine` | 前端静态资源托管、HTTP 与 WebSocket 反向代理 |
+| Docker / Docker Compose | 多阶段 Dockerfile、Compose 编排 | 服务镜像构建、网络、数据卷、健康检查和部署 |
+
+MySQL 与 MongoDB 是消息历史存储的可选后端，并不表示每条消息同时写入两者；即使消息选择 MongoDB，用户、房间和 Agent 等关系数据仍使用 MySQL。当前编号器采用**单实例内存去重和群序号分配**，尚不支持重启恢复；Redis Pub/Sub 也不提供离线可靠投递。具体保证与限制见[消息幂等说明](docs/message-idempotency.md)。
+
+### 监控、测试与工程工具
+
+| 技术 | 版本 / 形式 | 项目用途 |
+| --- | --- | --- |
+| Prometheus | 镜像 `v2.55.1` | 采集连接、消息链路、接口延迟、任务池和服务运行指标 |
+| Prometheus Go / Python Client | `1.24.1` / `>=0.21` | Go 与 Python 服务暴露指标 |
+| Grafana | 镜像 `11.2.2` | 监控看板与性能数据可视化 |
+| Go testing / Race Detector | `go test`、`go test -race` | 单元测试、集成测试与并发竞争检测 |
+| Node.js Test Runner / Python unittest | `node:test` / `unittest` | 前端消息排序、搜索逻辑及 Agent 幂等、SQL 校验测试 |
+| k6 / 自定义 Go、Node.js 脚本 | 仓库压测与分析脚本 | HTTP、WebSocket 压测、连接保持和结果分析 |
+| GitHub Actions | `.github/workflows/ci.yml` | 配置依赖校验、格式检查、`go vet`、竞争检测、编译及 Docker 检查任务 |
+| govulncheck / Dependabot | 安全检查与依赖更新配置 | Go 漏洞检查及依赖维护 |
+| Buf / protoc / Go 与 Python protobuf 插件 | 协议生成工具 | gRPC 与消息协议代码生成 |
+
 ## 部署实测演示
 
 以下截图拍摄于 **2026 年 9 月 17 日**，展示服务器部署后的用户操作与 Grafana 监控。原图保存在 [`docs/screenshots/deployment`](docs/screenshots/deployment)，点击图片可查看大图。
